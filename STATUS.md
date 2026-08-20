@@ -131,9 +131,39 @@
 
 ---
 
+## รอบเสริม — เพิ่ม DOM test environment (ปิดช่องโหว่ที่ B1/B7/B8 หลุดมาได้)
+
+ปัญหาเดิม: repo ไม่มี jsdom/happy-dom/testing-library เลย → **ไม่มีเทสที่ render component**
+บั๊กแบบ B1 (crash ตอน render = จอว่างเปล่า) จึงหลุดผ่านเทส 120 ตัวไปได้ทั้งหมด
+และงาน layout อย่าง B7/B8 ก็ไม่มีอะไรจับนอกจากเปิดดูด้วยตา
+
+- เพิ่ม devDeps: `@happy-dom/global-registrator`, `@testing-library/react`, `@testing-library/dom`
+- `test-setup.ts` ลงทะเบียน happy-dom เป็น global DOM + ตั้ง `IS_REACT_ACT_ENVIRONMENT`
+  โหลดผ่าน `bunfig.toml` (`[test] preload`) → ไม่กระทบ build (ยืนยันแล้วว่าไม่มี dep เทสหลุดเข้า `dist/`)
+- **`SetupScreen.render.test.tsx`** — เทสกัน regression ของ B1 โดยตรง
+  *ยืนยันแล้วว่าเทสนี้จับบั๊กได้จริง*: ลองใส่ `<Dialog.Trigger>` กลับเข้าไปนอก `<Dialog.Root>`
+  เทสแดงทันทีด้วยข้อความเดียวกับตอนเจอบั๊กครั้งแรก แล้วจึงคืนโค้ดที่แก้แล้ว
+- **`Board.render.test.tsx`** (4 ข้อ) — เทส DOM จริงของ B8: จำนวนปุ่มตรงกับจำนวนช่อง,
+  Board มี `overflow-y-auto` + `max-h-[calc(100vh-14rem)]`, ขนาดช่องออกมาเป็น inline style จริง
+  (กันคนย้ายกลับไปใช้ Tailwind class ที่ย่อตามตัวแปรไม่ได้), grid template ใช้ขนาดที่คำนวณ
+- **`cardWidthFor()`** แยกออกจาก `Hand.tsx` เป็น pure function ที่ export (แพตเทิร์นเดียวกับ `cellSizeFor`)
+  + `Hand.test.ts` 4 ข้อ รวม monotonic — เดิม threshold ของ B7 ฝังเป็น ternary inline ไม่มีเทสคุม
+- **แก้ผลข้างเคียง:** happy-dom ให้ `localStorage` จริงซึ่งเป็น readonly accessor
+  เทส storage 3 ไฟล์ที่ assign `globalThis.localStorage = mockStorage()` ตรง ๆ เลยพัง 20 ข้อ
+  → เปลี่ยนเป็น `Object.defineProperty` (ทำงานได้ทั้งมีและไม่มี happy-dom)
+
+**ผลตรวจ:** `bun test` **135/135 ผ่าน** (จาก 125), `tsc --noEmit` clean, `bun run build` สำเร็จ
+
+---
+
 ## งานที่เหลือ
 
-ไม่มี — ครบ W1–W9 + บั๊ก B1–B8 แล้ว
+- ครบ W1–W9 + บั๊ก B1–B8 แล้ว
+- **ยังไม่ได้ verify บนเบราว์เซอร์จริง** — Chrome extension (MCP) ไม่เชื่อมต่อทั้ง 2 รอบที่ลอง
+  ส่วนที่เป็น CSS ล้วนจึงยังไม่มีหลักฐานจากจอจริง โดยเฉพาะค่า `14rem` ใน
+  `max-h-[calc(100vh-14rem)]` ที่จับคู่กับ `pb-44` (11rem) ใน `GameScreen.tsx` — เป็นตัวเลขที่เดาจาก layout
+  → ผู้ใช้เปิดเกม 200 ช่อง + จั่วการ์ดเกิน 20 ใบ ดูด้วยตาว่าลงตัวไหม
+- branch `fix/setup-blank-screen` ยังไม่ merge เข้า `main`
 
 ---
 

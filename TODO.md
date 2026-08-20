@@ -73,7 +73,23 @@
 
 ## ยังไม่ได้แก้ — ฝากรอบหน้า 🔧
 
-ไม่มี — บั๊กจากรอบเทส (B1–B8) แก้ครบแล้ว
+- **verify บนเบราว์เซอร์จริง** — B7/B8 เป็นงาน CSS ล้วน ยังไม่เคยเห็นบนจอจริง
+  (Chrome extension MCP ไม่เชื่อมต่อทั้ง 2 รอบที่ลอง) ค่าที่อยากให้ดูเป็นพิเศษคือ
+  `max-h-[calc(100vh-14rem)]` ใน `Board.tsx` ที่จับคู่กับ `pb-44` (11rem) ใน `GameScreen.tsx`
+  → เปิดเกม 200 ช่อง + จั่วการ์ดเกิน 20 ใบ ดูว่ากระดาน/มือลงตัวไหม
+- **merge `fix/setup-blank-screen` เข้า `main`** แล้ว deploy
+
+## เพิ่ม DOM test environment แล้ว ✅ (รอบ 2026-08-20)
+
+เดิม repo ไม่มี jsdom/happy-dom/testing-library → ไม่มีเทสที่ render component เลย
+บั๊ก B1 (crash ตอน render) จึงหลุดผ่านเทส 120 ตัวไปได้ ตอนนี้มีด่านจับแล้ว:
+
+- `test-setup.ts` + `bunfig.toml` preload happy-dom (ไม่กระทบ `dist/` — ตรวจแล้ว)
+- `SetupScreen.render.test.tsx` กัน B1 — **ยืนยันแล้วว่าจับบั๊กได้จริง** โดยลองใส่บั๊กกลับเข้าไป
+  แล้วเทสแดงด้วย error เดียวกับตอนเจอครั้งแรก
+- `Board.render.test.tsx` เทส DOM จริงของ B8 · `Hand.test.ts` + `cardWidthFor()` คุม threshold ของ B7
+- แก้เทส storage 3 ไฟล์ให้ใช้ `Object.defineProperty` (happy-dom ทำให้ `localStorage` เป็น readonly)
+- `bun test` 135/135 ผ่าน
 
 ## หมายเหตุจากการเทส (ไม่ใช่บั๊ก)
 

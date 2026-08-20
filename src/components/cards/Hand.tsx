@@ -16,6 +16,14 @@ interface HandProps {
   locked?: boolean
 }
 
+// B7: ย่อขนาดการ์ดเมื่อใบเยอะ (64 → 48 → 36px) ก่อนจะปล่อยให้ scroll แนวนอน
+// แยกเป็น pure function ที่ export เพื่อให้ threshold มีเทสคุม (เหมือน cellSizeFor ของ Board)
+export function cardWidthFor(count: number): number {
+  if (count > 20) return 36
+  if (count > 12) return 48
+  return 64
+}
+
 // W5.3: ไพ่ในมือคว่ำหน้าทั้งหมด — กดเปิดทีละใบ (revealed) แล้วตัดสินใจ ใช้/ทิ้ง
 // เปิดแล้วปิดกลับไม่ได้ และระหว่างเปิดใบหนึ่งอยู่ห้ามเปิดใบอื่นซ้อน
 export function Hand({ locked = false }: HandProps) {
@@ -65,10 +73,9 @@ export function Hand({ locked = false }: HandProps) {
   const needsTeam = revealedCard !== null && cardNeedsTeamTarget(revealedCard)
   const needsCell = revealedCard !== null && cardNeedsCellTarget(revealedCard)
 
-  // B7: ย่อขนาดการ์ดเมื่อใบเยอะ (64 → 48 → 36px) ก่อนจะปล่อยให้ scroll
   const handCount = current.hand.length
   const compact = handCount > 12
-  const cardWidth = handCount > 20 ? 36 : handCount > 12 ? 48 : 64
+  const cardWidth = cardWidthFor(handCount)
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 pb-3">
