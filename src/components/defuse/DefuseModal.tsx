@@ -81,7 +81,7 @@ export function DefuseModal() {
           <>
             <p className="section-label text-red-300">ระเบิดจริง!</p>
             <h2 className="font-serif text-6xl font-bold">ตัดสาย</h2>
-            <p className="text-xl text-white/70">ทีม {current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด</p>
+            <p className="text-xl text-white/70">{current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด</p>
           </>
         )}
 
@@ -102,7 +102,7 @@ export function DefuseModal() {
         {stage === 'result' && !survived && (
           <>
             <h2 className="font-serif text-6xl font-bold text-red-400">ระเบิด!</h2>
-            <p className="text-2xl">ทีม {current.name} ตกรอบ</p>
+            <p className="text-2xl">{current.name} ตกรอบ</p>
           </>
         )}
 

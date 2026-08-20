@@ -32,10 +32,12 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
   const lastScanSig = useRef<string | null>(null)
   const scanTimer = useRef<number | null>(null)
 
-  // ขึ้นตาตอนใหม่ → กลับไปช่วงใช้การ์ดก่อน
+  // ขึ้นตาใหม่ → กลับไปช่วงใช้การ์ดก่อน
+  // ต้อง depend บนตาที่เปลี่ยน (turnNumber/currentTeamIndex) ด้วย — phase ค้างเป็น 'cards'
+  // ข้ามตาได้ ทำให้ effect ที่ depend เฉพาะ phase ไม่ยิงซ้ำ แล้วโหมดค้างที่ "เปิดป้ายเลย"
   useEffect(() => {
     if (state.phase === 'cards') setCardMode(true)
-  }, [state.phase])
+  }, [state.phase, state.turnNumber, state.currentTeamIndex])
 
   const inCards = state.phase === 'cards'
 
@@ -164,7 +166,7 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
             </div>
           )}
         </main>
-        <aside className="flex flex-col gap-3">
+        <aside className="flex flex-col gap-3 pt-14">
           <StatusPanel />
           <LogPanel />
         </aside>
@@ -296,7 +298,9 @@ function StatusPanel() {
 
 function LogPanel() {
   const { state } = useGame()
-  const latest = state.log.slice(0, 10)
+  // engine push log ต่อท้าย (เก่า→ใหม่) — ต้องตัดท้ายแล้วกลับด้าน ไม่ใช่ slice(0,10)
+  // ไม่งั้นพอเกิน 10 เหตุการณ์ panel จะค้างอยู่ที่ 10 อันแรกตลอดเกม
+  const latest = state.log.slice(-10).reverse()
   return (
     <div className="panel flex h-max flex-col gap-1">
       <h3 className="section-label mb-1">บันทึก</h3>
@@ -312,6 +316,8 @@ function LogPanel() {
 
 function phaseLabel(p: string): string {
   switch (p) {
+    case 'cards':
+      return 'ใช้การ์ด'
     case 'opening':
       return 'เปิดป้าย'
     case 'defusing':

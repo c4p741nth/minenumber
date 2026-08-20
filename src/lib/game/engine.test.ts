@@ -836,3 +836,20 @@ describe('determinism / resume', () => {
     }
   })
 })
+
+// log ต้องเรียงเก่า→ใหม่ (push ต่อท้าย) — UI พึ่ง order นี้ในการ slice(-N).reverse()
+// ถ้ากลับด้านที่ engine เมื่อไหร่ LogPanel จะโชว์ผิดทันที
+describe('log ordering', () => {
+  it('เรียงจากเก่าไปใหม่ และ id เพิ่มขึ้นเรื่อย ๆ', () => {
+    const g = createGame(defaultSettings(), 999)
+    let st = g.getState()
+    for (let c = 1; c <= 5; c++) {
+      if (st.phase === 'defusing') st = g.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      if (st.phase === 'gameover') break
+      st = g.dispatch({ type: 'OPEN_CELL', cell: c })
+    }
+    expect(st.log.length).toBeGreaterThan(1)
+    const ids = st.log.map((l) => l.id)
+    expect([...ids].sort((a, b) => a - b)).toEqual(ids)
+  })
+})
