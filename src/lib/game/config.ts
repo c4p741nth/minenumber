@@ -5,21 +5,31 @@ import type { CardType, GameSettings } from './types'
 
 export const LIMITS = {
   minTeams: 2,
-  maxTeams: 12,
+  // ไม่จำกัดจำนวนทีม (FIX #9) — cap ไว้สูง ๆ กัน input พังเท่านั้น
+  maxTeams: 999,
   minRange: 1,
-  maxRange: 200,
+  // ไม่จำกัดจำนวนช่อง (FIX #2) — cap ไว้สูง ๆ กัน render ค้างเท่านั้น
+  maxRange: 9999,
   minRangeSize: 10,
   maxTurnSeconds: 300,
+  maxDefuseSeconds: 120,
   maxGlitchRatio: 0.5,
   minScanRadius: 1,
   maxScanRadiusCap: 20,
   minHandSize: 3,
   maxHandSizeCap: 7,
   maxStartingHand: 5,
-  maxGlitchCount: 50,
-  // ช่องต้อง ≥ ทีม × 4 ไม่งั้นบล็อกปุ่มเริ่มเกม
-  minCellsPerTeam: 4,
+  maxGlitchCount: 999,
+  // ช่องขั้นต่ำ = จำนวนทีม (FIX #4) — น้อยกว่าจำนวนทีมคือเล่นไม่ได้จริง ๆ
+  // (เดิม × 4 ไม่มีที่มา) ใช้เป็นทั้งตัวบล็อกปุ่มเริ่มเกมและค่าขั้นต่ำของช่อง
+  minCellsPerTeam: 1,
 } as const
+
+// ช่องขั้นต่ำที่เล่นได้ = จำนวนทีม (FIX #3, #4)
+// ต่ำกว่านี้เริ่มเกมไม่ได้ — เพิ่มได้ไม่จำกัด
+export function minCellsFor(teamCount: number): number {
+  return teamCount * LIMITS.minCellsPerTeam
+}
 
 export const DEFAULTS = {
   teamCount: 6,
@@ -35,18 +45,21 @@ export const DEFAULTS = {
   startingHand: 3, // แจกขั้นต่ำ 3 ใบ/ทีม (W5.2)
   scanRadius: 3,
   shrinkingEnabled: false,
+  defuseSeconds: 15,
   musicUrl: '',
   musicVolume: 30,
 } as const
 
-// น้ำหนักสุ่มการ์ดตาม §7.2 — น้ำหนักรวม 100
+// น้ำหนักสุ่มการ์ด — น้ำหนักรวม 100
+// FIX #24/#25: เพิ่ม shield (กันระเบิดให้ตัวเอง) และ block เปลี่ยนเป็นการ์ดกัน effect
 export const CARD_WEIGHTS: ReadonlyArray<readonly [CardType, number]> = [
-  ['scan', 25],
-  ['skip', 20],
-  ['block', 15],
-  ['reverse', 15],
-  ['shuffle', 10],
-  ['attack', 15],
+  ['scan', 22],
+  ['skip', 16],
+  ['shield', 14],
+  ['block', 13],
+  ['reverse', 13],
+  ['shuffle', 9],
+  ['attack', 13],
 ]
 
 // จำนวนระเบิดจริง = ทีม − 1 (ล็อกตาม §2)
@@ -102,6 +115,7 @@ export function defaultSettings(): GameSettings {
     startingHand: DEFAULTS.startingHand,
     scanRadius: DEFAULTS.scanRadius,
     shrinkingEnabled: DEFAULTS.shrinkingEnabled,
+    defuseSeconds: DEFAULTS.defuseSeconds,
     musicUrl: DEFAULTS.musicUrl,
     musicVolume: DEFAULTS.musicVolume,
   }

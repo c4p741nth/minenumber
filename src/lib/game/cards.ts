@@ -27,7 +27,8 @@ export function drawRandomCard(
 export const CARD_META: Record<CardType, { emoji: string; name: string; th: string }> = {
   scan: { emoji: '🔍', name: 'Scan', th: 'สแกน' },
   skip: { emoji: '⏭', name: 'Skip', th: 'ข้ามตา' },
-  block: { emoji: '🛡', name: 'Block', th: 'บล็อก' },
+  shield: { emoji: '🛡', name: 'Shield', th: 'โล่กันระเบิด' },
+  block: { emoji: '🚫', name: 'Block', th: 'บล็อก' },
   reverse: { emoji: '🔄', name: 'Reverse', th: 'ย้อนทิศ' },
   shuffle: { emoji: '🎲', name: 'Shuffle', th: 'สับระเบิด' },
   attack: { emoji: '⚔', name: 'Attack', th: 'โจมตี' },
@@ -42,6 +43,7 @@ export const CARD_LABELS: Record<CardType, string> = Object.fromEntries(
 export const CARD_COLORS: Record<CardType, string> = {
   scan: 'border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300',
   skip: 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  shield: 'border-cyan-500 bg-cyan-500/15 text-cyan-700 dark:text-cyan-300',
   block: 'border-slate-500 bg-slate-500/15 text-slate-700 dark:text-slate-300',
   reverse: 'border-orange-500 bg-orange-500/15 text-orange-700 dark:text-orange-300',
   shuffle: 'border-purple-500 bg-purple-500/15 text-purple-700 dark:text-purple-300',
@@ -51,14 +53,20 @@ export const CARD_COLORS: Record<CardType, string> = {
 export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   scan: 'เลือกเลข → ตรวจช่วงเลขซ้าย–ขวารอบเลขนั้น (±R) เช่น เลือก 20 รัศมี 3 = ตรวจ 17–23 รวม 7 ช่อง บอกแค่มี/ไม่มีระเบิด',
   skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด)',
-  block: 'ทีมเป้าหมายใช้การ์ดไม่ได้ใน turn ถัดไป',
+  shield: 'กางโล่ให้ทีมตัวเอง — ถ้าเหยียบระเบิดจะรอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น (ใช้กับทีมตัวเองเท่านั้น กันได้เฉพาะระเบิด)',
+  block: 'เก็บไว้กัน effect ที่ทีมอื่นจะใช้ใส่เรา (Attack/Block) — เมื่อโดนจะมี popup ถามว่าจะกันไหม',
   reverse: 'สลับทิศทาง + จบ turn ทันที',
   shuffle: 'สุ่มย้ายตำแหน่งระเบิดทั้งหมดใหม่',
   attack: 'ทีมเป้าหมายต้องเปิดเพิ่ม +1 (โอนกองต่อได้)',
 }
 
+// จำนวนชนิดการ์ดในสำรับ — ใช้แสดงที่หน้าตั้งค่า (FIX #11) ห้าม hardcode เลขที่อื่น
+export const CARD_DECK_SIZE = Object.keys(CARD_META).length
+
+// FIX #23: Attack เลือกเป้าได้เฉพาะทีมอื่น (ห้ามใส่ตัวเอง) — ดู aliveOpponents ใน engine
+// FIX #24/#25: Shield ใช้กับตัวเองเสมอ, Block เป็นการ์ดตั้งรับ — ทั้งคู่ไม่ต้องเลือกเป้า
 export function cardNeedsTeamTarget(card: CardType): boolean {
-  return card === 'block' || card === 'attack'
+  return card === 'attack'
 }
 
 export function cardNeedsCellTarget(card: CardType): boolean {

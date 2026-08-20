@@ -4,7 +4,6 @@ import { GameProvider } from '@/components/game/GameProvider'
 import { GameScreen } from '@/components/game/GameScreen'
 import { LeaderboardScreen } from '@/components/leaderboard/LeaderboardScreen'
 import { MainMenu } from '@/components/menu/MainMenu'
-import { RulesScreen } from '@/components/rules/RulesScreen'
 import { SetupScreen } from '@/components/setup/SetupScreen'
 import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
@@ -13,7 +12,7 @@ import { unlockAudio } from '@/lib/audio/sfx'
 import { clearSnapshot, loadSettings, loadSnapshot, saveSettings } from '@/lib/storage/session'
 import type { GameSettings } from '@/lib/game/types'
 
-type Screen = 'menu' | 'setup' | 'rules' | 'leaderboard' | 'game'
+type Screen = 'menu' | 'setup' | 'leaderboard' | 'game'
 
 export default function Page() {
   const [screen, setScreen] = useState<Screen>('menu')
@@ -73,7 +72,6 @@ export default function Page() {
           onStart={() => setScreen('setup')}
           onResume={() => void resumeGame()}
           onLeaderboard={() => setScreen('leaderboard')}
-          onRules={() => setScreen('rules')}
         />
       )
     case 'setup':
@@ -84,8 +82,6 @@ export default function Page() {
           onBack={() => setScreen('menu')}
         />
       )
-    case 'rules':
-      return <RulesScreen onBack={() => setScreen('menu')} />
     case 'leaderboard':
       return <LeaderboardScreen onBack={() => setScreen('menu')} />
     case 'game':

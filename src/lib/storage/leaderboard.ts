@@ -25,11 +25,11 @@ export interface TeamAggregate {
   survived: number
 }
 
-export function pointsForRank(rank: number): number {
-  if (rank === 1) return 3
-  if (rank === 2) return 2
-  if (rank === 3) return 1
-  return 0
+// FIX #37: คะแนนลดหลั่นตามจำนวนทีม — ที่ 1 ได้ (ทีมทั้งหมด − 1), ทีมสุดท้ายได้ 0
+// เช่น 8 ทีม → ที่ 1 = 7 แต้ม, ที่ 2 = 6, ..., ที่ 8 = 0
+export function pointsForRank(rank: number, totalTeams: number): number {
+  if (!Number.isFinite(rank) || !Number.isFinite(totalTeams)) return 0
+  return Math.max(totalTeams - rank, 0)
 }
 
 export function loadLeaderboard(): MatchRecord[] {
@@ -89,7 +89,7 @@ export function aggregateByTeam(records: MatchRecord[]): TeamAggregate[] {
     }
     cur.games += 1
     if (r.rank === 1) cur.wins += 1
-    cur.points += pointsForRank(r.rank)
+    cur.points += pointsForRank(r.rank, r.totalTeams)
     cur.opens += r.opens
     if (r.survived) cur.survived += 1
     map.set(r.teamName, cur)

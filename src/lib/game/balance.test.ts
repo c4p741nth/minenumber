@@ -74,8 +74,9 @@ describe('chanceDisplay — ทั้ง 3 kind (W2.3)', () => {
     expect(d).toEqual({ kind: 'certain', text: 'หลบยังไงก่อน (100%)', percent: 100 })
   })
 
-  it('unplayable: ช่องน้อยกว่าทีม × 4 → เล่นยังไงก่อน (มันเล่นไม่ได้ ช่องน้อยไป๊)', () => {
-    const d = chanceDisplay(5, 7, 2) // 7 < 2×4
+  it('unplayable: ช่องน้อยกว่าจำนวนทีม → เล่นยังไงก่อน (มันเล่นไม่ได้ ช่องน้อยไป๊)', () => {
+    // FIX #4: ขั้นต่ำคือ "ช่อง ≥ จำนวนทีม" ไม่ใช่ ทีม × 4
+    const d = chanceDisplay(5, 3, 8) // 3 ช่อง < 8 ทีม
     expect(d).toEqual({
       kind: 'unplayable',
       text: 'เล่นยังไงก่อน (มันเล่นไม่ได้ ช่องน้อยไป๊)',

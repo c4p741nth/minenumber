@@ -7,6 +7,7 @@ import {
   type MatchRecord,
 } from '@/lib/storage/leaderboard'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
+import { BombMark } from '@/components/setup/SetupScreen'
 
 interface Props {
   onBack: () => void
@@ -39,10 +40,10 @@ export function LeaderboardScreen({ onBack }: Props) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-6 py-8">
       <header className="flex items-center gap-3 pb-6">
-        <div className="brand-mark">7</div>
+        <BombMark />
         <div>
-          <p className="section-label">MEETING GAME</p>
           <h1 className="font-serif text-3xl font-bold">🏆 Leaderboard</h1>
+          <p className="section-label">Minenumber — เลขระเบิด</p>
         </div>
         <button
           onClick={onBack}
@@ -122,7 +123,7 @@ export function LeaderboardScreen({ onBack }: Props) {
       {loaded && aggregates.length > 0 && (
         <button
           onClick={() => void handleClear()}
-          className="mt-6 self-start rounded-lg border border-destructive/40 px-4 py-2 text-sm font-bold text-destructive"
+          className="mt-6 self-end rounded-lg border border-destructive/40 px-4 py-2 text-sm font-bold text-destructive"
         >
           🗑 ล้าง leaderboard
         </button>

@@ -2,8 +2,8 @@ export type CellState = 'hidden' | 'safe' | 'detonated' | 'defused' | 'glitched'
 export type BombKind = 'real' | 'glitch'
 // ตำแหน่งระเบิด (secret) — ใช้เฉพาะตอน save เข้ารหัส ห้ามโผล่ใน UI
 export type PrivateBombState = Record<number, BombKind>
-export type CardType = 'scan' | 'skip' | 'block' | 'reverse' | 'shuffle' | 'attack'
-export type Phase = 'setup' | 'cards' | 'opening' | 'defusing' | 'gameover'
+export type CardType = 'scan' | 'skip' | 'shield' | 'block' | 'reverse' | 'shuffle' | 'attack'
+export type Phase = 'setup' | 'cards' | 'opening' | 'defusing' | 'blocking' | 'gameover'
 
 export interface Team {
   id: string
@@ -11,7 +11,11 @@ export interface Team {
   alive: boolean
   hand: CardType[]
   glitchTurnsLeft: number // >0 = ใช้/จั่วการ์ดไม่ได้
-  blockedTurnsLeft: number // >0 = ใช้การ์ดไม่ได้ (จาก Block)
+  blockedTurnsLeft: number // >0 = ใช้การ์ดไม่ได้ (เหลือไว้กัน state เก่าใน snapshot)
+  // FIX #24: Shield ที่กาง — กันระเบิดจริง 1 ครั้ง (ใช้กับทีมตัวเองเท่านั้น)
+  shieldCharges: number
+  // FIX #25: Block ที่ถือไว้ — กัน effect จากทีมอื่นได้ 1 ครั้ง (ถามก่อนใช้ผ่าน popup)
+  blockCharges: number
   pendingOpens: number // จำนวนป้ายที่ต้องเปิดในตานี้
   eliminatedAt: number | null // ลำดับการตกรอบ (1 = ตายคนแรก)
   stats: TeamStats
@@ -39,6 +43,7 @@ export interface GameSettings {
   cardWeights?: Partial<Record<CardType, number>> // optional override น้ำหนักจั่ว
   scanRadius: number // 1–5
   shrinkingEnabled: boolean // "Shrinking Mode" — default false
+  defuseSeconds: number // เวลานับถอยหลังตอนตัดสายระเบิด (0 = ไม่จับเวลา) (FIX #27)
   musicUrl: string // URL YouTube สำหรับเพลง background ('' = ไม่เปิดเพลง) (W8)
   musicVolume: number // 0–100 (W8)
 }
@@ -58,12 +63,15 @@ export type LogEntry = {
 export type OpenResult =
   | { kind: 'safe' }
   | { kind: 'real'; survived: boolean }
+  // FIX #24: กาง Shield ไว้ → รอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น
+  | { kind: 'shielded' }
   | { kind: 'glitch' }
 
 export type CardResult =
   | { card: 'scan'; found: boolean; center: number }
   | { card: 'skip' }
-  | { card: 'block'; targetTeamId: string }
+  | { card: 'shield' }
+  | { card: 'block' }
   | { card: 'reverse' }
   | { card: 'shuffle' }
   | { card: 'attack'; targetTeamId: string }
@@ -76,6 +84,8 @@ export type GameAction =
   | { type: 'PLAY_CARD'; card: CardType; index?: number; targetTeamId?: string; targetCell?: number }
   | { type: 'DISCARD_CARD'; index: number } // ทิ้งการ์ดใบที่ index (W5.3)
   | { type: 'DRAW_CARD'; teamId: string }
+  // FIX #25: ตอบ popup ว่าทีมเป้าหมายจะใช้ Block กันหรือไม่
+  | { type: 'RESOLVE_BLOCK'; use: boolean }
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
 export interface PublicGameState {
   phase: Phase
@@ -90,6 +100,8 @@ export interface PublicGameState {
   turnNumber: number
   log: LogEntry[]
   pendingDefuse: { cell: number } | null
+  // FIX #25: กำลังถามทีมเป้าหมายว่าจะใช้ Block กันไหม (ไม่บอกว่ามีการ์ดอะไร)
+  pendingBlock: { targetTeamId: string; sourceTeamId: string; card: CardType } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
   // การ์ดที่เพิ่งจั่วตอนจบตาก่อนหน้า — ใช้ทำ toast สี (W5.4)

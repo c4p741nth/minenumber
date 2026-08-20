@@ -53,13 +53,23 @@ function record(i: number, teamName: string, rank: number, totalTeams: number): 
   }
 }
 
-describe('pointsForRank', () => {
-  it('ชนะ = 3, อันดับ 2 = 2, อันดับ 3 = 1, นอกนั้น 0', () => {
-    expect(pointsForRank(1)).toBe(3)
-    expect(pointsForRank(2)).toBe(2)
-    expect(pointsForRank(3)).toBe(1)
-    expect(pointsForRank(4)).toBe(0)
-    expect(pointsForRank(9)).toBe(0)
+describe('pointsForRank (FIX #37)', () => {
+  it('8 ทีม → ที่ 1 ได้ 7 แต้ม ลดหลั่นทีละ 1 ทีมสุดท้ายได้ 0', () => {
+    expect(pointsForRank(1, 8)).toBe(7)
+    expect(pointsForRank(2, 8)).toBe(6)
+    expect(pointsForRank(7, 8)).toBe(1)
+    expect(pointsForRank(8, 8)).toBe(0)
+  })
+
+  it('จำนวนทีมน้อยลง แต้มสูงสุดก็ลดตาม', () => {
+    expect(pointsForRank(1, 2)).toBe(1)
+    expect(pointsForRank(2, 2)).toBe(0)
+    expect(pointsForRank(1, 4)).toBe(3)
+  })
+
+  it('อันดับเกินจำนวนทีม → 0 (ไม่ติดลบ)', () => {
+    expect(pointsForRank(9, 8)).toBe(0)
+    expect(pointsForRank(12, 4)).toBe(0)
   })
 })
 
@@ -83,16 +93,18 @@ describe('appendMatch / loadLeaderboard', () => {
 
 describe('aggregateByTeam', () => {
   it('คำนวณแต้ม + เกม + ชนะ + เรียงตามแต้มรวม', () => {
+    // FIX #37: เกม 3 ทีม → ที่ 1 ได้ 2 แต้ม, ที่ 2 ได้ 1, ที่ 3 ได้ 0
     appendMatch([
-      record(1, 'A', 1, 3), // A: 3 แต้ม
-      record(2, 'B', 2, 3), // B: 2 แต้ม
-      record(3, 'C', 3, 3), // C: 1 แต้ม
-      record(4, 'B', 1, 3), // B: +3 → 5 แต้ม
-      record(5, 'C', 1, 3), // C: +3 → 4 แต้ม
+      record(1, 'A', 1, 3), // A: 2 แต้ม
+      record(2, 'B', 2, 3), // B: 1 แต้ม
+      record(3, 'C', 3, 3), // C: 0 แต้ม
+      record(4, 'B', 1, 3), // B: +2 → 3 แต้ม
+      record(5, 'C', 1, 3), // C: +2 → 2 แต้ม
     ])
     const agg = aggregateByTeam(loadLeaderboard())
-    expect(agg[0]).toMatchObject({ teamName: 'B', games: 2, wins: 1, points: 5 })
-    expect(agg[1]).toMatchObject({ teamName: 'C', games: 2, wins: 1, points: 4 })
-    expect(agg[2]).toMatchObject({ teamName: 'A', games: 1, wins: 1, points: 3 })
+    expect(agg[0]).toMatchObject({ teamName: 'B', games: 2, wins: 1, points: 3 })
+    // C กับ A ได้ 2 แต้มเท่ากัน → เรียงตามชนะ (เท่ากัน) แล้วชื่อ
+    expect(agg[1]).toMatchObject({ teamName: 'A', games: 1, wins: 1, points: 2 })
+    expect(agg[2]).toMatchObject({ teamName: 'C', games: 2, wins: 1, points: 2 })
   })
 })

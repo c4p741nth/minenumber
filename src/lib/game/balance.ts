@@ -1,5 +1,5 @@
 // ความสมดุลของเกมสัมพันธ์กับช่วงตัวเลข — ใช้แนะนำผู้เล่นในหน้าตั้งค่า
-import { LIMITS } from './config'
+import { minCellsFor } from './config'
 
 // ความหนาแน่นระเบิด = ระเบิดทั้งหมด / ช่องทั้งหมด
 export function bombDensity(totalBombs: number, totalCells: number): number {
@@ -43,7 +43,7 @@ export type ChanceDisplay =
   | { kind: 'normal'; percent: number; level: BalanceVerdict }
 
 export function chanceDisplay(bombs: number, cells: number, teams: number): ChanceDisplay {
-  if (cells < teams * LIMITS.minCellsPerTeam) {
+  if (cells < minCellsFor(teams)) {
     return { kind: 'unplayable', text: 'เล่นยังไงก่อน (มันเล่นไม่ได้ ช่องน้อยไป๊)' }
   }
   if (bombs >= cells) {

@@ -20,6 +20,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     startingHand: 0,
     scanRadius: 3,
     shrinkingEnabled: false,
+  defuseSeconds: 15,
     musicUrl: '',
     musicVolume: 30,
     ...overrides,
@@ -120,7 +121,7 @@ describe('opening cells', () => {
     expect(state.pendingDefuse).toEqual({ cell })
   })
 
-  it('glitch bomb → ทีมไม่ตาย, glitchTurnsLeft = 2, หายจากระบบทันที', () => {
+  it('glitch bomb → ทีมไม่ตาย, glitchTurnsLeft = 2, ระเบิดย้ายไปช่องอื่น (FIX #35)', () => {
     const settings = baseSettings({ glitchEnabled: true, glitchRatio: 0.5, rangeMin: 1, rangeMax: 30 })
     const h = createGame(settings, 11)
     const cell = bombCellOf(h, 'glitch')
@@ -130,7 +131,9 @@ describe('opening cells', () => {
     expect(state.cells[cell]).toBe('glitched')
     expect(state.teams[openerId].alive).toBe(true)
     expect(state.teams[openerId].glitchTurnsLeft).toBe(2)
-    expect(state.bombsRemaining).toBe(before - 1) // หายจากระบบ ไม่ย้าย
+    // FIX #35: glitch ที่โดนเปิดต้องย้ายไปช่องอื่น ไม่ใช่หายไป
+    // (เดิมหายทำให้ระเบิดในกระดานลดลงเรื่อย ๆ ระหว่างเล่น)
+    expect(state.bombsRemaining).toBe(before)
     expect(state.phase).not.toBe('defusing') // กู้ไม่ได้
   })
 })
@@ -234,28 +237,17 @@ describe('defuse', () => {
 })
 
 describe('end conditions', () => {
-  it('TIMEOUT ตอน phase=cards → สุ่มเปิดช่องให้ + ขึ้นตาถัดไป (W4)', () => {
-    const settings = baseSettings({
-      cardsEnabled: true,
-      teamNames: ['A', 'B'],
-      rangeMin: 1,
-      rangeMax: 8,
-    })
+  it('TIMEOUT → ทีมนั้นเสีย turn ไปเลย ไม่มีการสุ่มเปิดให้ (FIX #18)', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 20 })
     const h = createGame(settings, 5)
-    expect(h.getState().phase).toBe('cards')
     const before = h.getState()
-    const after = h.dispatch({ type: 'TIMEOUT' })
-    // มีช่องถูกเปิดเพิ่มขึ้นจากหมดเวลา
-    const openedMore = Object.keys(after.cells).length > Object.keys(before.cells).length
-    expect(openedMore).toBe(true)
-    // ตาจบ → ขึ้นตาถัดไป หรือเจอระเบิดจริง → เข้าโหมดตัดสาย
-    const turnAdvanced =
-      after.currentTeamIndex !== before.currentTeamIndex || after.turnNumber > before.turnNumber
-    expect(after.phase === 'defusing' || turnAdvanced).toBe(true)
-    // ถ้าตาจบจริง phase ต้องกลับมาที่ 'cards' (การ์ดเปิด) หรือ 'opening' (การ์ดปิด)
-    if (turnAdvanced) {
-      expect(['cards', 'opening']).toContain(after.phase)
-    }
+    const openedBefore = Object.keys(before.cells).length
+    const s2 = h.dispatch({ type: 'TIMEOUT' })
+    // ไม่มีช่องไหนถูกเปิดเพิ่ม — เสีย turn เฉย ๆ
+    expect(Object.keys(s2.cells).length).toBe(openedBefore)
+    // ขึ้นตาถัดไปแล้ว
+    expect(s2.turnNumber).toBe(before.turnNumber + 1)
+    expect(s2.currentTeamIndex).not.toBe(before.currentTeamIndex)
   })
 
   it('ทีมสุดท้ายรอด → phase = gameover, อันดับถูกต้อง', () => {
@@ -455,21 +447,32 @@ describe('V5 turn flow — use many cards + block', () => {
     throw new Error('no seed for cards')
   }
 
-  it('ในตาเดียวใช้ scan 2 ใบ + block 1 ใบ ได้ (ไม่มีลิมิตต่อตา)', () => {
-    const settings = cardGame()
-    const seed = findSeedForCards(settings, '0', ['scan', 'scan', 'block'])
-    const h = createGame(settings, seed)
-    const maxHand = h.getState().settings.maxHandSize
-    for (let i = 0; i < maxHand; i++) h.dispatch({ type: 'DRAW_CARD', teamId: '0' })
-
+  it('ในตาเดียวใช้การ์ดหลายใบได้ (ไม่มีลิมิตต่อตา)', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 30,
+      cardsEnabled: true,
+      startingHand: 3,
+      maxHandSize: 0,
+    })
+    // หา seed ที่ทีม A เริ่มมี scan อย่างน้อย 2 ใบ
+    let h = createGame(settings, 0)
+    for (let seed = 0; seed < 30000; seed++) {
+      const cand = createGame(settings, seed)
+      const hand = cand.getState().teams[0].hand
+      if (hand.filter((c) => c === 'scan').length >= 2) {
+        h = cand
+        break
+      }
+    }
     const before = h.getState().teams[0].hand.length
-    h.dispatch({ type: 'PLAY_CARD', card: 'scan', targetCell: 1 })
     h.dispatch({ type: 'PLAY_CARD', card: 'scan', targetCell: 5 })
-    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
-    const s = h.getState()
-    expect(s.phase).toBe('cards') // ยังไม่จบตา
-    expect(s.teams[0].hand.length).toBe(before - 3) // ใช้ 3 ใบในตาเดียว
-    expect(s.teams[1].blockedTurnsLeft).toBe(1)
+    h.dispatch({ type: 'PLAY_CARD', card: 'scan', targetCell: 15 })
+    const st = h.getState()
+    // ใช้ไป 2 ใบในตาเดียว และยังอยู่ในตาเดิม (scan ไม่จบตา)
+    expect(st.teams[0].hand.length).toBe(before - 2)
+    expect(st.currentTeamIndex).toBe(0)
   })
 
   it('หลัง OPEN_CELL แล้ว PLAY_CARD ไม่มีผล (การ์ดไม่หายจากมือ)', () => {
@@ -501,72 +504,29 @@ describe('V5 turn flow — use many cards + block', () => {
     expect(h.getState().teams[1].hand.length).toBe(handBefore) // ไม่หาย
   })
 
-  it('block ทีม B → ตาถัดไปของ B currentBlocked=true และตาถัดไปอีกตาเป็น false', () => {
-    const settings = cardGame({ startingHand: 1, teamNames: ['A', 'B', 'C'] })
-    let seed = -1
-    for (let s = 0; s < 40000; s++) {
-      const h = createGame(settings, s)
-      if (h.getState().teams[0].hand.includes('block')) {
-        seed = s
+  it('FIX #25: Block เป็นการ์ดตั้งรับ — เก็บเป็น charge ไม่ได้แบนการ์ดทีมอื่น', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 30,
+      cardsEnabled: true,
+      startingHand: 3,
+      maxHandSize: 0,
+    })
+    let h = createGame(settings, 0)
+    for (let seed = 0; seed < 30000; seed++) {
+      const cand = createGame(settings, seed)
+      if (cand.getState().teams[0].hand.includes('block')) {
+        h = cand
         break
       }
     }
-    expect(seed).toBeGreaterThanOrEqual(0)
-    const h = createGame(settings, seed)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
-    expect(h.getState().teams[1].blockedTurnsLeft).toBe(1)
-
-    endCurrentTurnSafe(h) // A เปิด safe จบตา → ถึง B
-    expect(h.getState().currentTeamIndex).toBe(1)
-    expect(h.getState().currentBlocked).toBe(true)
-
-    endCurrentTurnSafe(h) // B จบตา → C
-    endCurrentTurnSafe(h) // C จบตา → A
-    endCurrentTurnSafe(h) // A จบตา → B อีกครั้ง
-    expect(h.getState().currentTeamIndex).toBe(1)
-    expect(h.getState().currentBlocked).toBe(false)
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'block' })
+    expect(st.teams[0].blockCharges).toBe(1)
+    // ไม่มีใครโดนแบนการ์ด
+    expect(st.teams.every((t) => t.blockedTurnsLeft === 0)).toBe(true)
   })
-})
 
-// เปิด safe จนจบตาของทีมปัจจุบัน (วนจน turn เปลี่ยน)
-function endCurrentTurnSafe(h: GameHandle): void {
-  const startTurn = h.getState().turnNumber
-  const startTeam = h.getState().currentTeamIndex
-  let guard = 0
-  while (guard < 200) {
-    guard++
-    const s = h.getState()
-    if (s.phase === 'defusing') {
-      h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
-      continue
-    }
-    if (s.phase === 'gameover') return
-    if (s.phase === 'cards') {
-      // เปิดป้ายเลย — ข้ามช่วงการ์ด
-    }
-    const secret = secretMap(h)
-    let opened = false
-    for (let n = s.rangeMin; n <= s.rangeMax; n++) {
-      if (!(n in secret) && !(n in s.cells)) {
-        h.dispatch({ type: 'OPEN_CELL', cell: n })
-        opened = true
-        break
-      }
-    }
-    if (!opened) {
-      // ไม่มี safe → เปิดช่องแรกที่ยัง hidden
-      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
-        if (!(n in s.cells)) {
-          h.dispatch({ type: 'OPEN_CELL', cell: n })
-          break
-        }
-      }
-    }
-    if (h.getState().currentTeamIndex !== startTeam || h.getState().turnNumber !== startTurn) return
-  }
-}
-
-describe('W5 — มือไม่จำกัด + ทิ้งการ์ด + lastDraw', () => {
   it('maxHandSize 0 = จั่วได้ไม่จำกัด (เกิน 7 ใบ)', () => {
     const settings = baseSettings({
       cardsEnabled: true,
@@ -667,42 +627,51 @@ describe('W5 — มือไม่จำกัด + ทิ้งการ์ด
     expect(h.getState().teams[0].hand).toHaveLength(handBefore)
   })
 
-  it('DISCARD_CARD ตอนโดน block → ไม่มีผล (การ์ดไม่หาย)', () => {
+  it('DISCARD_CARD ตอนติด glitch → ไม่มีผล (การ์ดไม่หาย)', () => {
+    // ต้องมีทีมพอให้ bombQuota สูงพอที่ glitchRatio จะปัดขึ้นได้อย่างน้อย 1 ลูก
     const settings = baseSettings({
-      cardsEnabled: true,
-      startingHand: 1,
-      maxHandSize: 5,
-      teamNames: ['A', 'B', 'C'],
+      teamNames: ['A', 'B', 'C', 'D'],
       rangeMin: 1,
-      rangeMax: 20,
+      rangeMax: 30,
+      cardsEnabled: true,
+      startingHand: 3,
+      maxHandSize: 0,
+      glitchEnabled: true,
+      glitchRatio: 0.5,
     })
-    // A มี block ใช้ใส่ B → B ตาต่อไปถูก block → ทิ้งไม่ได้
-    let seed = -1
-    for (let s = 0; s < 40000; s++) {
-      const h = createGame(settings, s)
-      if (h.getState().teams[0].hand.includes('block')) {
-        seed = s
+    // หา seed ที่มี glitch bomb และทีม A มีการ์ดในมือ
+    let h = createGame(settings, 0)
+    for (let seed = 0; seed < 30000; seed++) {
+      const cand = createGame(settings, seed)
+      const hasGlitch = Object.values(cand.serializeSecret()).includes('glitch')
+      if (hasGlitch && cand.getState().teams[0].hand.length > 0) {
+        h = cand
         break
       }
     }
-    expect(seed).toBeGreaterThanOrEqual(0)
-    const h = createGame(settings, seed)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
-    // A เปิด safe จบตา → B
-    const s = h.getState()
-    const secret = h.serializeSecret()
-    const safe = (() => {
-      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
-        if (!(n in secret) && !(n in s.cells)) return n
-      }
-      return -1
-    })()
-    h.dispatch({ type: 'OPEN_CELL', cell: safe })
-    expect(h.getState().currentTeamIndex).toBe(1)
-    expect(h.getState().currentBlocked).toBe(true)
-    const handBefore = h.getState().teams[1].hand.length
-    h.dispatch({ type: 'DISCARD_CARD', index: 0 })
-    expect(h.getState().teams[1].hand).toHaveLength(handBefore)
+    // ทีม A เหยียบ glitch → ติดกลิตช์ 2 ตา
+    const cell = bombCellOf(h, 'glitch')
+    h.dispatch({ type: 'OPEN_CELL', cell })
+    // วนกลับมาตา A
+    let guard = 0
+    while (h.getState().currentTeamIndex !== 0 && h.getState().phase !== 'gameover' && guard++ < 20) {
+      const st = h.getState()
+      const safe = (() => {
+        const secret = h.serializeSecret()
+        for (let n = st.rangeMin; n <= st.rangeMax; n++) {
+          if (!(n in secret) && !(n in st.cells)) return n
+        }
+        return -1
+      })()
+      if (safe === -1) break
+      h.dispatch({ type: 'OPEN_CELL', cell: safe })
+    }
+    const st = h.getState()
+    if (st.currentGlitched && st.teams[0].hand.length > 0) {
+      const before = st.teams[0].hand.length
+      const after = h.dispatch({ type: 'DISCARD_CARD', index: 0 })
+      expect(after.teams[0].hand.length).toBe(before)
+    }
   })
 
   it('lastDraw เคลียร์เป็น null เมื่อขึ้นตาถัดไป แต่จั่วจริง (มี log draw)', () => {

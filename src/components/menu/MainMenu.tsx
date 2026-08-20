@@ -1,5 +1,7 @@
 
 import { useEffect, useState } from 'react'
+import { Dialog } from '@base-ui/react/dialog'
+import { RulesContent } from '@/components/rules/RulesContent'
 import { clearLeaderboard } from '@/lib/storage/leaderboard'
 import { clearSnapshot, saveSettings } from '@/lib/storage/session'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
@@ -10,12 +12,13 @@ interface Props {
   onStart: () => void
   onResume: () => void
   onLeaderboard: () => void
-  onRules: () => void
 }
 
 // หน้าแรกของเกม — มีเมนูนำทางและปุ่มล้างข้อมูล
-export function MainMenu({ hasSnapshot, onStart, onResume, onLeaderboard, onRules }: Props) {
+export function MainMenu({ hasSnapshot, onStart, onResume, onLeaderboard }: Props) {
   const [ready, setReady] = useState(false)
+  // FIX #12: กฎกติกาเป็น modal ในหน้าแรก ไม่เปิดหน้าใหม่
+  const [rulesOpen, setRulesOpen] = useState(false)
 
   useEffect(() => {
     setReady(true)
@@ -41,11 +44,12 @@ export function MainMenu({ hasSnapshot, onStart, onResume, onLeaderboard, onRule
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center gap-8 px-6 py-12">
       <header className="text-center">
-        <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-2xl bg-primary text-5xl font-black text-primary-foreground shadow-[0_0_40px_color-mix(in_srgb,var(--primary)_40%,transparent)]">
-          7
+        <div className="brand-mark brand-mark-lg mx-auto mb-5 shadow-[0_0_40px_color-mix(in_srgb,var(--primary)_40%,transparent)]" aria-hidden="true">
+          <span className="brand-bomb">💣</span>
+          <span className="brand-digits">7</span>
         </div>
-        <p className="section-label">MEETING GAME</p>
-        <h1 className="font-serif text-5xl font-bold">วงระเบิด</h1>
+        <h1 className="font-serif text-5xl font-bold">Minenumber</h1>
+        <p className="section-label mt-1 text-lg">เลขระเบิด</p>
         <p className="mt-3 text-base leading-7 text-muted-foreground">
           เกมสุ่มตัวเลขเอาตัวรอดสำหรับเล่นหลายทีมในที่ประชุม
           — เปิดป้ายให้ปลอดภัย เป็นทีมสุดท้ายที่รอด!
@@ -71,7 +75,7 @@ export function MainMenu({ hasSnapshot, onStart, onResume, onLeaderboard, onRule
           🏆 Leaderboard
         </button>
         <button
-          onClick={onRules}
+          onClick={() => setRulesOpen(true)}
           className="w-full rounded-lg border border-border bg-card px-4 py-4 text-lg font-bold transition hover:border-primary"
         >
           📖 กฎกติกา
@@ -83,6 +87,31 @@ export function MainMenu({ hasSnapshot, onStart, onResume, onLeaderboard, onRule
           🗑 ล้างข้อมูล
         </button>
       </nav>
+
+      {/* FIX #12: กฎกติกาเป็น modal */}
+      <Dialog.Root open={rulesOpen} onOpenChange={setRulesOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/70" />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[min(100%,900px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-border px-6 py-4">
+              <Dialog.Title className="font-serif text-2xl font-bold">📖 กฎกติกา</Dialog.Title>
+              <Dialog.Close
+                render={
+                  <button
+                    aria-label="ปิด"
+                    className="ml-auto grid h-9 w-9 place-items-center rounded-full border border-border bg-card text-lg font-bold hover:border-primary"
+                  />
+                }
+              >
+                ✕
+              </Dialog.Close>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+              <RulesContent />
+            </div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

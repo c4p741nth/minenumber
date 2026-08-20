@@ -30,6 +30,11 @@ const COMBOS: Combo[] = [
 
 const SEEDS = 20
 
+// settings สำหรับเทสโควตาระเบิด (FIX #35/#40) — override จาก default
+function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
+  return { ...defaultSettings(), ...overrides }
+}
+
 function makeSettings(c: Combo): GameSettings {
   const { min, max } = suggestRange(c.teamCount)
   const base = defaultSettings()
@@ -65,6 +70,10 @@ function randomAction(h: GameHandle, rng: () => number): GameAction {
   if (s.phase === 'defusing') {
     return { type: 'CHOOSE_WIRE', wire: rng() < 0.5 ? 'red' : 'blue' }
   }
+  // FIX #25: ถูกถามว่าจะใช้ Block กันไหม — ตอบสุ่ม
+  if (s.phase === 'blocking') {
+    return { type: 'RESOLVE_BLOCK', use: rng() < 0.5 }
+  }
   const hidden = hiddenCells(h)
   if (hidden.length === 0) return { type: 'TIMEOUT' }
   if (s.phase === 'opening') {
@@ -75,7 +84,7 @@ function randomAction(h: GameHandle, rng: () => number): GameAction {
   const canPlay = cur.hand.length > 0 && !s.currentGlitched && !s.currentBlocked
   if (canPlay && rng() < 0.3) {
     const card = cur.hand[Math.floor(rng() * cur.hand.length)]
-    if (card === 'block' || card === 'attack') {
+    if (card === 'attack') {
       const targets = s.teams.filter((t) => t.alive && t.id !== cur.id)
       if (targets.length > 0) {
         return {
@@ -197,5 +206,97 @@ describe('V8 sanity — bombQuota', () => {
     expect(bombQuota(6)).toBe(5)
     expect(bombQuota(12)).toBe(11)
     expect(bombQuota(2)).toBe(1)
+  })
+})
+
+// FIX #35 / #40: ระเบิดจริงต้อง = ทีมที่ยังรอด − 1 เสมอ ตลอดทั้งเกม
+// และต้องไม่เกิดเคส "ช่องหมด/ระเบิดหมด แต่ยังเหลือหลายทีม"
+describe('FIX #35/#40 — โควตาระเบิดจริงคงที่ตามทีมที่รอด', () => {
+  it('ทุก dispatch: ระเบิดจริง = ทีมรอด − 1 (เมื่อยังมีช่องว่างพอ)', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B', 'C', 'D', 'E', 'F'],
+      rangeMin: 1,
+      rangeMax: 60,
+      cardsEnabled: true,
+      startingHand: 2,
+      glitchEnabled: true,
+      glitchRatio: 0.4,
+    })
+
+    for (let seed = 0; seed < 12; seed++) {
+      const h = createGame(settings, seed)
+      const rng = createRng(seed + 500)
+      let guard = 0
+
+      while (h.getState().phase !== 'gameover' && guard++ < 4000) {
+        const st = h.getState()
+        const secret = h.serializeSecret()
+        const realCount = Object.values(secret).filter((k) => k === 'real').length
+        const aliveCount = st.teams.filter((t) => t.alive).length
+
+        // ระหว่างตัดสาย/ตอบ popup ระเบิดยังไม่ resolve — ข้ามการเช็ก
+        if (st.phase !== 'defusing' && st.phase !== 'blocking') {
+          const hiddenLeft = hiddenCells(h).length
+          const expected = Math.max(aliveCount - 1, 0)
+          // เช็กได้เมื่อกระดานยังมีที่ว่างพอจะวางระเบิดตามโควตา
+          if (hiddenLeft >= expected) {
+            expect(realCount).toBe(expected)
+          }
+        }
+        h.dispatch(randomAction(h, rng))
+      }
+      expect(h.getState().phase).toBe('gameover')
+    }
+  })
+
+  it('จบเกมแล้วต้องเหลือทีมรอดไม่เกิน 1 ทีม (ไม่มีเคสระเบิดหมดแต่ทีมเหลือ)', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B', 'C', 'D', 'E'],
+      rangeMin: 1,
+      rangeMax: 40,
+      cardsEnabled: true,
+      startingHand: 2,
+    })
+
+    for (let seed = 0; seed < 15; seed++) {
+      const h = createGame(settings, seed)
+      const rng = createRng(seed + 900)
+      let guard = 0
+      while (h.getState().phase !== 'gameover' && guard++ < 4000) {
+        h.dispatch(randomAction(h, rng))
+      }
+      const st = h.getState()
+      expect(st.phase).toBe('gameover')
+      const alive = st.teams.filter((t) => t.alive).length
+      const hiddenLeft = hiddenCells(h).length
+      // เสมอได้เฉพาะตอนช่องหมดจริง ๆ เท่านั้น
+      if (alive > 1) expect(hiddenLeft).toBe(0)
+    }
+  })
+
+  it('glitch bomb ไม่นับรวมในโควตาระเบิดจริง และระเบิดปกติไม่กลายเป็น glitch', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B', 'C', 'D'],
+      rangeMin: 1,
+      rangeMax: 40,
+      glitchEnabled: true,
+      glitchMode: 'manual',
+      glitchCount: 5,
+      cardsEnabled: false,
+    })
+    const h = createGame(settings, 3)
+    const secret0 = h.serializeSecret()
+    expect(Object.values(secret0).filter((k) => k === 'real').length).toBe(3) // 4 ทีม − 1
+    expect(Object.values(secret0).filter((k) => k === 'glitch').length).toBe(5)
+
+    const rng = createRng(77)
+    let guard = 0
+    while (h.getState().phase !== 'gameover' && guard++ < 3000) {
+      const secret = h.serializeSecret()
+      const glitchCount = Object.values(secret).filter((k) => k === 'glitch').length
+      // glitch ไม่เพิ่มเองระหว่างเกม (ระเบิดจริงไม่ mutate เป็น glitch)
+      expect(glitchCount).toBeLessThanOrEqual(5)
+      h.dispatch(randomAction(h, rng))
+    }
   })
 })

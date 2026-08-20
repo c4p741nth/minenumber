@@ -92,7 +92,8 @@ export function Hand({ locked = false }: HandProps) {
           <div className="flex flex-wrap items-center gap-2">
             {needsTeam &&
               state.teams
-                .filter((t) => t.alive)
+                // FIX #23: Attack ใช้กับทีมตัวเองไม่ได้ — ไม่ต้องโชว์ปุ่มทีมตัวเอง
+                .filter((t) => t.alive && t.id !== current.id)
                 .map((t) => (
                   <button
                     key={t.id}

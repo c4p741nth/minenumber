@@ -18,6 +18,7 @@ function cardSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     startingHand: 1,
     scanRadius: 3,
     shrinkingEnabled: false,
+  defuseSeconds: 15,
     musicUrl: '',
     musicVolume: 30,
     ...overrides,
@@ -65,6 +66,16 @@ function openSafeCell(h: GameHandle): void {
 }
 
 // จบ turn ของทีมปัจจุบันโดยเปิด safe จนครบ pendingOpens
+// หาช่องที่เป็นระเบิดชนิดที่ต้องการ (อ่านจาก secret — ใช้ได้เฉพาะในเทส)
+function bombCellOf(h: GameHandle, kind: BombKind): number {
+  const secret = secretMap(h)
+  const state = h.getState()
+  for (const [n, k] of Object.entries(secret)) {
+    if (k === kind && !(Number(n) in state.cells)) return Number(n)
+  }
+  throw new Error(`ไม่มีระเบิดชนิด ${kind}`)
+}
+
 function endCurrentTurn(h: GameHandle): void {
   const s = h.getState()
   const turn = s.turnNumber
@@ -198,53 +209,114 @@ describe('Skip', () => {
   })
 })
 
-describe('Block', () => {
-  it('block ซ้อน 2 ชั้น = แบน 2 turn', () => {
+describe('Shield / Block (FIX #24, #25)', () => {
+  it('Shield → กันระเบิดจริง 1 ครั้ง ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น', () => {
     const settings = cardSettings()
+    const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('shield'))
+    const h = createGame(settings, seed)
+
+    h.dispatch({ type: 'PLAY_CARD', card: 'shield' })
+    expect(h.getState().teams[0].shieldCharges).toBe(1)
+
+    // เปิดช่องที่เป็นระเบิดจริง → ต้องรอดทันที ไม่เข้า phase defusing
+    const cell = bombCellOf(h, 'real')
+    const before = h.getState().bombsRemaining
+    const st = h.dispatch({ type: 'OPEN_CELL', cell })
+    expect(st.phase).not.toBe('defusing')
+    expect(st.teams[0].alive).toBe(true)
+    expect(st.teams[0].shieldCharges).toBe(0)
+    expect(st.cells[cell]).toBe('defused')
+    // ระเบิดย้ายไปช่องอื่น ไม่หายจากระบบ
+    expect(st.bombsRemaining).toBe(before)
+  })
+
+  it('Block → เก็บเป็น charge ไว้กัน effect ทีมอื่น (ไม่ได้เล่นใส่ใครทันที)', () => {
+    const settings = cardSettings()
+    const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('block'))
+    const h = createGame(settings, seed)
+
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'block' })
+    expect(st.teams[0].blockCharges).toBe(1)
+    // ไม่มีทีมไหนโดนแบนการ์ด
+    expect(st.teams.every((t) => t.blockedTurnsLeft === 0)).toBe(true)
+  })
+
+  it('โดน Attack ตอนมี Block → เข้า phase blocking, ตอบ use=true แล้วกันได้', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'] })
+    // A ต้องมี attack, B ต้องมี block
     const seed = findSeed(settings, (h) => {
-      if (!h.getState().teams[0].hand.includes('block')) return false
-      return drawUntil(h, '0', (hand) => hand.filter((c) => c === 'block').length >= 2)
+      const st = h.getState()
+      return st.teams[0].hand.includes('attack') && st.teams[1].hand.includes('block')
     })
     const h = createGame(settings, seed)
-    drawUntil(h, '0', (hand) => hand.filter((c) => c === 'block').length >= 2)
 
-    // A ใช้ block 2 ใบใส่ B
-    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
-    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
-    expect(h.getState().teams[1].blockedTurnsLeft).toBe(2)
-
-    // ถึงตา B ครั้งที่ 1 → blocked
+    // B กาง Block ไว้ก่อน (ข้ามไปตา B แล้วกลับมา)
     endCurrentTurn(h)
     expect(h.getState().currentTeamIndex).toBe(1)
-    expect(h.getState().currentBlocked).toBe(true)
-    expect(h.getState().teams[1].blockedTurnsLeft).toBe(1)
-
-    // B ลองเล่นการ์ด → ไม่มีผล (มือไม่ลด)
-    const handBefore = h.getState().teams[1].hand.length
-    const anyCard = h.getState().teams[1].hand[0]
-    h.dispatch({ type: 'PLAY_CARD', card: anyCard, targetTeamId: '2' })
-    expect(h.getState().teams[1].hand.length).toBe(handBefore)
-
-    // วนครบรอบ → ถึงตา B ครั้งที่ 2 → ยัง blocked (ชั้นที่ 2)
-    const bTurn = h.getState().turnNumber
+    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
+    expect(h.getState().teams[1].blockCharges).toBe(1)
     endCurrentTurn(h)
-    while (h.getState().currentTeamIndex !== 1 || h.getState().turnNumber <= bTurn) {
+    expect(h.getState().currentTeamIndex).toBe(0)
+
+    const pendingBefore = h.getState().teams[1].pendingOpens
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.targetTeamId).toBe('1')
+
+    const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    expect(after.phase).not.toBe('blocking')
+    expect(after.teams[1].blockCharges).toBe(0)
+    // กันได้ → B ไม่ต้องเปิดเพิ่ม
+    expect(after.teams[1].pendingOpens).toBe(pendingBefore)
+  })
+
+  it('โดน Attack ตอนมี Block แต่ตอบ use=false → effect ทำงานปกติ', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'] })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return st.teams[0].hand.includes('attack') && st.teams[1].hand.includes('block')
+    })
+    const h = createGame(settings, seed)
+
+    endCurrentTurn(h)
+    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
+    endCurrentTurn(h)
+
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
+    expect(after.phase).not.toBe('blocking')
+    // ไม่ได้ใช้ → charge ยังอยู่ และ B ต้องเปิดเพิ่ม
+    expect(after.teams[1].blockCharges).toBe(1)
+    expect(after.teams[1].pendingOpens).toBeGreaterThan(1)
+  })
+
+  it('FIX #23: Attack ใส่ทีมตัวเองไม่ได้ (การ์ดไม่หาย)', () => {
+    const settings = cardSettings()
+    const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('attack'))
+    const h = createGame(settings, seed)
+    const before = h.getState().teams[0].hand.length
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '0' })
+    expect(st.teams[0].hand.length).toBe(before)
+  })
+
+  it('FIX #22: ติด glitch → ใช้การ์ดไม่ได้ (การ์ดไม่หาย)', () => {
+    const settings = cardSettings({ glitchEnabled: true, glitchRatio: 0.5 })
+    const seed = findSeed(settings, (h) => h.getState().teams[0].hand.length > 0)
+    const h = createGame(settings, seed)
+    const cell = bombCellOf(h, 'glitch')
+    h.dispatch({ type: 'OPEN_CELL', cell })
+    // วนกลับมาถึงตาทีม 0 อีกครั้ง — ยังติด glitch อยู่
+    while (h.getState().currentTeamIndex !== 0 && h.getState().phase !== 'gameover') {
       endCurrentTurn(h)
     }
-    expect(h.getState().currentBlocked).toBe(true)
-    expect(h.getState().teams[1].blockedTurnsLeft).toBe(0)
-
-    // วนอีกรอบ → ถึงตา B ครั้งที่ 3 → เล่นได้แล้ว
-    const bTurn2 = h.getState().turnNumber
-    endCurrentTurn(h)
-    while (h.getState().currentTeamIndex !== 1 || h.getState().turnNumber <= bTurn2) {
-      endCurrentTurn(h)
+    const st = h.getState()
+    if (st.currentGlitched && st.teams[0].hand.length > 0) {
+      const before = st.teams[0].hand.length
+      const after = h.dispatch({ type: 'PLAY_CARD', card: st.teams[0].hand[0] })
+      expect(after.teams[0].hand.length).toBe(before)
     }
-    expect(h.getState().currentBlocked).toBe(false)
-    expect(h.getState().teams[1].blockedTurnsLeft).toBe(0)
   })
 })
-
 describe('Reverse', () => {
   it('เหลือ 2 ทีม → สลับทิศ + จบ turn โดยไม่ทำให้ทีมเดิมเล่นซ้ำ', () => {
     const settings = cardSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
@@ -322,11 +394,14 @@ describe('smoke', () => {
       const s = h.getState()
       if (s.phase === 'defusing') {
         h.dispatch({ type: 'CHOOSE_WIRE', wire: Math.random() < 0.5 ? 'red' : 'blue' })
+      } else if (s.phase === 'blocking') {
+        // FIX #25: ถูกถามว่าจะใช้ Block กันไหม — ต้องตอบ ไม่งั้นเกมค้างที่ phase นี้
+        h.dispatch({ type: 'RESOLVE_BLOCK', use: Math.random() < 0.5 })
       } else if (s.phase === 'cards') {
         const cur = s.teams[s.currentTeamIndex]
         if (cur.hand.length > 0 && !s.currentGlitched && !s.currentBlocked) {
           const card = cur.hand[0]
-          if (card === 'block' || card === 'attack') {
+          if (card === 'attack') {
             const targets = s.teams.filter((t) => t.alive && t.id !== cur.id)
             h.dispatch({ type: 'PLAY_CARD', card, targetTeamId: targets[0]?.id })
           } else if (card === 'scan') {

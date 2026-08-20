@@ -2,12 +2,18 @@
 import Swal from 'sweetalert2'
 
 // ใช้ CSS variable ใน globals.css ให้เข้ากับธีมของเกม
+// FIX #13: ปุ่มยืนยันเป็นเขียว (ไม่ใช่แดง/ส้มซึ่งอ่านเหมือนอันตราย)
+// และปุ่มยกเลิกต้องอ่านออก — เทาจางเกินไปมองไม่เห็นตัวหนังสือ
 const theme = {
   background: 'var(--card)',
   color: 'var(--foreground)',
-  confirmButtonColor: 'var(--primary)',
-  cancelButtonColor: 'var(--secondary)',
+  confirmButtonColor: 'var(--confirm)',
+  cancelButtonColor: 'var(--cancel)',
   iconColor: 'var(--primary)',
+  customClass: {
+    confirmButton: 'mn-swal-confirm',
+    cancelButton: 'mn-swal-cancel',
+  },
 }
 
 export async function confirmDialog(opts: {

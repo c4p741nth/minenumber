@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Board } from '@/components/board/Board'
 import { TimerCircle } from '@/components/board/TimerCircle'
 import { Hand } from '@/components/cards/Hand'
+import { BlockPrompt } from '@/components/defuse/BlockPrompt'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
@@ -172,6 +173,7 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
         </aside>
       </div>
       {state.phase === 'defusing' && <DefuseModal />}
+      {state.phase === 'blocking' && <BlockPrompt />}
       {state.phase === 'gameover' && (
         <GameOverScreen onRestart={onRestart} onExit={onExit} onLeaderboard={onLeaderboard} />
       )}
@@ -258,12 +260,20 @@ function TeamList() {
               ⚡{t.glitchTurnsLeft}
             </span>
           )}
-          {t.blockedTurnsLeft > 0 && (
+          {t.shieldCharges > 0 && (
+            <span
+              className="rounded-full bg-cyan-600 px-2 py-0.5 text-xs font-bold text-white"
+              title="กาง Shield — กันระเบิดได้"
+            >
+              🛡{t.shieldCharges}
+            </span>
+          )}
+          {t.blockCharges > 0 && (
             <span
               className="rounded-full bg-slate-500 px-2 py-0.5 text-xs font-bold text-white"
-              title="โดนบล็อก"
+              title="มี Block — กัน effect จากทีมอื่นได้"
             >
-              🛡{t.blockedTurnsLeft}
+              🚫{t.blockCharges}
             </span>
           )}
           {t.pendingOpens > 1 && (
