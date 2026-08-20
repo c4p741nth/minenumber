@@ -8,6 +8,7 @@ import type {
   LogEntry,
   OpenResult,
   Phase,
+  PrivateBombState,
   PublicGameState,
   Team,
 } from './types'
@@ -38,7 +39,7 @@ export interface GameHandle {
   getState(): PublicGameState
   dispatch(action: GameAction): PublicGameState
   // ใช้เฉพาะตอน save (เข้ารหัส) เท่านั้น
-  serializeSecret(): Record<number, BombKind>
+  serializeSecret(): PrivateBombState
 }
 
 export function createGame(settings: GameSettings, seed: number): GameHandle {
@@ -79,7 +80,7 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
       return buildPublic(state)
     },
     serializeSecret: () => {
-      const out: Record<number, BombKind> = {}
+      const out: PrivateBombState = {}
       for (const [n, kind] of state.bombs) out[n] = kind
       return out
     },

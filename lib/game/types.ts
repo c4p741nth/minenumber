@@ -1,5 +1,7 @@
 export type CellState = 'hidden' | 'safe' | 'detonated' | 'defused' | 'glitched'
 export type BombKind = 'real' | 'glitch'
+// ตำแหน่งระเบิด (secret) — ใช้เฉพาะตอน save เข้ารหัส ห้ามโผล่ใน UI
+export type PrivateBombState = Record<number, BombKind>
 export type CardType = 'scan' | 'skip' | 'block' | 'reverse' | 'shuffle' | 'attack'
 export type Phase = 'setup' | 'cards' | 'opening' | 'defusing' | 'gameover'
 
