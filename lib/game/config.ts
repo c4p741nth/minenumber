@@ -53,7 +53,7 @@ export function glitchCountFor(realBombs: number, ratio: number): number {
 }
 
 export function defaultTeamNames(count: number): string[] {
-  return Array.from({ length: count }, (_, i) => `ทีม ${String.fromCharCode(65 + i)}`)
+  return Array.from({ length: count }, (_, i) => `ทีม ${i + 1}`)
 }
 
 export function defaultSettings(): GameSettings {
