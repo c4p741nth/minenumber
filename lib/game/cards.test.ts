@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CARD_META } from './cards'
 import { createGame, type GameHandle } from './engine'
 import type { BombKind, CardType, GameSettings } from './types'
 
@@ -64,6 +65,18 @@ function endCurrentTurn(h: GameHandle): void {
     openSafeCell(h)
   }
 }
+
+describe('CARD_META', () => {
+  it('ทุก card มี name ตามรูปแบบและ emoji ยาว ≥ 1', () => {
+    const types: CardType[] = ['scan', 'skip', 'block', 'reverse', 'shuffle', 'attack']
+    for (const t of types) {
+      const meta = CARD_META[t]
+      expect(meta.name).toMatch(/^[A-Z][a-z]+$/)
+      expect(meta.emoji.length).toBeGreaterThanOrEqual(1)
+      expect(meta.th.length).toBeGreaterThan(0)
+    }
+  })
+})
 
 describe('card draw', () => {
   it('เริ่มเกมทุกทีมได้ 1 ใบสุ่ม', () => {

@@ -66,7 +66,7 @@ export function GameScreen({ onRestart, onExit }: Props) {
           rangeMin={state.rangeMin}
           rangeMax={state.rangeMax}
           cells={state.cells}
-          disabled={state.phase !== 'opening'}
+          disabled={state.phase !== 'opening' && state.phase !== 'cards'}
           onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
         />
         {current.pendingOpens > 1 && (

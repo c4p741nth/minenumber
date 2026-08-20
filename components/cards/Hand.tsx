@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import {
   CARD_DESCRIPTIONS,
-  CARD_LABELS,
+  CARD_META,
   cardNeedsCellTarget,
   cardNeedsTeamTarget,
 } from '@/lib/game/cards'
@@ -114,8 +114,8 @@ export function Hand() {
               `disabled:cursor-not-allowed disabled:opacity-40`
             }
           >
-            <span className="text-2xl leading-none">{cardEmoji(card)}</span>
-            <span className="text-sm font-black">{cardName(card)}</span>
+            <span className="text-2xl leading-none">{CARD_META[card].emoji}</span>
+            <span className="text-sm font-black">{CARD_META[card].name}</span>
           </button>
         ))}
         {current.hand.length === 0 && (
@@ -134,12 +134,4 @@ export function Hand() {
       )}
     </div>
   )
-}
-
-function cardEmoji(card: CardType): string {
-  return CARD_LABELS[card].slice(0, 2)
-}
-
-function cardName(card: CardType): string {
-  return CARD_LABELS[card].slice(3)
 }

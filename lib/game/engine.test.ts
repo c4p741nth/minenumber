@@ -71,6 +71,17 @@ describe('createGame / setup', () => {
 })
 
 describe('opening cells', () => {
+  it('เปิดช่องตอนช่วงการ์ด (cards) ได้ทันทีโดยไม่ต้องใช้การ์ด (DoD B1)', () => {
+    const settings = baseSettings({ cardsEnabled: true, teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
+    const h = createGame(settings, 5)
+    expect(h.getState().phase).toBe('cards')
+    const cell = safeCellOf(h)
+    const opener = h.getState().currentTeamIndex
+    const state = h.dispatch({ type: 'OPEN_CELL', cell })
+    expect(state.cells[cell]).toBe('safe')
+    expect(state.currentTeamIndex).not.toBe(opener)
+  })
+
   it('เปิดช่อง safe → cells[n] = safe, turn เดินต่อ', () => {
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     const h = createGame(settings, 5)

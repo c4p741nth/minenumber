@@ -12,14 +12,21 @@ export function drawRandomCard(hand: CardType[], rng: Rng): CardType | null {
   return card
 }
 
-export const CARD_LABELS: Record<CardType, string> = {
-  scan: '🔍 Scan',
-  skip: '⏭ Skip',
-  block: '🛡 Block',
-  reverse: '🔄 Reverse',
-  shuffle: '🎲 Shuffle',
-  attack: '⚔ Attack',
+// แยก emoji ออกจากชื่อการ์ด — ห้าม slice string เพื่อแยก emoji/ชื่อ
+// (emoji บางตัวกิน 1 code unit บางตัว 2 — slicing พัง เช่น ⚔/⏭)
+export const CARD_META: Record<CardType, { emoji: string; name: string; th: string }> = {
+  scan: { emoji: '🔍', name: 'Scan', th: 'สแกน' },
+  skip: { emoji: '⏭', name: 'Skip', th: 'ข้ามตา' },
+  block: { emoji: '🛡', name: 'Block', th: 'บล็อก' },
+  reverse: { emoji: '🔄', name: 'Reverse', th: 'ย้อนทิศ' },
+  shuffle: { emoji: '🎲', name: 'Shuffle', th: 'สับระเบิด' },
+  attack: { emoji: '⚔', name: 'Attack', th: 'โจมตี' },
 }
+
+// derived — เก็บไว้เพื่อไม่ให้ที่อื่นพัง (เดิมใช้ label แบบรวม)
+export const CARD_LABELS: Record<CardType, string> = Object.fromEntries(
+  (Object.keys(CARD_META) as CardType[]).map((c) => [c, `${CARD_META[c].emoji} ${CARD_META[c].name}`]),
+) as Record<CardType, string>
 
 export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   scan: 'เลือกเลข → บอกว่ามีระเบิดในช่วง ±R หรือไม่ (มี/ไม่มี)',
