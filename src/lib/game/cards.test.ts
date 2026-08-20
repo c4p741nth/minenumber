@@ -29,6 +29,12 @@ function secretMap(h: GameHandle): Record<number, BombKind> {
   return h.serializeSecret()
 }
 
+function countHidden(s: { rangeMin: number; rangeMax: number; cells: Record<number, unknown> }): number {
+  let n = 0
+  for (let i = s.rangeMin; i <= s.rangeMax; i++) if (!(i in s.cells)) n++
+  return n
+}
+
 function findSeed(settings: GameSettings, pred: (h: GameHandle) => boolean, maxSeed = 30000): number {
   for (let seed = 0; seed < maxSeed; seed++) {
     const h = createGame(settings, seed)
@@ -332,18 +338,25 @@ describe('Reverse', () => {
 })
 
 describe('Shuffle', () => {
-  it('ย้ายระเบิดทั้งหมดไปช่อง hidden ใหม่ ไม่ทับช่องที่เปิดแล้ว', () => {
+  // หมายเหตุ: เทสนี้เคย assert ว่า "ตำแหน่งเดิมทุกช่องต้องว่าง" ซึ่งบังคับให้ playShuffle
+  // ตัดช่องที่ระเบิดอยู่ออกจาก pool — นั่นคือต้นเหตุที่ระเบิดหายตอนช่องเหลือน้อย
+  // ตอนนี้ระเบิดสุ่มลงช่อง hidden ทั้งหมดได้ (อยู่ที่เดิมก็ได้) สิ่งที่ต้องรับประกันคือ "ไม่หาย"
+  it('ย้ายระเบิดไปช่อง hidden ใหม่ ครบจำนวน ไม่ทับช่องที่เปิดแล้ว', () => {
     const settings = cardSettings()
     const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('shuffle'))
     const h = createGame(settings, seed)
     const before = secretMap(h)
     h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
     const after = secretMap(h)
+    // จำนวนระเบิดคงเดิม
     expect(Object.keys(after)).toHaveLength(Object.keys(before).length)
-    // ตำแหน่งเดิมทั้งหมดต้องว่างแล้ว
-    for (const n of Object.keys(before)) {
-      expect(after[Number(n)]).toBeUndefined()
+    // ชนิดระเบิด (real/glitch) คงเดิม
+    const kindCount = (m: Record<number, BombKind>) => {
+      const c: Record<string, number> = {}
+      for (const k of Object.values(m)) c[k] = (c[k] ?? 0) + 1
+      return c
     }
+    expect(kindCount(after)).toEqual(kindCount(before))
     // ตำแหน่งใหม่ต้องเป็น hidden (ยังไม่เปิด)
     const cells = h.getState().cells
     for (const n of Object.keys(after)) {
@@ -351,6 +364,49 @@ describe('Shuffle', () => {
     }
     // ไม่จบ turn (ยังอยู่ช่วงใช้การ์ด)
     expect(h.getState().phase).toBe('cards')
+  })
+
+  it('ช่องเหลือน้อย → ระเบิดไม่หาย (bombsRemaining คงเดิม)', () => {
+    // บอร์ดเล็ก แล้วเปิดช่องปลอดภัยทิ้งจนช่อง hidden เหลือใกล้จำนวนระเบิด
+    const settings = cardSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 6 })
+    const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('shuffle'))
+    const h = createGame(settings, seed)
+    // เปิดช่องปลอดภัยทุกช่องที่เปิดได้ — เหลือแต่ช่องที่มีระเบิด
+    const secret = secretMap(h)
+    for (let n = 1; n <= 6; n++) {
+      if (h.getState().phase === 'gameover') break
+      if (!(n in secret) && !(n in h.getState().cells)) h.dispatch({ type: 'OPEN_CELL', cell: n })
+    }
+    const st = h.getState()
+    if (st.phase === 'gameover') return // เกมจบก่อน (ช่องหมด) — ไม่มีอะไรให้ทดสอบ
+    const bombsBefore = st.bombsRemaining
+    expect(bombsBefore).toBeGreaterThan(0)
+    // หา turn ที่มี shuffle ในมือแล้วเล่น (PLAY_CARD รอบเดียว ไม่ผ่าน endTurn → เทียบสะอาด)
+    const cur = h.getState().teams[h.getState().currentTeamIndex]
+    if (!cur.hand.includes('shuffle')) return
+    const after = h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
+    expect(after.bombsRemaining).toBe(bombsBefore)
+    expect(Object.keys(secretMap(h))).toHaveLength(bombsBefore)
+  })
+
+  it('bombsRemaining ไม่เป็น 0 ทั้งที่ยังเหลือ >1 ทีมและยังมีช่อง hidden', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
+    const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('shuffle'))
+    const h = createGame(settings, seed)
+    // ใช้ shuffle ซ้ำ ๆ — ทุกครั้งระเบิดต้องยังอยู่ครบตราบใดที่เกมยังไม่จบ
+    for (let round = 0; round < 5; round++) {
+      const st = h.getState()
+      if (st.phase === 'gameover') break
+      const team = st.teams[st.currentTeamIndex]
+      if (team.hand.includes('shuffle')) {
+        const s = h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
+        const hidden = countHidden(s)
+        if (s.teams.filter((t) => t.alive).length > 1 && hidden > 0) {
+          expect(s.bombsRemaining).toBeGreaterThan(0)
+        }
+      }
+      endCurrentTurn(h)
+    }
   })
 })
 

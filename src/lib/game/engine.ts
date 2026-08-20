@@ -651,10 +651,14 @@ function playScan(state: EngineState, target: number): void {
 function playShuffle(state: EngineState): void {
   const team = currentTeam(state)
   const bombs = Array.from(state.bombs.entries())
-  const targets = hiddenCells(state).filter((c) => !state.bombs.has(c))
-  const shuffled = shuffle(state.rng, targets)
+  // pool ต้องเป็นช่อง hidden "ทั้งหมด" รวมช่องที่ระเบิดอยู่ตอนนี้ด้วย — ระเบิดเก็บใน Map แยก
+  // ไม่เคยเขียนลง state.cells ช่องที่มีระเบิดจึงยัง hidden และเป็นปลายทางที่ถูกต้อง
+  // (เดิม filter ช่องพวกนี้ทิ้ง → pool = hidden − bombCount พอช่องเหลือน้อย ระเบิดส่วนเกิน
+  //  ถูก guard `i < shuffled.length` ตัดหายเงียบ ๆ จนระเบิดเหลือ 0 ทั้งที่เกมยังไม่จบ)
+  // invariant: bombs.length <= pool.length เสมอ ระเบิดจึงไม่มีทางหาย
+  const shuffled = shuffle(state.rng, hiddenCells(state))
   state.bombs.clear()
-  for (let i = 0; i < bombs.length && i < shuffled.length; i++) {
+  for (let i = 0; i < bombs.length; i++) {
     state.bombs.set(shuffled[i], bombs[i][1])
   }
   state.lastCardResult = { card: 'shuffle' }
