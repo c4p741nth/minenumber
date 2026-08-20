@@ -915,3 +915,56 @@ describe('END_GAME (FIX #44)', () => {
     expect(after.log.length).toBe(before.log.length)
   })
 })
+
+// FIX #36: leaderboard ต้องโชว์ "เวลาเริ่ม → เวลาจบ" ของแต่ละเกม
+// เวลาจบเก็บตอนเขียน record ได้ แต่เวลาเริ่มมีแค่ engine ที่รู้ จึงต้องอยู่ใน state
+describe('startedAt (FIX #36)', () => {
+  it('createGame ตั้ง startedAt เป็นเวลาปัจจุบัน', () => {
+    const before = Date.now()
+    const h = createGame(baseSettings({ teamNames: ['A', 'B'] }), 1)
+    const after = Date.now()
+    const at = h.getState().startedAt
+    expect(typeof at).toBe('number')
+    expect(at as number).toBeGreaterThanOrEqual(before)
+    expect(at as number).toBeLessThanOrEqual(after)
+  })
+
+  it('เล่นไปหลายตาแล้ว startedAt ไม่เปลี่ยน (เวลาเริ่มเกม ไม่ใช่เวลาล่าสุด)', () => {
+    const h = createGame(baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 12 }), 7)
+    const at0 = h.getState().startedAt
+    const secret = h.serializeSecret()
+    let opened = 0
+    for (let n = 1; n <= 12 && opened < 3; n++) {
+      if (!(n in secret)) {
+        h.dispatch({ type: 'OPEN_CELL', cell: n })
+        opened++
+      }
+    }
+    expect(opened).toBeGreaterThan(0)
+    expect(h.getState().startedAt).toBe(at0)
+  })
+
+  // ตัวสำคัญสุด: ขาด `?? ` ที่ createGameFromState แล้วค่าจะรีเซ็ตทุกครั้งที่ resume
+  it('createGameFromState คง startedAt เดิม ไม่รีเซ็ตตอน resume', () => {
+    const h = createGame(baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 12 }), 3)
+    const state = h.getState()
+    const at0 = state.startedAt as number
+    expect(at0).toBeGreaterThan(0)
+    const restored = createGameFromState(state, h.serializeSecret(), 99)
+    expect(restored.getState().startedAt).toBe(at0)
+  })
+
+  it('snapshot เก่าที่ไม่มี startedAt → resume ได้ ไม่ crash และได้ค่าใหม่แทน', () => {
+    const h = createGame(baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 12 }), 5)
+    const state = h.getState()
+    // จำลอง snapshot ที่บันทึกไว้ก่อนอัปเกรด — field ยังไม่มี
+    const legacy = { ...state }
+    delete (legacy as { startedAt?: number }).startedAt
+    const before = Date.now()
+    const restored = createGameFromState(legacy, h.serializeSecret(), 11)
+    const at = restored.getState().startedAt as number
+    expect(at).toBeGreaterThanOrEqual(before)
+    // เล่นต่อได้ปกติ
+    expect(restored.getState().phase).toBe(state.phase)
+  })
+})

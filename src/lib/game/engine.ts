@@ -36,6 +36,8 @@ interface EngineState {
   rangeMin: number
   rangeMax: number
   turnNumber: number
+  // FIX #36: เวลาที่เกมนี้เริ่ม (epoch ms) — ใช้ทำ "ประวัติ 20 เกมล่าสุด" ที่บอกเวลาเริ่ม→เวลาจบ
+  startedAt: number
   log: LogEntry[]
   nextLogId: number
   eliminations: number
@@ -127,6 +129,7 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     rangeMin: clampedSettings.rangeMin,
     rangeMax: clampedSettings.rangeMax,
     turnNumber: 1,
+    startedAt: Date.now(),
     log: [],
     nextLogId: 0,
     eliminations: 0,
@@ -175,6 +178,9 @@ export function createGameFromState(
     rangeMin: state.rangeMin,
     rangeMax: state.rangeMax,
     turnNumber: state.turnNumber,
+    // FIX #36: snapshot เก่าไม่มี field นี้ — ถ้าไม่ ?? ค่าจะรีเซ็ตทุกครั้งที่ resume
+    // แล้ว "เวลาเริ่มเกม" ในประวัติจะกลายเป็นเวลาที่กดเล่นต่อครั้งล่าสุด
+    startedAt: state.startedAt ?? Date.now(),
     log: state.log.map((l) => ({ ...l })),
     nextLogId,
     eliminations,
@@ -225,6 +231,7 @@ function buildPublic(state: EngineState): PublicGameState {
     rangeMax: state.rangeMax,
     bombsRemaining: state.bombs.size,
     turnNumber: state.turnNumber,
+    startedAt: state.startedAt,
     log: state.log.map((l) => ({ ...l })),
     pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
     pendingBlock: state.pendingBlock ? { ...state.pendingBlock } : null,

@@ -111,6 +111,9 @@ export interface PublicGameState {
   rangeMax: number
   bombsRemaining: number // จำนวนเท่านั้น ห้ามมีตำแหน่ง
   turnNumber: number
+  // FIX #36: เวลาที่เกมเริ่ม (epoch ms) — optional เพราะ snapshot เก่า deserialize
+  // มาเป็น type นี้ ถ้า required จะเป็นการโกหกว่ามีข้อมูล
+  startedAt?: number
   log: LogEntry[]
   pendingDefuse: { cell: number } | null
   // FIX #25: กำลังถามทีมเป้าหมายว่าจะใช้ Block กันไหม (ไม่บอกว่ามีการ์ดอะไร)
