@@ -14,6 +14,27 @@ interface Props {
 const R = 28
 const CIRC = 2 * Math.PI * R
 
+// FIX bullet 52: pause ต้อง "แช่" เวลาไว้ ไม่ใช่รีเซ็ตหน้าจอ
+// เดิมใช้ตัวแปร active ตัวเดียวคุมทั้ง "นับอยู่ไหม" และ "แสดงอะไร" พอ pause แล้ว
+// active = false → วงแหวนเด้งกลับเต็ม (frac 1) และตัวเลขถูกแทนด้วย '⏸'
+// แยกเป็น showTime = "มีเวลาให้แสดงไหม" ซึ่งไม่สนใจ paused
+// แยกเป็น pure function เพื่อให้มีเทสคุม (เหมือน cellSizeFor / cardWidthFor)
+export function timerDisplay(
+  phase: Phase,
+  duration: number,
+  remaining: number,
+): { frac: number; label: string; danger: boolean } {
+  const showTime = (phase === 'cards' || phase === 'opening') && duration > 0
+  if (!showTime) return { frac: 1, label: '∞', danger: false }
+  const clamped = Math.max(remaining, 0)
+  return {
+    frac: clamped / duration,
+    label: String(clamped),
+    // pause ตอนเวลาใกล้หมดต้องยังเป็นสีแดง — สถานะอันตรายไม่ได้หายไปเพราะกดหยุด
+    danger: clamped <= 10,
+  }
+}
+
 export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeout }: Props) {
   const [remaining, setRemaining] = useState(duration)
   // นับถอยหลังตั้งแต่ช่วงใช้การ์ด ('cards') จนถึงช่วงเปิดป้าย ('opening')
@@ -37,8 +58,9 @@ export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeou
     return () => clearTimeout(t)
   }, [active, remaining, duration, onTimeout])
 
-  const frac = active ? Math.max(remaining, 0) / duration : 1
-  const danger = active && remaining <= 10
+  const { frac, label, danger } = timerDisplay(phase, duration, remaining)
+  // urgent (กระพริบ) + เสียง tick ผูกกับ active ไม่ใช่ showTime — หยุดเวลาแล้ว
+  // ไม่ต้องกระพริบและไม่ต้องมีเสียง แต่เลข/วงแหวน/สีแดงยังค้างอยู่
   const urgent = active && remaining <= 5
   const color = danger ? '#dc2626' : 'var(--primary)'
 
@@ -70,7 +92,7 @@ export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeou
           danger ? 'text-red-600' : ''
         } ${urgent ? 'timer-urgent' : ''}`}
       >
-        {paused && duration > 0 ? '⏸' : active ? remaining : '∞'}
+        {label}
       </span>
     </div>
   )
