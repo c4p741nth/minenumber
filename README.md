@@ -10,12 +10,14 @@
 1. **ตั้งค่า** — ตั้งชื่อทีม (2–12 ทีม), เลือกจำนวนช่องทั้งหมด (เริ่มจากเลข 1), toggle glitch/การ์ด/Shrinking Mode, ปรับเวลา สแกนรัศมี สัดส่วน glitch แล้วกด **เริ่มเกม**
    - จำนวนระเบิด = ทีม − 1 (ล็อกไว้ เพื่อให้เกมจบเมื่อเหลือ 1 ทีม)
    - ปุ่มเริ่มจะ disable ถ้าช่องน้อยกว่า ทีม × 4
+   - ใส่ **URL YouTube** ได้ (ไม่บังคับ) เป็นเพลง background ระหว่างเล่น + ปรับ volume แยกจากเสียง effect
 2. **ผลัดกันเปิดป้าย** — แต่ละทีมเลือกเลขบนกระดาน (หรือ MC พิมพ์เลขตรง ๆ)
    - `safe` → ผ่าน ไปทีมถัดไป
    - `real bomb` → เข้าโหมด **ตัดสาย** เลือกแดง/น้ำเงิน (ผลสุ่ม 50/50 ตัดสินไว้ก่อนแล้ว)
    - `glitch bomb` → ไม่ตาย แต่ทีมติด glitch 2 turn ใช้/จั่วการ์ดไม่ได้
-3. **การ์ด** — จั่ว 1 ใบเมื่อรอดจบ turn (มือเต็มจั่วไม่เข้า; ถ้าตั้ง "การ์ดเริ่มต้น" ไว้จะแจกตอนเริ่มเกม)
-   - 🔍 Scan: มี/ไม่มีระเบิดในช่วง ±R
+3. **การ์ด** — จั่ว 1 ใบเมื่อรอดจบ turn (มือถือได้ไม่จำกัด; ตั้งจำกัดได้ ถ้าเกินจั่วไม่เข้า; ตั้ง "การ์ดเริ่มต้น" จะแจกตอนเริ่มเกม)
+   - **ไพ่คว่ำหน้า** — กดเปิดดูทีละใบ แล้วเลือก ใช้ หรือ ทิ้ง
+   - 🔍 Scan: มี/ไม่มีระเบิดใน**ช่วงซ้าย–ขวา** ±R
    - ⏭ Skip: จบ turn ทันที (ไม่ได้จั่ว)
    - 🛡 Block: เป้าหมายใช้การ์ดไม่ได้ในตาถัดไป (ซ้อนชั้นได้)
    - 🔄 Reverse: สลับทิศทาง + จบ turn
@@ -29,7 +31,7 @@
 ```bash
 bun install
 bun dev          # dev server (Vite)
-bun test         # bun test (RNG / engine / cards / crypto / session / playthrough)
+bun test         # bun test (RNG / engine / cards / crypto / session / music / playthrough)
 bun run build    # สร้าง static build ไปที่ dist/
 ```
 
@@ -38,6 +40,14 @@ Deploy: เอาไฟล์ใน `dist/` ขึ้น static hosting ใด�
 
 Stack: **Bun + Vite + React + Tailwind** (ไม่ใช้ pnpm/Next อีกแล้ว)
 ส่วน `src/lib/` เป็น logic บริสุทธิ์ที่ framework-agnostic — ย้ายไปใช้ที่อื่นได้โดยไม่แก้
+
+## เสียง / เพลง
+
+- **ไฟล์เสียง effect** อยู่ใน `public/sounds/` (10 ไฟล์) — Vite copy ไป `dist/sounds/` ตอน build
+  ถ้าโหลดไม่ขึ้น (offline) จะ fallback เป็นเสียงที่ generate ด้วย WebAudio API
+- **เพลง background** — ใส่ URL YouTube ในหน้าตั้งค่า (เปิด/ปิดได้, volume แยกจากเสียง effect)
+  ใช้ YouTube IFrame Player API ฝัง player ซ่อน (ไม่ download ไฟล์) — ถ้า API โหลดไม่ได้จะซ่อน UI เพลง
+  หมายเหตุ: ถ้าจะเพิ่ม CSP ในอนาคตต้องเปิดให้ `youtube.com` / `ytimg.com` (ตอนนี้ยังไม่มี CSP header)
 
 ## หมายเหตุ (anti-cheat)
 
@@ -58,7 +68,7 @@ Stack: **Bun + Vite + React + Tailwind** (ไม่ใช้ pnpm/Next อีก
 ```
 src/lib/game/        engine บริสุทธิ์ (types, rng, config, engine, setup, cards, balance)
 src/lib/storage/     crypto + session + leaderboard (save/load/clear snapshot, settings)
-src/lib/audio/       เสียงทั้งหมด generate ด้วย WebAudio API
+src/lib/audio/       sfx (ไฟล์ + WebAudio fallback) + music (YouTube ID parser) + MusicPlayer
 src/components/      menu, setup, board, game, defuse, cards, effects, gameover, rules
 src/App.tsx          สลับหน้าเมนู/ตั้งค่า/กติกา/leaderboard/เกม
 ```
