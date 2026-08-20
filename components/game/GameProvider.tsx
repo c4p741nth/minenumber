@@ -7,6 +7,7 @@ import type { GameAction, PublicGameState } from '@/lib/game/types'
 interface GameContextValue {
   state: PublicGameState
   dispatch: (a: GameAction) => void
+  handle: GameHandle
 }
 
 const GameContext = createContext<GameContextValue | null>(null)
@@ -20,7 +21,11 @@ export function GameProvider({ handle, children }: { handle: GameHandle; childre
     setState(handleRef.current.dispatch(action))
   }
 
-  return <GameContext.Provider value={{ state, dispatch }}>{children}</GameContext.Provider>
+  return (
+    <GameContext.Provider value={{ state, dispatch, handle: handleRef.current }}>
+      {children}
+    </GameContext.Provider>
+  )
 }
 
 export function useGame(): GameContextValue {

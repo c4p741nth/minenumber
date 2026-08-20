@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createGame, type GameHandle } from './engine'
+import { createGame, createGameFromState, type GameHandle } from './engine'
 import { createRng } from './rng'
 import { refillBombs } from './setup'
 import type { BombKind, CellState, GameAction, GameSettings } from './types'
@@ -307,6 +307,37 @@ describe('determinism', () => {
     const json = JSON.stringify(state)
     for (const n of Object.keys(secret)) {
       expect(json).not.toContain(`"${n}"`)
+    }
+  })
+
+  it('createGameFromState กู้ state กลับมาได้ครบ (Task 10 resume)', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B', 'C'], rangeMin: 1, rangeMax: 12 })
+    const h = createGame(settings, 42)
+    for (let i = 0; i < 3; i++) {
+      const s = h.getState()
+      const secret = h.serializeSecret()
+      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+        if (!(n in secret) && !(n in s.cells)) {
+          h.dispatch({ type: 'OPEN_CELL', cell: n })
+          break
+        }
+      }
+    }
+    const state = h.getState()
+    const secret = h.serializeSecret()
+    const restored = createGameFromState(state, secret, 999)
+    expect(restored.getState()).toEqual(state)
+    expect(restored.serializeSecret()).toEqual(secret)
+
+    // กู้แล้วเล่นต่อได้ — เปิดช่องปลอดภัยถัดไปไม่ crash
+    const s2 = restored.getState()
+    const sec2 = restored.serializeSecret()
+    for (let n = s2.rangeMin; n <= s2.rangeMax; n++) {
+      if (!(n in sec2) && !(n in s2.cells)) {
+        const after = restored.dispatch({ type: 'OPEN_CELL', cell: n })
+        expect(after.cells[n]).toBe('safe')
+        break
+      }
     }
   })
 })

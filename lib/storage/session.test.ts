@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createGame } from '../game/engine'
+import { createGame, createGameFromState } from '../game/engine'
 import { defaultSettings } from '../game/config'
 import {
   clearSnapshot,
@@ -104,5 +104,36 @@ describe('snapshot', () => {
     expect(globalThis.localStorage.getItem('mn.salt')).toBeNull()
     // settings ยังอยู่ (คนละ key)
     expect(globalThis.localStorage.getItem('mn.prefs')).not.toBeNull()
+  })
+
+  it('save → load → createGameFromState กู้เกมกลางคันต่อได้จริง (Task 10 resume)', async () => {
+    const { h } = freshGame()
+    // เล่นไป 2 ตา
+    for (let i = 0; i < 2; i++) {
+      const s = h.getState()
+      const secret = h.serializeSecret()
+      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+        if (!(n in secret) && !(n in s.cells)) {
+          h.dispatch({ type: 'OPEN_CELL', cell: n })
+          break
+        }
+      }
+    }
+    await saveSnapshot(h.getState(), h.serializeSecret())
+
+    const loaded = await loadSnapshot()
+    expect(loaded).not.toBeNull()
+    const resumed = createGameFromState(loaded!.state, loaded!.secret, 55)
+    expect(resumed.getState()).toEqual(loaded!.state)
+
+    // เล่นต่อได้จริง ไม่ crash
+    const s2 = resumed.getState()
+    const sec2 = resumed.serializeSecret()
+    for (let n = s2.rangeMin; n <= s2.rangeMax; n++) {
+      if (!(n in sec2) && !(n in s2.cells)) {
+        resumed.dispatch({ type: 'OPEN_CELL', cell: n })
+        break
+      }
+    }
   })
 })

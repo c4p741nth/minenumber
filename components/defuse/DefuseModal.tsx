@@ -53,6 +53,19 @@ export function DefuseModal() {
     dispatch({ type: 'CHOOSE_WIRE', wire: chosen ?? 'red' })
   }
 
+  // Space ยืนยันตอนเฉลยผล
+  useEffect(() => {
+    if (stage !== 'result') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        e.preventDefault()
+        acknowledge()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [stage, chosen, acknowledge])
+
   return (
     <div
       className={`defuse-vignette ${stage === 'result' && !survived ? 'defuse-shake' : ''}`}

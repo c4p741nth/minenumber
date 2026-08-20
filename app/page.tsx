@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Autosave } from '@/components/game/Autosave'
 import { GameProvider } from '@/components/game/GameProvider'
 import { GameScreen } from '@/components/game/GameScreen'
 import { ResumePrompt } from '@/components/setup/ResumePrompt'
 import { SetupScreen } from '@/components/setup/SetupScreen'
-import { createGame, type GameHandle } from '@/lib/game/engine'
+import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
 import { randomSeed } from '@/lib/game/rng'
 import { unlockAudio } from '@/lib/audio/sfx'
@@ -29,16 +30,22 @@ export default function Page() {
 
   function startGame(s: GameSettings) {
     unlockAudio() // ปลดล็อก autoplay ด้วย user gesture แรก
+    void clearSnapshot() // เกมใหม่ → ล้าง snapshot เก่า
     saveSettings(s)
     setSettings(s)
     setGame(createGame(s, randomSeed()))
     setStarted(true)
   }
 
-  // Task 10 จะกู้ state กลางเกมกลับมา — ตอนนี้เริ่มด้วย settings เดิมของ snapshot
+  // กู้เกมกลางคันกลับมา — สร้าง engine จาก snapshot (Task 10)
   async function resumeGame() {
     const snap = await loadSnapshot()
-    if (snap) startGame(snap.state.settings)
+    if (snap) {
+      unlockAudio()
+      setSettings(snap.state.settings)
+      setGame(createGameFromState(snap.state, snap.secret, randomSeed()))
+      setStarted(true)
+    }
     setSnapshotHandled(true)
   }
 
@@ -46,6 +53,11 @@ export default function Page() {
     await clearSnapshot()
     setHasSnapshot(false)
     setSnapshotHandled(true)
+  }
+
+  async function exitGame() {
+    await clearSnapshot()
+    setStarted(false)
   }
 
   if (!ready) {
@@ -65,7 +77,8 @@ export default function Page() {
 
   return (
     <GameProvider handle={game}>
-      <GameScreen onRestart={() => startGame(settings)} onExit={() => setStarted(false)} />
+      <Autosave />
+      <GameScreen onRestart={() => startGame(settings)} onExit={exitGame} />
     </GameProvider>
   )
 }

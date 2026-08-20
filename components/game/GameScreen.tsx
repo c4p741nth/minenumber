@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Board } from '@/components/board/Board'
 import { TimerCircle } from '@/components/board/TimerCircle'
 import { Hand } from '@/components/cards/Hand'
@@ -17,6 +18,44 @@ interface Props {
 export function GameScreen({ onRestart, onExit }: Props) {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
+  const [typed, setTyped] = useState('')
+
+  // พิมพ์ตัวเลขตรง ๆ เพื่อเลือกช่อง (MC พิมพ์เร็วกว่าคลิก) + Esc ยกเลิก
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (state.phase !== 'opening' && state.phase !== 'cards') return
+      if (/^\d$/.test(e.key)) {
+        setTyped((prev) => (prev + e.key).slice(0, 3))
+      } else if (e.key === 'Enter' && typed !== '') {
+        dispatch({ type: 'OPEN_CELL', cell: Number(typed) })
+        setTyped('')
+      } else if (e.key === 'Backspace') {
+        setTyped((prev) => prev.slice(0, -1))
+      } else if (e.key === 'Escape') {
+        setTyped('')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [state.phase, typed, dispatch])
+
+  // พิมพ์ทิ้งไว้เกิน 700ms → เปิดให้อัตโนมัติ
+  useEffect(() => {
+    if (typed === '') return
+    const t = window.setTimeout(() => {
+      dispatch({ type: 'OPEN_CELL', cell: Number(typed) })
+      setTyped('')
+    }, 700)
+    return () => window.clearTimeout(t)
+  }, [typed, dispatch])
+
+  function endGame() {
+    if (window.confirm('จบเกมนี้เลย? (เกมจะถูกบันทึกเป็นจบเกมและกลับหน้าตั้งค่า)')) {
+      onExit()
+    }
+  }
 
   return (
     <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 p-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
@@ -48,9 +87,25 @@ export function GameScreen({ onRestart, onExit }: Props) {
       {state.phase === 'defusing' && <DefuseModal />}
       {state.phase === 'gameover' && <GameOverScreen onRestart={onRestart} onExit={onExit} />}
       <Hand />
-      <div className="fixed top-4 right-4 z-30">
+      <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
+        <button
+          onClick={endGame}
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold text-destructive shadow"
+        >
+          จบเกมนี้
+        </button>
         <MuteButton />
       </div>
+      {typed !== '' && state.phase !== 'gameover' && (
+        <div
+          className={
+            'fixed bottom-40 left-1/2 z-30 -translate-x-1/2 rounded-xl border-2 border-primary ' +
+            'bg-card px-4 py-2 font-mono text-3xl font-black shadow-2xl'
+          }
+        >
+          {typed}
+        </div>
+      )}
       <GameEffects />
     </div>
   )

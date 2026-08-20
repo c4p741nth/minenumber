@@ -107,6 +107,48 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     currentBlocked: false,
   }
 
+  return makeHandle(state)
+}
+
+// กู้เกมจาก snapshot (Task 10) — รับ PublicGameState + ตำแหน่งระเบิด (secret)
+// rng เริ่มใหม่จาก seed — ความสุ่มช่วงต่อจากนี้ไม่เหมือนเกมเดิม แต่เกมดำเนินต่อได้ถูกต้อง
+export function createGameFromState(
+  state: PublicGameState,
+  secret: PrivateBombState,
+  seed: number,
+): GameHandle {
+  const bombs = new Map<number, BombKind>()
+  for (const [n, kind] of Object.entries(secret)) bombs.set(Number(n), kind)
+  const nextLogId = state.log.reduce((m, l) => Math.max(m, l.id + 1), 0)
+  const eliminations = state.teams.reduce((m, t) => Math.max(m, t.eliminatedAt ?? 0), 0)
+
+  const restored: EngineState = {
+    settings: state.settings,
+    rng: createRng(seed),
+    bombs,
+    cells: { ...state.cells },
+    teams: state.teams.map((t) => ({ ...t, hand: t.hand.slice() })),
+    currentTeamIndex: state.currentTeamIndex,
+    direction: state.direction,
+    phase: state.phase,
+    rangeMin: state.rangeMin,
+    rangeMax: state.rangeMax,
+    turnNumber: state.turnNumber,
+    log: state.log.map((l) => ({ ...l })),
+    nextLogId,
+    eliminations,
+    pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
+    pendingDefuseSurvived:
+      state.lastResult?.kind === 'real' ? state.lastResult.survived : false,
+    lastResult: state.lastResult ? { ...state.lastResult } : null,
+    lastCardResult: state.lastCardResult ? { ...state.lastCardResult } : null,
+    currentGlitched: state.currentGlitched,
+    currentBlocked: state.currentBlocked,
+  }
+  return makeHandle(restored)
+}
+
+function makeHandle(state: EngineState): GameHandle {
   return {
     getState: () => buildPublic(state),
     dispatch: (action) => {
