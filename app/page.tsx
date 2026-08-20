@@ -65,7 +65,7 @@ export default function Page() {
 
   return (
     <GameProvider handle={game}>
-      <GameScreen />
+      <GameScreen onRestart={() => startGame(settings)} onExit={() => setStarted(false)} />
     </GameProvider>
   )
 }

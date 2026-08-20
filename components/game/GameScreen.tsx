@@ -6,9 +6,15 @@ import { Hand } from '@/components/cards/Hand'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
+import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { useGame } from './GameProvider'
 
-export function GameScreen() {
+interface Props {
+  onRestart: () => void
+  onExit: () => void
+}
+
+export function GameScreen({ onRestart, onExit }: Props) {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
 
@@ -40,6 +46,7 @@ export function GameScreen() {
         <LogPanel />
       </aside>
       {state.phase === 'defusing' && <DefuseModal />}
+      {state.phase === 'gameover' && <GameOverScreen onRestart={onRestart} onExit={onExit} />}
       <Hand />
       <div className="fixed top-4 right-4 z-30">
         <MuteButton />

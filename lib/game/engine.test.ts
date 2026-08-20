@@ -201,8 +201,7 @@ describe('end conditions', () => {
     expect(state.log.some((l) => l.message.includes('ชนะ'))).toBe(true)
   })
 
-  it('ช่อง hidden หมด แต่เหลือ >1 ทีม → เสมอ', () => {
-    // 2 ทีม range 1–8, 1 ระเบิดจริง — เปิด safe 7 ช่อง เหลือ hidden เฉพาะช่องระเบิด
+  it('ช่อง hidden หมด แต่เหลือ >1 ทีม → เสมอ', () => {    // 2 ทีม range 1–8, 1 ระเบิดจริง — เปิด safe 7 ช่อง เหลือ hidden เฉพาะช่องระเบิด
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     const seed = findDefuseSeed(settings, true)
     const h = createGame(settings, seed)
@@ -240,7 +239,44 @@ describe('end conditions', () => {
     // alive 6 → ต้องการ 5 แต่ hidden เหลือ 8 → เติม 5
     expect(refillBombs(bombs, cells, 1, 10, 6, rng)).toBe(5)
   })
+
+  it('4 ทีมตกรอบตามลำดับ → eliminatedAt ถูกต้อง (DoD Task 9: อันดับ 1-4)', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B', 'C', 'D'], rangeMin: 1, rangeMax: 16 })
+    let seed = -1
+    for (let s = 0; s < 50000; s++) {
+      const h = createGame(settings, s)
+      if (openAndDefuseFail(h) && openAndDefuseFail(h) && openAndDefuseFail(h)) {
+        seed = s
+        break
+      }
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    openAndDefuseFail(h)
+    openAndDefuseFail(h)
+    openAndDefuseFail(h)
+    const s = h.getState()
+    expect(s.phase).toBe('gameover')
+    // ทีม 0,1,2 ตกรอบตามลำดับ (eliminatedAt = 1,2,3) ทีม 3 ชนะ
+    expect(s.teams[0].eliminatedAt).toBe(1)
+    expect(s.teams[1].eliminatedAt).toBe(2)
+    expect(s.teams[2].eliminatedAt).toBe(3)
+    expect(s.teams[3].alive).toBe(true)
+    expect(s.teams[3].eliminatedAt).toBeNull()
+  })
 })
+
+// เปิดระเบิดจริงช่องแรกแล้ว defuse ให้ล้มเหลว — คืน true ถ้าทีมนั้นตาย
+function openAndDefuseFail(h: GameHandle): boolean {
+  const s = h.getState()
+  const secret = h.serializeSecret()
+  const realBomb = Number(Object.entries(secret).find(([, k]) => k === 'real')![0])
+  const opener = s.currentTeamIndex
+  h.dispatch({ type: 'OPEN_CELL', cell: realBomb })
+  if (h.getState().phase !== 'defusing') return false
+  h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+  return !h.getState().teams[opener].alive
+}
 
 describe('determinism', () => {
   it('seed เดียวกัน + action ชุดเดียวกัน → state เหมือนกันทุกครั้ง', () => {

@@ -14,6 +14,13 @@ export interface Team {
   blockedTurnsLeft: number // >0 = ใช้การ์ดไม่ได้ (จาก Block)
   pendingOpens: number // จำนวนป้ายที่ต้องเปิดในตานี้
   eliminatedAt: number | null // ลำดับการตกรอบ (1 = ตายคนแรก)
+  stats: TeamStats
+}
+
+export interface TeamStats {
+  opens: number // จำนวนป้ายที่เปิด (รวมที่ทำให้ตาย)
+  defusesSucceeded: number
+  cardsPlayed: Record<CardType, number>
 }
 
 export interface GameSettings {

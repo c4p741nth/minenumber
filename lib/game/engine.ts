@@ -15,6 +15,7 @@ import type {
   PrivateBombState,
   PublicGameState,
   Team,
+  TeamStats,
 } from './types'
 
 // Private state ของ engine — อยู่ใน closure ห้ามหลุดออกนอก module นี้
@@ -50,6 +51,21 @@ export interface GameHandle {
   serializeSecret(): PrivateBombState
 }
 
+function zeroStats(): TeamStats {
+  return {
+    opens: 0,
+    defusesSucceeded: 0,
+    cardsPlayed: {
+      scan: 0,
+      skip: 0,
+      block: 0,
+      reverse: 0,
+      shuffle: 0,
+      attack: 0,
+    },
+  }
+}
+
 export function createGame(settings: GameSettings, seed: number): GameHandle {
   const rng = createRng(seed)
   const teams = settings.teamNames.map((name, i) => ({
@@ -61,6 +77,7 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     blockedTurnsLeft: 0,
     pendingOpens: 1,
     eliminatedAt: null,
+    stats: zeroStats(),
   }))
   // เริ่มเกมทุกทีมได้ 1 ใบสุ่ม (§7.1)
   if (settings.cardsEnabled) {
@@ -185,6 +202,7 @@ function openCell(state: EngineState, cell: number): void {
   // เข้าช่วงเปิดป้าย (ทีมใช้การ์ดเสร็จแล้ว)
   if (state.phase === 'cards') state.phase = 'opening'
   const team = currentTeam(state)
+  team.stats.opens += 1
 
   const bomb = state.bombs.get(cell)
   if (bomb === 'real') {
@@ -226,6 +244,7 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
 
   if (survived) {
     state.cells[cell] = 'defused'
+    team.stats.defusesSucceeded += 1
     const candidates = hiddenCells(state).filter((c) => c !== cell && !state.bombs.has(c))
     if (candidates.length > 0) {
       const target = pickRandom(state.rng, candidates)
@@ -369,6 +388,7 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
   }
 
   team.hand.splice(idx, 1)
+  team.stats.cardsPlayed[action.card] += 1
 
   switch (action.card) {
     case 'scan':
