@@ -4,7 +4,7 @@ import type { CardType } from './types'
 
 type Rng = () => number
 
-// จั่วการ์ดสุ่ม 1 ใบ ตามน้ำหนัก (§7.2) — คืน null ถ้ามือเต็ม
+// จั่วการ์ดสุ่ม 1 ใบ ตามน้ำหนัก (§7.2) — คืน null ถ้ามือเต็ม (maxHandSize = 0 = ไม่จำกัด)
 // cardWeights (optional) เป็นการ override น้ำหนักเฉพาะบางชนิด
 export function drawRandomCard(
   hand: CardType[],
@@ -12,7 +12,8 @@ export function drawRandomCard(
   maxHandSize: number,
   weights?: Partial<Record<CardType, number>>,
 ): CardType | null {
-  if (hand.length >= maxHandSize) return null
+  // maxHandSize 0 = ไม่จำกัด — ห้ามใช้ Infinity (JSON.stringify → null ทำ snapshot พัง)
+  if (maxHandSize > 0 && hand.length >= maxHandSize) return null
   const merged = weights
     ? CARD_WEIGHTS.map(([c, w]) => [c, weights[c] ?? w] as const)
     : CARD_WEIGHTS
@@ -36,6 +37,16 @@ export const CARD_META: Record<CardType, { emoji: string; name: string; th: stri
 export const CARD_LABELS: Record<CardType, string> = Object.fromEntries(
   (Object.keys(CARD_META) as CardType[]).map((c) => [c, `${CARD_META[c].emoji} ${CARD_META[c].name}`]),
 ) as Record<CardType, string>
+
+// สีของแต่ละการ์ด — ใช้ทั้งการ์ด (Hand) และ toast ตอนจั่ว (W5.4) → อยู่ที่นี่ไฟล์เดียว
+export const CARD_COLORS: Record<CardType, string> = {
+  scan: 'border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  skip: 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  block: 'border-slate-500 bg-slate-500/15 text-slate-700 dark:text-slate-300',
+  reverse: 'border-orange-500 bg-orange-500/15 text-orange-700 dark:text-orange-300',
+  shuffle: 'border-purple-500 bg-purple-500/15 text-purple-700 dark:text-purple-300',
+  attack: 'border-red-500 bg-red-500/15 text-red-700 dark:text-red-300',
+}
 
 export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   scan: 'เลือกเลข → บอกว่ามีระเบิดในช่วง ±R หรือไม่ (มี/ไม่มี)',

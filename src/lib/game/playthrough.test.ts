@@ -44,6 +44,8 @@ function makeSettings(c: Combo): GameSettings {
     glitchRatio: 0.3,
     cardsEnabled: c.cardsEnabled,
     startingHand: c.cardsEnabled ? 1 : 0,
+    // กำหนดมือจำกัดไว้ให้ invariant มือมีผล (0 = ไม่จำกัด ต้องข้าม invariant)
+    maxHandSize: c.cardsEnabled ? 5 : 0,
     shrinkingEnabled: c.shrinkingEnabled,
   }
 }
@@ -87,6 +89,10 @@ function randomAction(h: GameHandle, rng: () => number): GameAction {
         s.rangeMin + Math.floor(rng() * (s.rangeMax - s.rangeMin + 1))
       return { type: 'PLAY_CARD', card, targetCell }
     } else {
+      // บางครั้งทิ้งการ์ดแทนใช้ (W5.3) — ไม่จบตา ไม่กระทบความคืบหน้าเกม
+      if (rng() < 0.3) {
+        return { type: 'DISCARD_CARD', index: cur.hand.indexOf(card) }
+      }
       return { type: 'PLAY_CARD', card }
     }
   }
@@ -133,9 +139,11 @@ describe('V8 playthrough — เล่นเกมจบจริงทุก co
           .map((t) => t.eliminatedAt as number)
         expect(new Set(ats).size).toBe(ats.length)
 
-        // 5. ไม่มีทีมถือการ์ดเกิน maxHandSize
-        for (const t of s.teams) {
-          expect(t.hand.length).toBeLessThanOrEqual(s.settings.maxHandSize)
+        // 5. ไม่มีทีมถือการ์ดเกิน maxHandSize (ข้ามเมื่อ 0 = ไม่จำกัด)
+        if (s.settings.maxHandSize > 0) {
+          for (const t of s.teams) {
+            expect(t.hand.length).toBeLessThanOrEqual(s.settings.maxHandSize)
+          }
         }
       }
     })
@@ -153,8 +161,10 @@ describe('V8 playthrough — เล่นเกมจบจริงทุก co
         const s = h.getState()
         if (s.phase === 'gameover') break
         expect(s.bombsRemaining).toBeGreaterThanOrEqual(0)
-        for (const t of s.teams) {
-          expect(t.hand.length).toBeLessThanOrEqual(s.settings.maxHandSize)
+        if (s.settings.maxHandSize > 0) {
+          for (const t of s.teams) {
+            expect(t.hand.length).toBeLessThanOrEqual(s.settings.maxHandSize)
+          }
         }
         h.dispatch(randomAction(h, rng))
         d++

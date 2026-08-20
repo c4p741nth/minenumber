@@ -39,7 +39,8 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [glitchRatioInput, setGlitchRatioInput] = useState(String(Math.round(initial.glitchRatio * 100)))
   const [glitchCountInput, setGlitchCountInput] = useState(String(initial.glitchCount))
   const [cardsEnabled, setCardsEnabled] = useState(initial.cardsEnabled)
-  const [maxHandInput, setMaxHandInput] = useState(String(initial.maxHandSize))
+  const [handLimited, setHandLimited] = useState(initial.maxHandSize > 0)
+  const [maxHandInput, setMaxHandInput] = useState(String(initial.maxHandSize || LIMITS.minHandSize))
   const [startingHandInput, setStartingHandInput] = useState(String(initial.startingHand))
   const [scanRadiusInput, setScanRadiusInput] = useState(String(initial.scanRadius))
   const [shrinkingEnabled, setShrinkingEnabled] = useState(initial.shrinkingEnabled)
@@ -118,7 +119,9 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       glitchRatio: clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio),
       glitchCount: clampInt(Number(glitchCountInput), 0, LIMITS.maxGlitchCount),
       cardsEnabled,
-      maxHandSize: clampInt(Number(maxHandInput), LIMITS.minHandSize, LIMITS.maxHandSizeCap),
+      maxHandSize: handLimited
+        ? clampInt(Number(maxHandInput), LIMITS.minHandSize, LIMITS.maxHandSizeCap)
+        : 0, // 0 = ไม่จำกัด (W5.1)
       startingHand: clampInt(Number(startingHandInput), 0, LIMITS.maxStartingHand),
       scanRadius: clampInt(Number(scanRadiusInput), LIMITS.minScanRadius, LIMITS.maxScanRadius),
       shrinkingEnabled,
@@ -469,24 +472,35 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
 
                 <fieldset disabled={!cardsEnabled} className={cardsEnabled ? '' : 'opacity-40'}>
                   <legend className="sr-only">ระบบการ์ด</legend>
-                  <NumberField
-                    label="มือสูงสุด (การ์ด)"
-                    hint="จำนวนการ์ดสูงสุดที่ถือได้ในมือ เกินกว่านี้จั่วไม่เข้า"
-                    value={maxHandInput}
-                    onChange={setMaxHandInput}
-                    min={LIMITS.minHandSize}
-                    max={LIMITS.maxHandSizeCap}
-                    suffix={`${Number(maxHandInput) || LIMITS.minHandSize} ใบ`}
-                    onBlurFix={() =>
-                      fixInput(
-                        maxHandInput,
-                        LIMITS.minHandSize,
-                        LIMITS.maxHandSizeCap,
-                        LIMITS.minHandSize,
-                        setMaxHandInput,
-                      )
-                    }
-                  />
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={handLimited}
+                      onChange={(e) => setHandLimited(e.target.checked)}
+                      className="h-5 w-5 accent-[var(--primary)]"
+                    />
+                    <span className="text-base font-semibold">จำกัดจำนวนใบในมือ</span>
+                  </label>
+                  {handLimited && (
+                    <NumberField
+                      label="มือสูงสุด (การ์ด)"
+                      hint="จำนวนการ์ดสูงสุดที่ถือได้ในมือ เกินกว่านี้จั่วไม่เข้า"
+                      value={maxHandInput}
+                      onChange={setMaxHandInput}
+                      min={LIMITS.minHandSize}
+                      max={LIMITS.maxHandSizeCap}
+                      suffix={`${Number(maxHandInput) || LIMITS.minHandSize} ใบ`}
+                      onBlurFix={() =>
+                        fixInput(
+                          maxHandInput,
+                          LIMITS.minHandSize,
+                          LIMITS.maxHandSizeCap,
+                          LIMITS.minHandSize,
+                          setMaxHandInput,
+                        )
+                      }
+                    />
+                  )}
                   <NumberField
                     label="การ์ดเริ่มต้น (แจกตอนเริ่มเกม)"
                     hint="การ์ดที่แจกให้ทุกทีมตั้งแต่เริ่มเกม (ปกติจั่วทีละ 1 ใบเมื่อรอดจบตา)"

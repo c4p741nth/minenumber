@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { createGame, createGameFromState, type GameHandle } from './engine'
 import { createRng } from './rng'
 import { refillBombs } from './setup'
+import { defaultSettings } from './config'
 import type { BombKind, CardType, CellState, GameAction, GameSettings } from './types'
 
 function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
@@ -562,6 +563,175 @@ function endCurrentTurnSafe(h: GameHandle): void {
     if (h.getState().currentTeamIndex !== startTeam || h.getState().turnNumber !== startTurn) return
   }
 }
+
+describe('W5 — มือไม่จำกัด + ทิ้งการ์ด + lastDraw', () => {
+  it('maxHandSize 0 = จั่วได้ไม่จำกัด (เกิน 7 ใบ)', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      maxHandSize: 0,
+      startingHand: 0,
+      teamNames: ['A', 'B'],
+    })
+    const h = createGame(settings, 5)
+    for (let i = 0; i < 20; i++) h.dispatch({ type: 'DRAW_CARD', teamId: '0' })
+    expect(h.getState().teams[0].hand).toHaveLength(20)
+  })
+
+  it('default ใหม่: startingHand 3 + maxHandSize 0 (ไม่จำกัด) — แจก 3 ใบ/ทีม', () => {
+    const s = defaultSettings()
+    expect(s.startingHand).toBe(3)
+    expect(s.maxHandSize).toBe(0)
+    const h = createGame(
+      { ...s, teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 20, cardsEnabled: true },
+      1,
+    )
+    for (const t of h.getState().teams) expect(t.hand).toHaveLength(3)
+  })
+
+  it('DISCARD_CARD ทิ้งใบที่ index → หายจากมือ, ไม่จบตา, ไม่ได้จั่วชดเชย', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      startingHand: 1,
+      maxHandSize: 5,
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 20,
+    })
+    const h = createGame(settings, 5)
+    const before = h.getState().teams[0].hand.length
+    expect(before).toBe(1)
+    const s = h.dispatch({ type: 'DISCARD_CARD', index: 0 })
+    expect(s.teams[0].hand).toHaveLength(before - 1)
+    expect(s.teams[0].stats.cardsDiscarded).toBe(1)
+    expect(s.phase).toBe('cards') // ไม่จบตา
+    expect(s.currentTeamIndex).toBe(0) // ยังเป็นตาทีมเดิม
+    expect(s.log.some((l) => l.message.includes('ทิ้งการ์ด'))).toBe(true)
+  })
+
+  it('DISCARD_CARD ตอนติด glitch → ไม่มีผล (การ์ดไม่หาย)', () => {
+    const settings = baseSettings({
+      glitchEnabled: true,
+      glitchMode: 'manual',
+      glitchCount: 3,
+      cardsEnabled: true,
+      startingHand: 1,
+      maxHandSize: 5,
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 30,
+    })
+    // หา seed ที่: ทีม 0 เปิด glitch ก่อน (glitchTurnsLeft=2) แล้ววนกลับมาตา 0 ติด glitch
+    let seed = -1
+    for (let s = 0; s < 20000; s++) {
+      const h = createGame(settings, s)
+      const secret = h.serializeSecret()
+      const glitch = Object.entries(secret).find(([, k]) => k === 'glitch')
+      if (!glitch) continue
+      h.dispatch({ type: 'OPEN_CELL', cell: Number(glitch[0]) })
+      if (h.getState().teams[0].glitchTurnsLeft !== 2) continue
+      const s2 = h.getState()
+      let safe = -1
+      for (let n = s2.rangeMin; n <= s2.rangeMax; n++) {
+        if (!(n in secret) && !(n in s2.cells)) {
+          safe = n
+          break
+        }
+      }
+      if (safe < 0) continue
+      h.dispatch({ type: 'OPEN_CELL', cell: safe })
+      if (h.getState().currentTeamIndex !== 0) continue
+      seed = s
+      break
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    const secret = h.serializeSecret()
+    const glitchCell = Number(Object.entries(secret).find(([, k]) => k === 'glitch')![0])
+    h.dispatch({ type: 'OPEN_CELL', cell: glitchCell })
+    const s2 = h.getState()
+    let safe = -1
+    for (let n = s2.rangeMin; n <= s2.rangeMax; n++) {
+      if (!(n in secret) && !(n in s2.cells)) {
+        safe = n
+        break
+      }
+    }
+    h.dispatch({ type: 'OPEN_CELL', cell: safe })
+    const state = h.getState()
+    expect(state.currentTeamIndex).toBe(0)
+    expect(state.currentGlitched).toBe(true)
+    const handBefore = state.teams[0].hand.length
+    h.dispatch({ type: 'DISCARD_CARD', index: 0 })
+    expect(h.getState().teams[0].hand).toHaveLength(handBefore)
+  })
+
+  it('DISCARD_CARD ตอนโดน block → ไม่มีผล (การ์ดไม่หาย)', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      startingHand: 1,
+      maxHandSize: 5,
+      teamNames: ['A', 'B', 'C'],
+      rangeMin: 1,
+      rangeMax: 20,
+    })
+    // A มี block ใช้ใส่ B → B ตาต่อไปถูก block → ทิ้งไม่ได้
+    let seed = -1
+    for (let s = 0; s < 40000; s++) {
+      const h = createGame(settings, s)
+      if (h.getState().teams[0].hand.includes('block')) {
+        seed = s
+        break
+      }
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
+    // A เปิด safe จบตา → B
+    const s = h.getState()
+    const secret = h.serializeSecret()
+    const safe = (() => {
+      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+        if (!(n in secret) && !(n in s.cells)) return n
+      }
+      return -1
+    })()
+    h.dispatch({ type: 'OPEN_CELL', cell: safe })
+    expect(h.getState().currentTeamIndex).toBe(1)
+    expect(h.getState().currentBlocked).toBe(true)
+    const handBefore = h.getState().teams[1].hand.length
+    h.dispatch({ type: 'DISCARD_CARD', index: 0 })
+    expect(h.getState().teams[1].hand).toHaveLength(handBefore)
+  })
+
+  it('lastDraw เคลียร์เป็น null เมื่อขึ้นตาถัดไป แต่จั่วจริง (มี log draw)', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      startingHand: 0,
+      maxHandSize: 5,
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 12,
+    })
+    const h = createGame(settings, 5)
+    const s = h.getState()
+    const secret = h.serializeSecret()
+    const safe = (() => {
+      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+        if (!(n in secret) && !(n in s.cells)) return n
+      }
+      return -1
+    })()
+    h.dispatch({ type: 'OPEN_CELL', cell: safe })
+    const after = h.getState()
+    expect(after.currentTeamIndex).toBe(1) // ขึ้นตาถัดไปแล้ว
+    expect(after.lastDraw).toBeNull() // เคลียร์ ไม่ให้ทีมถัดไปเห็น
+    expect(after.teams[0].hand).toHaveLength(1) // A จั่วได้จริง
+    // หลักฐานว่าจั่วจริง: มี log kind=draw + ระบุทีม
+    const drawLog = after.log.find((l) => l.kind === 'draw')
+    expect(drawLog?.card).toBeDefined()
+    expect(drawLog?.teamId).toBe('0')
+  })
+})
 
 describe('determinism / resume', () => {
   it('seed เดียวกัน + action ชุดเดียวกัน → state เหมือนกันทุกครั้ง', () => {

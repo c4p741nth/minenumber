@@ -1,4 +1,4 @@
-import { drawRandomCard } from './cards'
+import { CARD_LABELS, drawRandomCard } from './cards'
 import { createRng, pickRandom, shuffle } from './rng'
 import { refillBombs, setupBombs } from './setup'
 import type {
@@ -38,6 +38,7 @@ interface EngineState {
   pendingDefuseSurvived: boolean
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
+  lastDraw: { teamId: string; card: CardType } | null
   // ทีมปัจจุบันติด glitch/block ไหม (ตั้งตอนเริ่ม turn ของตัวเอง)
   currentGlitched: boolean
   currentBlocked: boolean
@@ -54,6 +55,7 @@ function zeroStats(): TeamStats {
   return {
     opens: 0,
     defusesSucceeded: 0,
+    cardsDiscarded: 0,
     cardsPlayed: {
       scan: 0,
       skip: 0,
@@ -78,11 +80,11 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     eliminatedAt: null,
     stats: zeroStats(),
   }))
-  // เริ่มเกมแจกการ์ดให้ทุกทีม (startingHand ใบ — default 0 = ไม่แจก) (§7.1)
+  // เริ่มเกมแจกการ์ดให้ทุกทีม (startingHand ใบ — default 3, maxHandSize 0 = ไม่จำกัด) (§7.1)
   if (settings.cardsEnabled) {
     for (const t of teams) {
       for (let i = 0; i < settings.startingHand; i++) {
-        if (t.hand.length >= settings.maxHandSize) break
+        if (settings.maxHandSize > 0 && t.hand.length >= settings.maxHandSize) break
         drawRandomCard(t.hand, rng, settings.maxHandSize, settings.cardWeights)
       }
     }
@@ -107,6 +109,7 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     pendingDefuseSurvived: false,
     lastResult: null,
     lastCardResult: null,
+    lastDraw: null,
     currentGlitched: false,
     currentBlocked: false,
   }
@@ -146,6 +149,7 @@ export function createGameFromState(
       state.lastResult?.kind === 'real' ? state.lastResult.survived : false,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
     lastCardResult: state.lastCardResult ? { ...state.lastCardResult } : null,
+    lastDraw: state.lastDraw ? { ...state.lastDraw } : null,
     currentGlitched: state.currentGlitched,
     currentBlocked: state.currentBlocked,
   }
@@ -183,6 +187,7 @@ function buildPublic(state: EngineState): PublicGameState {
     pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
     lastCardResult: state.lastCardResult ? { ...state.lastCardResult } : null,
+    lastDraw: state.lastDraw ? { ...state.lastDraw } : null,
     currentGlitched: state.currentGlitched,
     currentBlocked: state.currentBlocked,
   }
@@ -206,14 +211,22 @@ function dispatchAction(state: EngineState, action: GameAction): void {
     case 'PLAY_CARD':
       playCard(state, action)
       break
+    case 'DISCARD_CARD':
+      discardCard(state, action)
+      break
     case 'DRAW_CARD':
       drawCardAction(state, action.teamId)
       break
   }
 }
 
-function pushLog(state: EngineState, teamId: string | null, message: string): void {
-  state.log.push({ id: state.nextLogId++, turn: state.turnNumber, teamId, message })
+function pushLog(
+  state: EngineState,
+  teamId: string | null,
+  message: string,
+  extra?: { kind?: 'draw'; card?: CardType },
+): void {
+  state.log.push({ id: state.nextLogId++, turn: state.turnNumber, teamId, message, ...extra })
 }
 
 function currentTeam(state: EngineState): Team {
@@ -355,14 +368,25 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
 
   if (acting.alive) acting.pendingOpens = 1
   // จั่วการ์ดเมื่อรอดจบ turn และไม่ติด glitch (§7.1)
+  // maxHandSize 0 = ไม่จำกัด (W5.1)
   if (
     draw &&
     acting.alive &&
     !state.currentGlitched &&
     state.settings.cardsEnabled &&
-    acting.hand.length < state.settings.maxHandSize
+    (state.settings.maxHandSize === 0 || acting.hand.length < state.settings.maxHandSize)
   ) {
-    drawRandomCard(acting.hand, state.rng, state.settings.maxHandSize, state.settings.cardWeights)
+    const card = drawRandomCard(
+      acting.hand,
+      state.rng,
+      state.settings.maxHandSize,
+      state.settings.cardWeights,
+    )
+    // เก็บไว้ทำ toast สีตอนจั่ว (W5.4) — เคลียร์ใน advanceToNext ไม่ให้ทีมถัดไปเห็น
+    if (card) {
+      state.lastDraw = { teamId: acting.id, card }
+      pushLog(state, acting.id, 'ได้การ์ด 1 ใบ', { kind: 'draw', card })
+    }
   }
   advanceToNext(state)
   state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
@@ -377,6 +401,8 @@ function advanceToNext(state: EngineState): void {
   }
   state.currentTeamIndex = i
   state.turnNumber += 1
+  // เคลียร์การ์ดที่ทีมก่อนหน้าจั่ว — กันทีมถัดไปเห็น (ข้อมูลรั่ว W5.4)
+  state.lastDraw = null
   const team = state.teams[i]
   // glitch/block ลดตอนเริ่ม turn ของทีมนั้นเอง (§3.4.9)
   state.currentBlocked = team.blockedTurnsLeft > 0
@@ -404,16 +430,28 @@ function timeout(state: EngineState): void {
 function drawCardAction(state: EngineState, teamId: string): void {
   const team = state.teams.find((t) => t.id === teamId)
   if (!team || !team.alive || !state.settings.cardsEnabled) return
-  if (team.glitchTurnsLeft > 0 || team.hand.length >= state.settings.maxHandSize) return
+  if (
+    team.glitchTurnsLeft > 0 ||
+    (state.settings.maxHandSize > 0 && team.hand.length >= state.settings.maxHandSize)
+  ) {
+    return
+  }
   drawRandomCard(team.hand, state.rng, state.settings.maxHandSize, state.settings.cardWeights)
 }
 
 // ใช้การ์ด 1 ใบ — ต้องอยู่ในช่วงใช้การ์ด ('cards') และไม่ติด glitch/block
+// index (optional) ระบุใบที่เปิดอยู่ (ไพ่คว่ำหน้า W5.3) — ถ้าไม่ส่ง จะหาใบแรกที่ตรงชนิด
 function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_CARD' }>): void {
   if (state.phase !== 'cards') return
   const team = currentTeam(state)
   if (state.currentGlitched || state.currentBlocked) return
-  const idx = team.hand.indexOf(action.card)
+  const idx =
+    action.index !== undefined &&
+    action.index >= 0 &&
+    action.index < team.hand.length &&
+    team.hand[action.index] === action.card
+      ? action.index
+      : team.hand.indexOf(action.card)
   if (idx < 0) return
 
   // ตรวจ target ก่อนหักการ์ด (ถ้า invalid = ไม่ใช้การ์ด)
@@ -467,6 +505,20 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       playAttack(state, action.targetTeamId!)
       break
   }
+}
+
+// ทิ้งการ์ด 1 ใบ (W5.3) — เฉพาะช่วงใช้การ์ด + ไม่ติด glitch/block
+// ทิ้งแล้วไม่จบตา ไม่ได้จั่วชดเชย — log บอกชื่อการ์ด (ทิ้งแล้วไม่เป็นความลับอีก)
+function discardCard(state: EngineState, action: Extract<GameAction, { type: 'DISCARD_CARD' }>): void {
+  if (state.phase !== 'cards') return
+  const team = currentTeam(state)
+  if (state.currentGlitched || state.currentBlocked) return
+  const idx = action.index
+  if (idx < 0 || idx >= team.hand.length) return
+  const card = team.hand[idx]
+  team.hand.splice(idx, 1)
+  team.stats.cardsDiscarded += 1
+  pushLog(state, team.id, `${team.name} ทิ้งการ์ด ${CARD_LABELS[card]}`)
 }
 
 function playScan(state: EngineState, target: number): void {

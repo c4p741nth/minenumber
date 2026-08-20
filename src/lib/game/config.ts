@@ -15,7 +15,7 @@ export const LIMITS = {
   maxScanRadius: 5,
   minHandSize: 3,
   maxHandSizeCap: 7,
-  maxStartingHand: 3,
+  maxStartingHand: 5,
   maxGlitchCount: 50,
   // ช่องต้อง ≥ ทีม × 4 ไม่งั้นบล็อกปุ่มเริ่มเกม
   minCellsPerTeam: 4,
@@ -31,8 +31,8 @@ export const DEFAULTS = {
   glitchRatio: 0.3,
   glitchCount: 0,
   cardsEnabled: true,
-  maxHandSize: 5,
-  startingHand: 0,
+  maxHandSize: 0, // 0 = ไม่จำกัด (W5.1)
+  startingHand: 3, // แจกขั้นต่ำ 3 ใบ/ทีม (W5.2)
   scanRadius: 3,
   shrinkingEnabled: false,
 } as const

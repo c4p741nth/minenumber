@@ -133,6 +133,7 @@ function StatsRow({ team }: { team: Team }) {
     <span className="flex shrink-0 items-center gap-3 text-sm text-muted-foreground">
       <span title="ป้ายที่เปิด">🔎 {team.stats.opens}</span>
       <span title="กู้สำเร็จ">🧨 {team.stats.defusesSucceeded}</span>
+      <span title="การ์ดที่ทิ้ง">🗑 {team.stats.cardsDiscarded}</span>
       <span title="การ์ดที่ใช้เยอะสุด">
         {top && top[1] > 0 ? `${CARD_LABELS[top[0]]} ×${top[1]}` : '—'}
       </span>

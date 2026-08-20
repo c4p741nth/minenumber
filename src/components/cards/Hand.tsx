@@ -1,7 +1,8 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import {
+  CARD_COLORS,
   CARD_DESCRIPTIONS,
   CARD_META,
   cardNeedsCellTarget,
@@ -9,89 +10,113 @@ import {
 } from '@/lib/game/cards'
 import type { CardType } from '@/lib/game/types'
 
-const CARD_COLORS: Record<CardType, string> = {
-  scan: 'border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  skip: 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  block: 'border-slate-500 bg-slate-500/15 text-slate-700 dark:text-slate-300',
-  reverse: 'border-orange-500 bg-orange-500/15 text-orange-700 dark:text-orange-300',
-  shuffle: 'border-purple-500 bg-purple-500/15 text-purple-700 dark:text-purple-300',
-  attack: 'border-red-500 bg-red-500/15 text-red-700 dark:text-red-300',
-}
-
 interface HandProps {
   // ล็อกการ์ด — ผู้เล่นเลือก "เปิดป้ายเลย" ในตานี้ (ยังจั่ว/เห็นมือได้ แต่ใช้ไม่ได้)
   locked?: boolean
 }
 
+// W5.3: ไพ่ในมือคว่ำหน้าทั้งหมด — กดเปิดทีละใบ (revealed) แล้วตัดสินใจ ใช้/ทิ้ง
+// เปิดแล้วปิดกลับไม่ได้ และระหว่างเปิดใบหนึ่งอยู่ห้ามเปิดใบอื่นซ้อน
 export function Hand({ locked = false }: HandProps) {
   const { state, dispatch } = useGame()
-  const [selected, setSelected] = useState<CardType | null>(null)
+  const [revealed, setRevealed] = useState<number | null>(null)
   const [scanTarget, setScanTarget] = useState('')
 
   const current = state.teams[state.currentTeamIndex]
   const canPlay = state.phase === 'cards' && !locked && !state.currentGlitched && !state.currentBlocked
   const maxHand = state.settings.maxHandSize
-  const handFull = current.hand.length >= maxHand
+  const handLimited = maxHand > 0
+  const handFull = handLimited && current.hand.length >= maxHand
+
+  // ขึ้นตาใหม่ → ปิดการ์ดที่เปิดค้างไว้
+  useEffect(() => {
+    setRevealed(null)
+    setScanTarget('')
+  }, [state.turnNumber, state.currentTeamIndex])
 
   if (!state.settings.cardsEnabled || state.phase === 'gameover') return null
 
-  function playCard(card: CardType, extra?: { targetTeamId?: string; targetCell?: number }) {
-    dispatch({ type: 'PLAY_CARD', card, ...extra })
-    setSelected(null)
+  const revealedCard = revealed !== null ? current.hand[revealed] : null
+
+  function playRevealed(extra?: { targetTeamId?: string; targetCell?: number }) {
+    if (revealedCard === null) return
+    dispatch({ type: 'PLAY_CARD', card: revealedCard, index: revealed!, ...extra })
+    setRevealed(null)
     setScanTarget('')
   }
 
-  function onCardClick(card: CardType) {
-    if (!canPlay) return
-    if (cardNeedsTeamTarget(card) || cardNeedsCellTarget(card)) {
-      setSelected(selected === card ? null : card)
-    } else {
-      playCard(card)
-    }
+  function discardRevealed() {
+    if (revealed === null) return
+    dispatch({ type: 'DISCARD_CARD', index: revealed })
+    setRevealed(null)
   }
 
-  const needsTeam = selected !== null && cardNeedsTeamTarget(selected)
-  const needsCell = selected !== null && cardNeedsCellTarget(selected)
+  function onCardClick(i: number) {
+    if (!canPlay) return
+    if (revealed !== null) return // กันเปิดซ้อนระหว่างเปิดใบหนึ่งอยู่
+    setRevealed(i)
+  }
+
+  const needsTeam = revealedCard !== null && cardNeedsTeamTarget(revealedCard)
+  const needsCell = revealedCard !== null && cardNeedsCellTarget(revealedCard)
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 pb-3">
-      {selected && (
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-2xl">
-          {needsTeam &&
-            state.teams
-              .filter((t) => t.alive)
-              .map((t) => (
+      {/* ใบที่เปิดอยู่ — เลือกใช้/ทิ้ง หรือเลือกเป้า */}
+      {revealedCard && (
+        <div
+          className={`flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 shadow-2xl ${CARD_COLORS[revealedCard]}`}
+        >
+          <span className="text-3xl leading-none">{CARD_META[revealedCard].emoji}</span>
+          <div className="min-w-0">
+            <p className="text-lg font-black">{CARD_META[revealedCard].name}</p>
+            <p className="text-sm leading-5">{CARD_DESCRIPTIONS[revealedCard]}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {needsTeam &&
+              state.teams
+                .filter((t) => t.alive)
+                .map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => playRevealed({ targetTeamId: t.id })}
+                    className="rounded-lg border-2 border-border bg-background px-3 py-2 text-base font-bold hover:border-primary"
+                  >
+                    {t.name}
+                  </button>
+                ))}
+            {needsCell && (
+              <>
+                <input
+                  type="number"
+                  value={scanTarget}
+                  min={state.rangeMin}
+                  max={state.rangeMax}
+                  onChange={(e) => setScanTarget(e.target.value)}
+                  placeholder="เลขเป้า"
+                  className="control w-28 text-lg font-bold"
+                />
                 <button
-                  key={t.id}
-                  onClick={() => playCard(selected, { targetTeamId: t.id })}
-                  className={
-                    'rounded-lg border-2 border-border bg-background px-3 py-2 ' +
-                    'text-base font-bold hover:border-primary'
-                  }
+                  onClick={() => playRevealed({ targetCell: Number(scanTarget) })}
+                  disabled={scanTarget === ''}
+                  className="primary-button disabled:opacity-40"
                 >
-                  {t.name}
+                  ยืนยัน
                 </button>
-              ))}
-          {needsCell && (
-            <>
-              <input
-                type="number"
-                value={scanTarget}
-                min={state.rangeMin}
-                max={state.rangeMax}
-                onChange={(e) => setScanTarget(e.target.value)}
-                placeholder="เลขเป้า"
-                className="control w-28 text-lg font-bold"
-              />
-              <button
-                onClick={() => playCard(selected, { targetCell: Number(scanTarget) })}
-                disabled={scanTarget === ''}
-                className="primary-button disabled:opacity-40"
-              >
-                ยืนยัน
+              </>
+            )}
+            {!needsTeam && !needsCell && (
+              <button onClick={() => playRevealed()} className="primary-button">
+                ใช้
               </button>
-            </>
-          )}
+            )}
+            <button
+              onClick={discardRevealed}
+              className="rounded-lg border border-border bg-background px-3 py-2 text-base font-bold text-destructive"
+            >
+              ทิ้ง
+            </button>
+          </div>
         </div>
       )}
 
@@ -107,20 +132,20 @@ export function Hand({ locked = false }: HandProps) {
       )}
 
       <div className="flex gap-2">
-        {current.hand.map((card, i) => (
+        {current.hand.map((_, i) => (
           <button
             key={i}
-            onClick={() => onCardClick(card)}
+            onClick={() => onCardClick(i)}
             disabled={!canPlay}
-            title={CARD_DESCRIPTIONS[card]}
+            title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
             className={
-              `flex w-20 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
-              `${CARD_COLORS[card]} transition hover:scale-105 ` +
+              `flex w-16 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
+              `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
               `disabled:cursor-not-allowed disabled:opacity-40`
             }
           >
-            <span className="text-2xl leading-none">{CARD_META[card].emoji}</span>
-            <span className="text-sm font-black">{CARD_META[card].name}</span>
+            <span className="text-2xl leading-none">🂠</span>
+            <span className="text-sm font-black">#{i + 1}</span>
           </button>
         ))}
         {current.hand.length === 0 && (

@@ -21,6 +21,7 @@ export interface TeamStats {
   opens: number // จำนวนป้ายที่เปิด (รวมที่ทำให้ตาย)
   defusesSucceeded: number
   cardsPlayed: Record<CardType, number>
+  cardsDiscarded: number // จำนวนการ์ดที่ทิ้ง (W5.3)
 }
 
 export interface GameSettings {
@@ -45,6 +46,9 @@ export type LogEntry = {
   turn: number
   teamId: string | null
   message: string
+  // สำหรับ toast สีการ์ดตอนจั่ว (W5.4) — มีเฉพาะรายการ "ได้การ์ด"
+  kind?: 'draw'
+  card?: CardType
 }
 
 // ผลของการเปิดช่องหนึ่งช่อง
@@ -67,7 +71,8 @@ export type GameAction =
   | { type: 'CHOOSE_WIRE'; wire: 'red' | 'blue' }
   | { type: 'TIMEOUT' }
   | { type: 'END_TURN' }
-  | { type: 'PLAY_CARD'; card: CardType; targetTeamId?: string; targetCell?: number }
+  | { type: 'PLAY_CARD'; card: CardType; index?: number; targetTeamId?: string; targetCell?: number }
+  | { type: 'DISCARD_CARD'; index: number } // ทิ้งการ์ดใบที่ index (W5.3)
   | { type: 'DRAW_CARD'; teamId: string }
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
 export interface PublicGameState {
@@ -85,6 +90,9 @@ export interface PublicGameState {
   pendingDefuse: { cell: number } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
+  // การ์ดที่เพิ่งจั่วตอนจบตาก่อนหน้า — ใช้ทำ toast สี (W5.4)
+  // ⚠️ เคลียร์เป็น null เมื่อขึ้นตาถัดไป กันทีมถัดไปเห็นการ์ดทีมก่อนหน้า
+  lastDraw: { teamId: string; card: CardType } | null
   // ทีมปัจจุบันใช้การ์ดไม่ได้ไหม (สำหรับ UI เทา/บอกเหตุผล)
   currentGlitched: boolean
   currentBlocked: boolean
