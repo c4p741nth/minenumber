@@ -65,6 +65,11 @@ export function Hand({ locked = false }: HandProps) {
   const needsTeam = revealedCard !== null && cardNeedsTeamTarget(revealedCard)
   const needsCell = revealedCard !== null && cardNeedsCellTarget(revealedCard)
 
+  // B7: ย่อขนาดการ์ดเมื่อใบเยอะ (64 → 48 → 36px) ก่อนจะปล่อยให้ scroll
+  const handCount = current.hand.length
+  const compact = handCount > 12
+  const cardWidth = handCount > 20 ? 36 : handCount > 12 ? 48 : 64
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 pb-3">
       {/* ใบที่เปิดอยู่ — เลือกใช้/ทิ้ง หรือเลือกเป้า */}
@@ -136,26 +141,31 @@ export function Hand({ locked = false }: HandProps) {
         </p>
       )}
 
-      <div className="flex gap-2">
-        {current.hand.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => onCardClick(i)}
-            aria-disabled={!canPlay}
-            title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
-            className={
-              `flex w-16 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
-              `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
-              `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
-            }
-          >
-            <span className="text-2xl leading-none">🂠</span>
-            <span className="text-sm font-black">#{i + 1}</span>
-          </button>
-        ))}
-        {current.hand.length === 0 && (
-          <p className="text-sm text-muted-foreground">ไม่มีการ์ดในมือ</p>
-        )}
+      {/* B7: มือถือได้ไม่จำกัด — การ์ดย่อลงตามจำนวนใบ แล้วถ้ายังไม่พอก็ scroll แนวนอน
+          (แถวเดียวเสมอ เพื่อไม่ให้มือสูงขึ้นไปบังกระดาน) */}
+      <div className="w-full overflow-x-auto px-3 pb-1">
+        <div className="mx-auto flex w-max gap-2">
+          {current.hand.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => onCardClick(i)}
+              aria-disabled={!canPlay}
+              title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
+              style={{ width: cardWidth }}
+              className={
+                `flex shrink-0 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
+                `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
+                `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
+              }
+            >
+              <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>🂠</span>
+              <span className={compact ? 'text-xs font-black' : 'text-sm font-black'}>#{i + 1}</span>
+            </button>
+          ))}
+          {current.hand.length === 0 && (
+            <p className="text-sm text-muted-foreground">ไม่มีการ์ดในมือ</p>
+          )}
+        </div>
       </div>
 
       {!canPlay && state.phase === 'cards' && (
