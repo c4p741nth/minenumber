@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { LIMITS, bombQuota, glitchCountFor } from '@/lib/game/config'
 import type { GameSettings } from '@/lib/game/types'
+import { RulesPanel } from './RulesPanel'
 
 interface Props {
   initial: GameSettings
@@ -252,6 +253,8 @@ export function SetupScreen({ initial, onStart }: Props) {
           </label>
         </section>
       </div>
+
+      <RulesPanel />
     </div>
   )
 }
