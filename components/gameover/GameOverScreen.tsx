@@ -1,12 +1,15 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { CARD_LABELS } from '@/lib/game/cards'
+import { appendMatch, totalCardsPlayed } from '@/lib/storage/leaderboard'
 import type { CardType, Team } from '@/lib/game/types'
 
 interface Props {
   onRestart: () => void
   onExit: () => void
+  onLeaderboard: () => void
 }
 
 interface RankedTeam {
@@ -14,10 +17,30 @@ interface RankedTeam {
   rank: number
 }
 
-export function GameOverScreen({ onRestart, onExit }: Props) {
+export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
   const { state } = useGame()
   const { rankings, isDraw, noWinner } = computeRankings(state.teams)
   const winner = rankings.find((r) => r.rank === 1)
+  const savedRef = useRef(false)
+
+  // บันทึกผลเข้าบอร์ดครั้งเดียวตอน mount — guard กัน React StrictMode double-mount
+  useEffect(() => {
+    if (savedRef.current) return
+    savedRef.current = true
+    appendMatch(
+      rankings.map((r) => ({
+        id: `${Date.now()}-${r.team.id}-${Math.random().toString(36).slice(2, 8)}`,
+        playedAt: Date.now(),
+        teamName: r.team.name,
+        rank: r.rank,
+        totalTeams: rankings.length,
+        opens: r.team.stats.opens,
+        defusesSucceeded: r.team.stats.defusesSucceeded,
+        cardsPlayed: totalCardsPlayed(r.team.stats.cardsPlayed),
+        survived: r.team.alive,
+      })),
+    )
+  }, [rankings])
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/70 p-6">
@@ -49,9 +72,15 @@ export function GameOverScreen({ onRestart, onExit }: Props) {
           ))}
         </ol>
 
-        <div className="mt-8 flex justify-center gap-4">
+        <div className="mt-8 flex flex-wrap justify-center gap-4">
           <button onClick={onRestart} className="primary-button text-xl">
             เล่นอีกรอบ
+          </button>
+          <button
+            onClick={onLeaderboard}
+            className="rounded-lg border border-primary px-5 py-3 text-xl font-bold text-primary"
+          >
+            🏆 ดู leaderboard
           </button>
           <button
             onClick={onExit}

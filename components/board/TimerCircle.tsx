@@ -36,10 +36,16 @@ export function TimerCircle({ duration, phase, turnKey, onTimeout }: Props) {
 
   const frac = active ? Math.max(remaining, 0) / duration : 1
   const danger = active && remaining <= 10
+  const urgent = active && remaining <= 5
   const color = danger ? '#dc2626' : 'var(--primary)'
 
+  // ≤ 5 วิ → เสียง tick ทุกวินาที
+  useEffect(() => {
+    if (active && remaining <= 5 && remaining > 0) sfx.tick()
+  }, [active, remaining])
+
   return (
-    <div className="relative h-20 w-20">
+    <div className={`relative h-20 w-20 ${danger ? 'timer-pulse' : ''}`}>
       <svg viewBox="0 0 64 64" className="h-full w-full">
         <circle cx="32" cy="32" r={R} stroke="var(--secondary)" strokeWidth="7" fill="none" />
         <circle
@@ -59,7 +65,7 @@ export function TimerCircle({ duration, phase, turnKey, onTimeout }: Props) {
       <span
         className={`absolute inset-0 grid place-items-center font-mono text-2xl font-black ${
           danger ? 'text-red-600' : ''
-        }`}
+        } ${urgent ? 'timer-urgent' : ''}`}
       >
         {active ? remaining : '∞'}
       </span>

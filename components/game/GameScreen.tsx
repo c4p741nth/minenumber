@@ -14,9 +14,10 @@ import { useGame } from './GameProvider'
 interface Props {
   onRestart: () => void
   onExit: () => void
+  onLeaderboard: () => void
 }
 
-export function GameScreen({ onRestart, onExit }: Props) {
+export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
   const [typed, setTyped] = useState('')
@@ -131,7 +132,9 @@ export function GameScreen({ onRestart, onExit }: Props) {
         <LogPanel />
       </aside>
       {state.phase === 'defusing' && <DefuseModal />}
-      {state.phase === 'gameover' && <GameOverScreen onRestart={onRestart} onExit={onExit} />}
+      {state.phase === 'gameover' && (
+        <GameOverScreen onRestart={onRestart} onExit={onExit} onLeaderboard={onLeaderboard} />
+      )}
       <Hand locked={!cardMode} />
       <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
         <button

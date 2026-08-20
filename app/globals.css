@@ -109,3 +109,12 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .fx-glitch-overlay, .fx-red-flash { animation: none !important; }
 }
+
+/* ---- Timer (Task V6.4) ---- */
+.timer-pulse { animation: mn-timer-pulse 1s ease-in-out infinite; }
+@keyframes mn-timer-pulse { 50% { transform: scale(1.08); } }
+.timer-urgent { animation: mn-timer-blink 0.5s steps(2) infinite; }
+@keyframes mn-timer-blink { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .timer-pulse, .timer-urgent { animation: none !important; }
+}

@@ -58,6 +58,11 @@ export default function Page() {
     setScreen('menu')
   }
 
+  function viewLeaderboard() {
+    setGame(null)
+    setScreen('leaderboard')
+  }
+
   if (!ready) {
     return <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
   }
@@ -89,7 +94,11 @@ export default function Page() {
       return game ? (
         <GameProvider handle={game}>
           <Autosave />
-          <GameScreen onRestart={() => startGame(settings)} onExit={exitGame} />
+          <GameScreen
+            onRestart={() => startGame(settings)}
+            onExit={exitGame}
+            onLeaderboard={viewLeaderboard}
+          />
         </GameProvider>
       ) : (
         <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
