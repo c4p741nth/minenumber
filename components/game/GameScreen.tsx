@@ -20,6 +20,14 @@ export function GameScreen({ onRestart, onExit }: Props) {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
   const [typed, setTyped] = useState('')
+  const [cardMode, setCardMode] = useState(true)
+
+  // ขึ้นตาตอนใหม่ → กลับไปช่วงใช้การ์ดก่อน
+  useEffect(() => {
+    if (state.phase === 'cards') setCardMode(true)
+  }, [state.phase])
+
+  const inCards = state.phase === 'cards'
 
   // พิมพ์ตัวเลขตรง ๆ เพื่อเลือกช่อง (MC พิมพ์เร็วกว่าคลิก) + Esc ยกเลิก
   useEffect(() => {
@@ -67,6 +75,39 @@ export function GameScreen({ onRestart, onExit }: Props) {
       <TeamList />
       <main className="flex flex-col gap-3">
         <CurrentTeamBanner />
+        {inCards && (
+          <div
+            className={
+              'flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 ' +
+              (cardMode ? 'border-primary bg-primary/5' : 'border-border bg-card')
+            }
+          >
+            <span className="text-base font-bold">ตานี้จะทำอะไร?</span>
+            <button
+              onClick={() => setCardMode(true)}
+              className={
+                'rounded-lg px-4 py-2 text-base font-bold transition ' +
+                (cardMode ? 'primary-button' : 'border border-border bg-background')
+              }
+            >
+              🃏 ใช้การ์ด ({current.hand.length} ใบในมือ)
+            </button>
+            <button
+              onClick={() => setCardMode(false)}
+              className={
+                'rounded-lg px-4 py-2 text-base font-bold transition ' +
+                (!cardMode ? 'primary-button' : 'border border-border bg-background')
+              }
+            >
+              🔢 เปิดป้ายเลย
+            </button>
+            {!cardMode && (
+              <span className="text-sm text-muted-foreground">
+                เปิดป้ายแล้วจะใช้การ์ดในตานี้ไม่ได้อีก
+              </span>
+            )}
+          </div>
+        )}
         <Board
           rangeMin={state.rangeMin}
           rangeMax={state.rangeMax}
@@ -91,7 +132,7 @@ export function GameScreen({ onRestart, onExit }: Props) {
       </aside>
       {state.phase === 'defusing' && <DefuseModal />}
       {state.phase === 'gameover' && <GameOverScreen onRestart={onRestart} onExit={onExit} />}
-      <Hand />
+      <Hand locked={!cardMode} />
       <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
         <button
           onClick={endGame}

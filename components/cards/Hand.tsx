@@ -19,13 +19,18 @@ const CARD_COLORS: Record<CardType, string> = {
   attack: 'border-red-500 bg-red-500/15 text-red-700 dark:text-red-300',
 }
 
-export function Hand() {
+interface HandProps {
+  // ล็อกการ์ด — ผู้เล่นเลือก "เปิดป้ายเลย" ในตานี้ (ยังจั่ว/เห็นมือได้ แต่ใช้ไม่ได้)
+  locked?: boolean
+}
+
+export function Hand({ locked = false }: HandProps) {
   const { state, dispatch } = useGame()
   const [selected, setSelected] = useState<CardType | null>(null)
   const [scanTarget, setScanTarget] = useState('')
 
   const current = state.teams[state.currentTeamIndex]
-  const canPlay = state.phase === 'cards' && !state.currentGlitched && !state.currentBlocked
+  const canPlay = state.phase === 'cards' && !locked && !state.currentGlitched && !state.currentBlocked
   const maxHand = state.settings.maxHandSize
   const handFull = current.hand.length >= maxHand
 

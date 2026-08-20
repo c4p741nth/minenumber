@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createGame, createGameFromState, type GameHandle } from './engine'
 import { createRng } from './rng'
 import { refillBombs } from './setup'
-import type { BombKind, CellState, GameAction, GameSettings } from './types'
+import type { BombKind, CardType, CellState, GameAction, GameSettings } from './types'
 
 function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
   return {
@@ -356,6 +356,157 @@ describe('maxHandSize / startingHand', () => {
     }
   })
 })
+
+describe('V5 turn flow — use many cards + block', () => {
+  function cardGame(overrides: Partial<GameSettings> = {}): GameSettings {
+    return baseSettings({
+      cardsEnabled: true,
+      startingHand: 0,
+      teamNames: ['A', 'B', 'C'],
+      rangeMin: 1,
+      rangeMax: 20,
+      ...overrides,
+    })
+  }
+
+  // จั่วจนครบมือ แล้วเช็คว่ามีการ์ดตามที่ต้องการครบไหม — true = ได้ seed นี้
+  function seedHasCards(settings: GameSettings, teamId: string, need: CardType[]): boolean {
+    const h = createGame(settings, 0)
+    const maxHand = h.getState().settings.maxHandSize
+    for (let i = 0; i < maxHand; i++) {
+      h.dispatch({ type: 'DRAW_CARD', teamId })
+    }
+    const hand = h.getState().teams[Number(teamId)].hand
+    for (const c of need) {
+      if (hand.filter((x) => x === c).length < need.filter((x) => x === c).length) return false
+    }
+    return true
+  }
+
+  function findSeedForCards(settings: GameSettings, teamId: string, need: CardType[]): number {
+    for (let s = 0; s < 40000; s++) {
+      const h = createGame(settings, s)
+      const maxHand = h.getState().settings.maxHandSize
+      for (let i = 0; i < maxHand; i++) h.dispatch({ type: 'DRAW_CARD', teamId })
+      const hand = h.getState().teams[Number(teamId)].hand
+      const ok = need.every(
+        (c) => hand.filter((x) => x === c).length >= need.filter((x) => x === c).length,
+      )
+      if (ok) return s
+    }
+    throw new Error('no seed for cards')
+  }
+
+  it('ในตาเดียวใช้ scan 2 ใบ + block 1 ใบ ได้ (ไม่มีลิมิตต่อตา)', () => {
+    const settings = cardGame()
+    const seed = findSeedForCards(settings, '0', ['scan', 'scan', 'block'])
+    const h = createGame(settings, seed)
+    const maxHand = h.getState().settings.maxHandSize
+    for (let i = 0; i < maxHand; i++) h.dispatch({ type: 'DRAW_CARD', teamId: '0' })
+
+    const before = h.getState().teams[0].hand.length
+    h.dispatch({ type: 'PLAY_CARD', card: 'scan', targetCell: 1 })
+    h.dispatch({ type: 'PLAY_CARD', card: 'scan', targetCell: 5 })
+    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
+    const s = h.getState()
+    expect(s.phase).toBe('cards') // ยังไม่จบตา
+    expect(s.teams[0].hand.length).toBe(before - 3) // ใช้ 3 ใบในตาเดียว
+    expect(s.teams[1].blockedTurnsLeft).toBe(1)
+  })
+
+  it('หลัง OPEN_CELL แล้ว PLAY_CARD ไม่มีผล (การ์ดไม่หายจากมือ)', () => {
+    // A โจมตี B → B ต้องเปิด 2 → B เปิด 1 แล้วยังอยู่ตาเดิม (opening) → ใช้การ์ดต่อไม่ได้
+    const settings = cardGame({ startingHand: 1, teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
+    let seed = -1
+    for (let s = 0; s < 40000; s++) {
+      const h = createGame(settings, s)
+      if (h.getState().teams[0].hand.includes('attack')) {
+        seed = s
+        break
+      }
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().currentTeamIndex).toBe(1)
+    expect(h.getState().teams[1].pendingOpens).toBe(2)
+
+    const safe = safeCellOf(h)
+    h.dispatch({ type: 'OPEN_CELL', cell: safe })
+    const s = h.getState()
+    expect(s.phase).toBe('opening')
+    expect(s.currentTeamIndex).toBe(1) // ยังตาเดิม เหลือเปิดอีก 1
+
+    const handBefore = s.teams[1].hand.length
+    const anyCard = s.teams[1].hand[0]
+    h.dispatch({ type: 'PLAY_CARD', card: anyCard, targetTeamId: '0' })
+    expect(h.getState().teams[1].hand.length).toBe(handBefore) // ไม่หาย
+  })
+
+  it('block ทีม B → ตาถัดไปของ B currentBlocked=true และตาถัดไปอีกตาเป็น false', () => {
+    const settings = cardGame({ startingHand: 1, teamNames: ['A', 'B', 'C'] })
+    let seed = -1
+    for (let s = 0; s < 40000; s++) {
+      const h = createGame(settings, s)
+      if (h.getState().teams[0].hand.includes('block')) {
+        seed = s
+        break
+      }
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    h.dispatch({ type: 'PLAY_CARD', card: 'block', targetTeamId: '1' })
+    expect(h.getState().teams[1].blockedTurnsLeft).toBe(1)
+
+    endCurrentTurnSafe(h) // A เปิด safe จบตา → ถึง B
+    expect(h.getState().currentTeamIndex).toBe(1)
+    expect(h.getState().currentBlocked).toBe(true)
+
+    endCurrentTurnSafe(h) // B จบตา → C
+    endCurrentTurnSafe(h) // C จบตา → A
+    endCurrentTurnSafe(h) // A จบตา → B อีกครั้ง
+    expect(h.getState().currentTeamIndex).toBe(1)
+    expect(h.getState().currentBlocked).toBe(false)
+  })
+})
+
+// เปิด safe จนจบตาของทีมปัจจุบัน (วนจน turn เปลี่ยน)
+function endCurrentTurnSafe(h: GameHandle): void {
+  const startTurn = h.getState().turnNumber
+  const startTeam = h.getState().currentTeamIndex
+  let guard = 0
+  while (guard < 200) {
+    guard++
+    const s = h.getState()
+    if (s.phase === 'defusing') {
+      h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      continue
+    }
+    if (s.phase === 'gameover') return
+    if (s.phase === 'cards') {
+      // เปิดป้ายเลย — ข้ามช่วงการ์ด
+    }
+    const secret = secretMap(h)
+    let opened = false
+    for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+      if (!(n in secret) && !(n in s.cells)) {
+        h.dispatch({ type: 'OPEN_CELL', cell: n })
+        opened = true
+        break
+      }
+    }
+    if (!opened) {
+      // ไม่มี safe → เปิดช่องแรกที่ยัง hidden
+      for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+        if (!(n in s.cells)) {
+          h.dispatch({ type: 'OPEN_CELL', cell: n })
+          break
+        }
+      }
+    }
+    if (h.getState().currentTeamIndex !== startTeam || h.getState().turnNumber !== startTurn) return
+  }
+}
 
 describe('determinism / resume', () => {
   it('seed เดียวกัน + action ชุดเดียวกัน → state เหมือนกันทุกครั้ง', () => {
