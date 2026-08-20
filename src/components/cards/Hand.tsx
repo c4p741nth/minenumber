@@ -24,8 +24,22 @@ export function cardWidthFor(count: number): number {
   return 64
 }
 
+// FIX #43: Block หงายหน้าอยู่แล้ว + เก็บไว้ในมือได้ (ไม่ถูกบังคับใช้/ทิ้ง)
+// การ์ดอื่นเปิดดูแล้ว "เห็นข้อมูลลับ" (เช่น Scan รู้ผลก่อนตัดสินใจ) จึงต้องบังคับตัดสินใจ
+// แต่ Block เป็น defensive charge หงายอยู่แล้วไม่มีอะไรรั่ว → ปิดกลับได้
+export function isFaceUpCard(card: CardType): boolean {
+  return card === 'block'
+}
+
+// การ์ดที่เปิดดูแล้วเก็บกลับเข้ามือได้ — คู่กับ isFaceUpCard โดยเจตนา
+// (หงายอยู่แล้ว = ไม่มีข้อมูลลับให้รั่ว = ไม่ต้องบังคับตัดสินใจ)
+export function canKeepInHand(card: CardType): boolean {
+  return isFaceUpCard(card)
+}
+
 // W5.3: ไพ่ในมือคว่ำหน้าทั้งหมด — กดเปิดทีละใบ (revealed) แล้วตัดสินใจ ใช้/ทิ้ง
 // เปิดแล้วปิดกลับไม่ได้ และระหว่างเปิดใบหนึ่งอยู่ห้ามเปิดใบอื่นซ้อน
+// ยกเว้นการ์ดที่ isFaceUpCard (Block) — หงายตลอด กดแล้วเก็บกลับได้
 export function Hand({ locked = false }: HandProps) {
   const { state, dispatch } = useGame()
   const [revealed, setRevealed] = useState<number | null>(null)
@@ -131,6 +145,15 @@ export function Hand({ locked = false }: HandProps) {
                 ใช้
               </button>
             )}
+            {/* FIX #43: การ์ดที่หงายอยู่แล้ว (Block) เก็บกลับเข้ามือได้ ไม่ถูกบังคับใช้/ทิ้ง */}
+            {canKeepInHand(revealedCard) && (
+              <button
+                onClick={() => setRevealed(null)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-base font-bold"
+              >
+                เก็บไว้ก่อน
+              </button>
+            )}
             <button
               onClick={discardRevealed}
               className="rounded-lg border border-border bg-background px-3 py-2 text-base font-bold text-destructive"
@@ -176,27 +199,44 @@ export function Hand({ locked = false }: HandProps) {
         {!collapsed && (
           <div className="hand-scroll w-full overflow-x-auto pb-1">
             <div className="mx-auto flex w-max gap-2">
-              {current.hand.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => onCardClick(i)}
-                  aria-disabled={!canPlay}
-                  title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
-                  style={{ width: cardWidth }}
-                  className={
-                    `flex shrink-0 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
-                    `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
-                    `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
-                  }
-                >
-                  <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>
-                    🂠
-                  </span>
-                  <span className={compact ? 'text-xs font-black' : 'text-sm font-black'}>
-                    #{i + 1}
-                  </span>
-                </button>
-              ))}
+              {current.hand.map((card, i) => {
+                // FIX #43: Block หงายหน้า — โชว์ emoji + ชื่อ + สีของการ์ดจริง
+                // การ์ดอื่นยังคว่ำ (🂠 + เลขใบ) ไม่รั่วข้อมูล
+                const faceUp = isFaceUpCard(card)
+                return (
+                  <button
+                    key={i}
+                    onClick={() => onCardClick(i)}
+                    aria-disabled={!canPlay}
+                    title={
+                      faceUp
+                        ? `${CARD_META[card].name} — ${CARD_DESCRIPTIONS[card]}`
+                        : `ใบที่ ${i + 1} — กดเพื่อเปิดดู`
+                    }
+                    style={{ width: cardWidth }}
+                    className={
+                      `flex shrink-0 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
+                      `transition hover:scale-105 ` +
+                      (faceUp
+                        ? `${CARD_COLORS[card]} `
+                        : `border-border bg-secondary text-secondary-foreground `) +
+                      `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
+                    }
+                  >
+                    <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>
+                      {faceUp ? CARD_META[card].emoji : '🂠'}
+                    </span>
+                    <span
+                      className={
+                        (compact ? 'text-xs font-black' : 'text-sm font-black') +
+                        (faceUp ? ' max-w-full truncate' : '')
+                      }
+                    >
+                      {faceUp ? CARD_META[card].name : `#${i + 1}`}
+                    </span>
+                  </button>
+                )
+              })}
               {current.hand.length === 0 && (
                 <p className="py-2 text-sm text-muted-foreground">ไม่มีการ์ดในมือ</p>
               )}
