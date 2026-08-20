@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { GameProvider } from '@/components/game/GameProvider'
+import { GameScreen } from '@/components/game/GameScreen'
 import { ResumePrompt } from '@/components/setup/ResumePrompt'
 import { SetupScreen } from '@/components/setup/SetupScreen'
 import { createGame, type GameHandle } from '@/lib/game/engine'
@@ -15,7 +17,7 @@ export default function Page() {
   const [started, setStarted] = useState(false)
   const [hasSnapshot, setHasSnapshot] = useState(false)
   const [snapshotHandled, setSnapshotHandled] = useState(false)
-  const gameRef = useRef<GameHandle | null>(null)
+  const [game, setGame] = useState<GameHandle | null>(null)
 
   useEffect(() => {
     const saved = loadSettings()
@@ -26,8 +28,8 @@ export default function Page() {
 
   function startGame(s: GameSettings) {
     saveSettings(s)
-    gameRef.current = createGame(s, randomSeed())
     setSettings(s)
+    setGame(createGame(s, randomSeed()))
     setStarted(true)
   }
 
@@ -48,7 +50,7 @@ export default function Page() {
     return <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
   }
 
-  if (!started) {
+  if (!started || !game) {
     return (
       <>
         <SetupScreen initial={settings} onStart={startGame} />
@@ -59,18 +61,9 @@ export default function Page() {
     )
   }
 
-  const state = gameRef.current?.getState()
-  const current = state?.teams[state?.currentTeamIndex ?? 0]
-
   return (
-    <div className="grid min-h-screen place-items-center p-8">
-      <div className="text-center">
-        <p className="section-label">เกมเริ่มแล้ว — ตาของ</p>
-        <h1 className="mt-2 font-serif text-6xl font-bold">{current?.name}</h1>
-        <p className="mt-4 text-muted-foreground">
-          ระเบิดเหลือ {state?.bombsRemaining} ลูก — กระดานจะมาใน Task 5
-        </p>
-      </div>
-    </div>
+    <GameProvider handle={game}>
+      <GameScreen />
+    </GameProvider>
   )
 }
