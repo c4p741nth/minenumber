@@ -33,7 +33,8 @@ export type LogEntry = {
   message: string
 }
 
-// ผลของการเปิดช่องหนึ่งช่อง — survived ตัดสินล่วงหน้าตอน OPEN_CELL (§5)
+// ผลของการเปิดช่องหนึ่งช่อง
+// survived ตัดสินล่วงหน้าตอน OPEN_CELL (§5)
 export type OpenResult =
   | { kind: 'safe' }
   | { kind: 'real'; survived: boolean }
@@ -56,8 +57,7 @@ export type GameAction =
   | { type: 'DRAW_CARD'; teamId: string }
 
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
-export interface PublicGameState {
-  phase: Phase
+export interface PublicGameState {  phase: Phase
   settings: GameSettings
   teams: Team[]
   currentTeamIndex: number

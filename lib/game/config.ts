@@ -1,6 +1,7 @@
 import type { CardType, GameSettings } from './types'
 
-// ค่า default และขอบเขตตาม GAME_SPEC §2 — ห้าม hardcode ตัวเลขพวกนี้กระจายในไฟล์อื่น
+// ค่า default และขอบเขตตาม GAME_SPEC §2
+// ห้าม hardcode ตัวเลขพวกนี้กระจายในไฟล์อื่น
 
 export const LIMITS = {
   minTeams: 2,
@@ -13,7 +14,8 @@ export const LIMITS = {
   minScanRadius: 1,
   maxScanRadius: 5,
   maxHandSize: 5,
-  minCellsPerTeam: 4, // ช่องต้อง ≥ ทีม × 4 ไม่งั้นบล็อกปุ่มเริ่มเกม
+  // ช่องต้อง ≥ ทีม × 4 ไม่งั้นบล็อกปุ่มเริ่มเกม
+  minCellsPerTeam: 4,
 } as const
 
 export const DEFAULTS = {
@@ -43,7 +45,8 @@ export function bombQuota(teamCount: number): number {
   return Math.max(teamCount - 1, 0)
 }
 
-// จำนวน glitch bomb = ปัดลงของสัดส่วน × ระเบิดจริง — เป็นระเบิดส่วนเกิน (§4.2)
+// glitch bomb = ปัดลงของสัดส่วน × ระเบิดจริง
+// เป็นระเบิดส่วนเกิน (§4.2)
 export function glitchCountFor(realBombs: number, ratio: number): number {
   const clamped = Math.min(Math.max(ratio, 0), LIMITS.maxGlitchRatio)
   return Math.floor(realBombs * clamped)
