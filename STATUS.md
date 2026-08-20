@@ -17,11 +17,11 @@
 | W2 | Popup ตั้งค่า + bar โอกาสโดนระเบิด + ข้อความสุดโต่ง + แยกสีระเบิดจริง/glitch (TODO 1,2,3,10) | ✅ เสร็จ | `45abc66` | Base UI Dialog, verdict thresholds ปรับเป็น 15/30/50% |
 | W5 | มือไม่จำกัด + ไพ่คว่ำหน้า + ใช้/ทิ้ง + toast สีตอนจั่ว (TODO 7,9,16,8) | ✅ เสร็จ | `e498481` | `maxHandSize=0`=ไม่จำกัด, default 3 ใบ, `DISCARD_CARD`, toast อ่านจาก log |
 | W6 | Scan adapt รัศมี + อธิบาย + effect + popup ผล (TODO 6) | ✅ เสร็จ | `9fb73b3` | `maxScanRadiusFor`/`suggestedScanRadius` + clamp ตอนเริ่มเกม, `cell-scan` animation, popup ผ่าน `infoDialog` |
-| W7 | ใช้ไฟล์เสียงจริงใน `sounds/` (TODO 18) | 🚧 กำลังทำ | — | `sounds/` → `public/sounds/` แล้ว, กำลังแก้ `sfx.ts` + hook เหตุการณ์ |
-| W8 | เพลง YouTube background + volume (TODO 14) | ⏳ ยังไม่เริ่ม | — | รอ W2 (ช่อง URL อยู่ใน modal) ต้องตัดสินใจเรื่อง IFrame API/CSP |
-| W9 | อัปเดตเอกสารให้ตรงกับของใหม่ | ⏳ ยังไม่เริ่ม | — | ทำท้ายสุด; ต้อง grep 'โหมดเร่ง' = 0 |
+| W7 | ใช้ไฟล์เสียงจริงใน `sounds/` (TODO 18) | ✅ เสร็จ | — | hook ครบทุกเหตุการณ์, `defuseFailedFallback` แยกจาก success, mute คุมทั้งสองทาง, 10 ไฟล์ใน dist |
+| W8 | เพลง YouTube background + volume (TODO 14) | ✅ เสร็จ | — | IFrame API (ไม่มี CSP ปิดกั้น), `parseYouTubeId`, backward-compatible settings, cleanup ตอนออกเกม |
+| W9 | อัปเดตเอกสารให้ตรงกับของใหม่ | ✅ เสร็จ | — | GAME_SPEC/README/RulesContent/TODO.md อัปเดต, `โหมดเร่ง` ในไฟล์ใช้งาน = 0 |
 
-**ผลตรวจ baseline:** `bun test` 107/107 ผ่าน, `bun run tsc --noEmit` clean, `bun run build` สำเร็จ
+**ผลตรวจ baseline:** `bun test` 120/120 ผ่าน, `bun run tsc --noEmit` clean, `bun run build` สำเร็จ (10 ไฟล์เสียงใน `dist/sounds/`)
 
 ---
 
@@ -72,43 +72,38 @@
 - setup: max ของช่องกรอก = `maxScanRadiusFor(cells)` + ปุ่ม "ใช้ค่าแนะนำ" + แสดงจำนวนช่องที่ครอบ (2R+1)
 - หมายเหตุ: session.test เปรียบเทียบ settings กับ `h.getState().settings` (เพราะ createGame clamp scanRadius)
 
-### W7 — ไฟล์เสียงจริง (กำลังทำ)
-- [x] `git mv sounds public/sounds` (Vite copy เฉพาะ public/)
-- [x] เขียน `sfx.ts` ใหม่: `playFile(name)` preload + cloneNode + `sfxVolume` (localStorage) + WebAudio เป็น fallback ถ้าไฟล์ 404/offline
-- [ ] hook เหตุการณ์ที่เหลือ: GameEffects (explosion ตอนตาย, gotItem, secureBlock), DefuseModal (defuseFailed), Hand (selectItem, itemUnavailable)
-- [ ] `setMuted()` คุมทั้งไฟล์และ WebAudio — ตรวจ
-- [ ] `public/sounds/` มีครบ 10 ไฟล์ + อยู่ใน `dist/` หลัง build
+### W7 — ไฟล์เสียงจริง
+- `git mv sounds public/sounds` (Vite copy เฉพาะ public/)
+- `sfx.ts` ใหม่: `playFile(name)` preload + cloneNode + `sfxVolume` (localStorage `mn.sfxVolume`) + WebAudio เป็น fallback ถ้าไฟล์ 404/offline
+- hook ครบทุกเหตุการณ์:
+  - `GameEffects`: ทีมตกรอบ → `explosion` (bomb-hit) + red flash; จั่วการ์ดได้ (log kind='draw') → `gotItem`; ช่วงหด (rangeMin/Max เปลี่ยน) → `secureBlock`
+  - `DefuseModal`: เฉลยว่าพลาด → `defuseFailed` (defuse-success เฉพาะกู้สำเร็จ) — เสียง bomb-hit ตามหลังตอนทีมตกรอบจริง กันเสียงซ้อน
+  - `Hand`: เปิดหน้าไพ่ → `selectItem`; กดการ์ดตอนใช้ไม่ได้ → `itemUnavailable` (การ์ดยังคลิกได้เพื่อให้เสียงดัง แต่ทำอะไรไม่ได้)
+- `defuseFailedFallback()` ใหม่ (เสียงต่ำลง) — เดิมใช้ fallback ของ defuseSuccess (เสียงดีดขึ้น) ผิด
+- verify: `setMuted()` คุมทั้งไฟล์ (`playFile` return false) และ WebAudio (`tone`/`noise` return) — ตรวจแล้ว
+- verify: `public/sounds/` มีครบ 10 ไฟล์ + อยู่ใน `dist/sounds/` หลัง `bun run build`
+
+### W8 — เพลง YouTube background
+- **ตัดสินใจ:** ใช้ YouTube IFrame Player API ฝัง player ซ่อน (ขนาด 0) — ห้าม download/แปลงไฟล์
+- ใหม่ `src/lib/audio/music.ts`: `parseYouTubeId()` (watch?v= / youtu.be / playlist?list= / shorts / youtube-nocookie / ID 11 ตัว / input ขยะ → null) + `isPlaylistId()` + `youtubeEmbedUrl()` — test 12 ข้อ
+- `GameSettings` เพิ่ม `musicUrl` (default `''`) + `musicVolume` (default 30, 0–100) — `loadSettings()` merge กับ `defaultSettings()` → settings เก่าไม่ crash (มี test)
+- ใหม่ `MusicPlayer.tsx`: โหลด IFrame API ครั้งเดียว (module-level promise + timeout 8 วิ), ฝัง player ซ่อน, ▶/⏸ + slider volume (จำใน `mn.musicVolume`), วนลูป (loop + playlist param), แสดงชื่อเพลง
+- setup modal: ช่อง URL YouTube + validate (แสดง ✓/✗ + เพลย์ลิสต์) + volume 0–100%
+- ว่าง = ไม่มี iframe ไม่มี network request; ออกจากเกม → `player.destroy()` หยุดเพลง; API โหลดไม่ได้ → ซ่อน UI เกมไม่พัง
+- **CSP:** `vercel.json` ยังไม่มี CSP header → ไม่มีอะไรบล็อก (ถ้าจะเพิ่มทีหลังต้องเปิด `youtube.com`/`ytimg.com` — เขียนไว้ใน GAME_SPEC/README)
+
+### W9 — เอกสาร
+- `docs/GAME_SPEC.md`: §2 ตาราง default เพิ่ม startingHand 3 / มือไม่จำกัด / scan radius adapt / เพลง background; §6 timer นับตั้งแต่ช่วงใช้การ์ด; §7.1 ไพ่คว่ำหน้า + ใช้/ทิ้ง + มือไม่จำกัด; §7.2 Scan ช่วงซ้าย–ขวา; §10 ตารางเสียง (ระบุไฟล์) + §10.1 เพลง background + หมายเหตุ CSP
+- `README.md`: วิธีตั้งเพลง background + หมายเหตุ `public/sounds/` คือไฟล์เสียง + โครงสร้าง `lib/audio/` อัปเดต
+- `RulesContent.tsx`: เพิ่มไพ่คว่ำหน้า/ใช้-ทิ้ง/มือไม่จำกัด
+- `TODO.md`: เปลี่ยนเป็นสรุปว่างาน 18 ข้อจบครบ (ชี้ไป TASKS-V3/STATUS/GAME_SPEC)
+- `grep -r 'โหมดเร่ง' src README.md docs/GAME_SPEC.md TODO.md` = 0 (เหลือเฉพาะใน docs/TASKS*.md + PLAN.md ที่เป็นประวัติเก่า)
 
 ---
 
-## งานที่เหลือ (เรียงตามลำดับที่แนะนำใน TASKS-V3.md)
+## งานที่เหลือ
 
-### W7 — เสียงจริง (กำลังทำ)
-- [x] `git mv sounds public/sounds` (Vite copy เฉพาะ public/)
-- [x] `playFile(name)` ใน sfx.ts + เก็บ WebAudio ไว้เป็น fallback
-- [x] map เสียง 10 ไฟล์ ตามตารางใน TASKS-V3.md §W7.2
-- [x] `sfxVolume` แยกจากเพลง background (localStorage `mn.sfxVolume`)
-- [ ] hook เหตุการณ์ที่เหลือ: GameEffects (explosion ตอนตาย, gotItem, secureBlock), DefuseModal (defuseFailed), Hand (selectItem, itemUnavailable)
-- [ ] verify: `setMuted()` คุมทั้งไฟล์และ WebAudio
-- [ ] verify: `public/sounds/` ครบ 10 ไฟล์ + อยู่ใน `dist/` หลัง build
-
-### W8 — เพลง YouTube
-- **ต้องตัดสินใจก่อน:** ใช้ YouTube IFrame API หรือไม่ (ห้าม download/แปลงไฟล์)
-- [ ] `parseYouTubeId()` + test, `musicUrl`/`musicVolume` ใน GameSettings (backward-compatible + test)
-- [ ] player ซ่อน + ▶/⏸ + volume + cleanup ตอนออกเกม
-
-### W9 — เอกสาร
-- [ ] GAME_SPEC/README/RulesContent/RulesPanel ให้ตรงกับของใหม่
-- [ ] `grep -r 'โหมดเร่ง' src docs README.md` = 0 (ยังมีหลงใน docs/TASKS*.md ที่เป็นประวัติเก่า)
-
-### W8 — เพลง YouTube
-- **ต้องตัดสินใจก่อน:** ใช้ YouTube IFrame API หรือไม่ (ห้าม download/แปลงไฟล์)
-- [ ] `parseYouTubeId()` + test, `musicUrl`/`musicVolume` ใน GameSettings (backward-compatible + test)
-- [ ] player ซ่อน + ▶/⏸ + volume + cleanup ตอนออกเกม
-
-### W9 — เอกสาร
-- [ ] GAME_SPEC/README/RulesContent/RulesPanel ให้ตรงกับของใหม่
-- [ ] `grep -r 'โหมดเร่ง' src docs README.md` = 0 (ยังมีหลงใน docs/TASKS*.md ที่เป็นประวัติเก่า)
+ไม่มี — ครบ W1–W9 แล้ว
 
 ---
 
@@ -117,3 +112,4 @@
 - แต่ละ task = 1 commit (กฎเดิม)
 - `docs/TASKS-V3.md` มีลำดับ: W4 → W3 → W1 → W2 → W5 → W6 → W7 → W8 → W9
 - งานเสี่ยงสุด: W5 (engine/types/test) และ W8 (script ภายนอก + CSP)
+- W8 caveat: ถ้า host เปิด adblock/offline → IFrame API โหลดไม่ได้ ระบบจะซ่อน UI เพลงเอง (เกมไม่พัง)
