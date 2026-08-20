@@ -11,8 +11,12 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     rangeMax: 20,
     turnSeconds: 60,
     glitchEnabled: false,
+    glitchMode: 'auto',
     glitchRatio: 0.3,
+    glitchCount: 0,
     cardsEnabled: false,
+    maxHandSize: 5,
+    startingHand: 0,
     scanRadius: 3,
     shrinkingEnabled: false,
     ...overrides,
@@ -289,7 +293,71 @@ function openAndDefuseFail(h: GameHandle): boolean {
   return !h.getState().teams[opener].alive
 }
 
-describe('determinism', () => {
+describe('maxHandSize / startingHand', () => {
+  it('maxHandSize: 3 → จั่วใบที่ 4 ไม่เข้า (DoD V4)', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      maxHandSize: 3,
+      startingHand: 0,
+      teamNames: ['A', 'B'],
+    })
+    const h = createGame(settings, 5)
+    for (let i = 0; i < 5; i++) {
+      h.dispatch({ type: 'DRAW_CARD', teamId: '0' })
+    }
+    expect(h.getState().teams[0].hand.length).toBe(3)
+    h.dispatch({ type: 'DRAW_CARD', teamId: '0' })
+    expect(h.getState().teams[0].hand.length).toBe(3)
+  })
+
+  it('startingHand: 2 → ทุกทีมเริ่มด้วยการ์ด 2 ใบ', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      startingHand: 2,
+      teamNames: ['A', 'B', 'C'],
+    })
+    const h = createGame(settings, 5)
+    for (const t of h.getState().teams) {
+      expect(t.hand).toHaveLength(2)
+    }
+  })
+
+  it('จั่วอัตโนมัติจบตาไม่เกิน maxHandSize (4/5/7)', () => {
+    for (const size of [3, 5, 7]) {
+      const settings = baseSettings({
+        cardsEnabled: true,
+        maxHandSize: size,
+        startingHand: 0,
+        teamNames: ['A', 'B'],
+        rangeMin: 1,
+        rangeMax: 12,
+      })
+      const h = createGame(settings, 11)
+      let guard = 0
+      while (h.getState().phase !== 'gameover' && guard < 5000) {
+        guard++
+        const s = h.getState()
+        if (s.phase === 'defusing') {
+          h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+        } else {
+          const hidden: number[] = []
+          for (let n = s.rangeMin; n <= s.rangeMax; n++) {
+            if (!(n in s.cells)) hidden.push(n)
+          }
+          const secret = secretMap(h)
+          const safe = hidden.find((n) => !(n in secret))
+          if (safe !== undefined) h.dispatch({ type: 'OPEN_CELL', cell: safe })
+          else h.dispatch({ type: 'OPEN_CELL', cell: hidden[0] })
+        }
+        for (const t of h.getState().teams) {
+          expect(t.hand.length).toBeLessThanOrEqual(size)
+        }
+      }
+    }
+  })
+})
+
+describe('determinism / resume', () => {
   it('seed เดียวกัน + action ชุดเดียวกัน → state เหมือนกันทุกครั้ง', () => {
     const settings = baseSettings({ teamNames: ['A', 'B', 'C'], rangeMin: 1, rangeMax: 12 })
     const h1 = createGame(settings, 42)

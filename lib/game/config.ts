@@ -13,7 +13,10 @@ export const LIMITS = {
   maxGlitchRatio: 0.5,
   minScanRadius: 1,
   maxScanRadius: 5,
-  maxHandSize: 5,
+  minHandSize: 3,
+  maxHandSizeCap: 7,
+  maxStartingHand: 3,
+  maxGlitchCount: 50,
   // ช่องต้อง ≥ ทีม × 4 ไม่งั้นบล็อกปุ่มเริ่มเกม
   minCellsPerTeam: 4,
 } as const
@@ -24,8 +27,12 @@ export const DEFAULTS = {
   rangeMax: 60,
   turnSeconds: 60,
   glitchEnabled: true,
+  glitchMode: 'auto' as const,
   glitchRatio: 0.3,
+  glitchCount: 0,
   cardsEnabled: true,
+  maxHandSize: 5,
+  startingHand: 0,
   scanRadius: 3,
   shrinkingEnabled: false,
 } as const
@@ -45,11 +52,17 @@ export function bombQuota(teamCount: number): number {
   return Math.max(teamCount - 1, 0)
 }
 
-// glitch bomb = ปัดลงของสัดส่วน × ระเบิดจริง
-// เป็นระเบิดส่วนเกิน (§4.2)
-export function glitchCountFor(realBombs: number, ratio: number): number {
-  const clamped = Math.min(Math.max(ratio, 0), LIMITS.maxGlitchRatio)
-  return Math.floor(realBombs * clamped)
+// glitch bomb จำนวนลูก — auto = ปัดลงของสัดส่วน × ระเบิดจริง
+// manual = ใช้ค่าที่ตั้งไว้ ต่างก็ clamp ไม่เกินช่องว่าง (totalCells − realBombs)
+export function glitchCountFor(
+  realBombs: number,
+  totalCells: number,
+  mode: 'auto' | 'manual',
+  ratio: number,
+  count: number,
+): number {
+  const base = mode === 'auto' ? Math.floor(realBombs * Math.min(Math.max(ratio, 0), LIMITS.maxGlitchRatio)) : count
+  return Math.min(Math.max(base, 0), Math.max(totalCells - realBombs, 0))
 }
 
 export function defaultTeamNames(count: number): string[] {
@@ -63,8 +76,12 @@ export function defaultSettings(): GameSettings {
     rangeMax: DEFAULTS.rangeMax,
     turnSeconds: DEFAULTS.turnSeconds,
     glitchEnabled: DEFAULTS.glitchEnabled,
+    glitchMode: DEFAULTS.glitchMode,
     glitchRatio: DEFAULTS.glitchRatio,
+    glitchCount: DEFAULTS.glitchCount,
     cardsEnabled: DEFAULTS.cardsEnabled,
+    maxHandSize: DEFAULTS.maxHandSize,
+    startingHand: DEFAULTS.startingHand,
     scanRadius: DEFAULTS.scanRadius,
     shrinkingEnabled: DEFAULTS.shrinkingEnabled,
   }

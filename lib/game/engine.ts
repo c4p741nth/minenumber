@@ -1,5 +1,4 @@
 import { drawRandomCard } from './cards'
-import { LIMITS } from './config'
 import { createRng, pickRandom, shuffle } from './rng'
 import { refillBombs, setupBombs } from './setup'
 import type {
@@ -79,9 +78,14 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     eliminatedAt: null,
     stats: zeroStats(),
   }))
-  // เริ่มเกมทุกทีมได้ 1 ใบสุ่ม (§7.1)
+  // เริ่มเกมแจกการ์ดให้ทุกทีม (startingHand ใบ — default 0 = ไม่แจก) (§7.1)
   if (settings.cardsEnabled) {
-    for (const t of teams) drawRandomCard(t.hand, rng)
+    for (const t of teams) {
+      for (let i = 0; i < settings.startingHand; i++) {
+        if (t.hand.length >= settings.maxHandSize) break
+        drawRandomCard(t.hand, rng, settings.maxHandSize, settings.cardWeights)
+      }
+    }
   }
 
   const state: EngineState = {
@@ -351,9 +355,9 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
     acting.alive &&
     !state.currentGlitched &&
     state.settings.cardsEnabled &&
-    acting.hand.length < LIMITS.maxHandSize
+    acting.hand.length < state.settings.maxHandSize
   ) {
-    drawRandomCard(acting.hand, state.rng)
+    drawRandomCard(acting.hand, state.rng, state.settings.maxHandSize, state.settings.cardWeights)
   }
   advanceToNext(state)
   state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
@@ -393,8 +397,8 @@ function timeout(state: EngineState): void {
 function drawCardAction(state: EngineState, teamId: string): void {
   const team = state.teams.find((t) => t.id === teamId)
   if (!team || !team.alive || !state.settings.cardsEnabled) return
-  if (team.glitchTurnsLeft > 0 || team.hand.length >= LIMITS.maxHandSize) return
-  drawRandomCard(team.hand, state.rng)
+  if (team.glitchTurnsLeft > 0 || team.hand.length >= state.settings.maxHandSize) return
+  drawRandomCard(team.hand, state.rng, state.settings.maxHandSize, state.settings.cardWeights)
 }
 
 // ใช้การ์ด 1 ใบ — ต้องอยู่ในช่วงใช้การ์ด ('cards') และไม่ติด glitch/block

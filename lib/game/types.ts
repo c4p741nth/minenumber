@@ -29,8 +29,13 @@ export interface GameSettings {
   rangeMax: number
   turnSeconds: number // 0 = ไม่จับเวลา
   glitchEnabled: boolean
-  glitchRatio: number // 0–0.5
+  glitchMode: 'auto' | 'manual' // auto = ตามสัดส่วน, manual = กำหนดจำนวนเอง
+  glitchRatio: number // 0–0.5 (ใช้เมื่อ auto)
+  glitchCount: number // จำนวน glitch (ใช้เมื่อ manual)
   cardsEnabled: boolean
+  maxHandSize: number // 3–7 จำนวนการ์ดที่ถือได้สูงสุด
+  startingHand: number // 0–3 การ์ดแจกตอนเริ่มเกม
+  cardWeights?: Partial<Record<CardType, number>> // optional override น้ำหนักจั่ว
   scanRadius: number // 1–5
   shrinkingEnabled: boolean // "โหมดเร่ง" — default false
 }

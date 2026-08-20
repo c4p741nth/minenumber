@@ -10,8 +10,12 @@ function cardSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     rangeMax: 20,
     turnSeconds: 60,
     glitchEnabled: false,
+    glitchMode: 'auto',
     glitchRatio: 0.3,
+    glitchCount: 0,
     cardsEnabled: true,
+    maxHandSize: 5,
+    startingHand: 1,
     scanRadius: 3,
     shrinkingEnabled: false,
     ...overrides,
@@ -36,10 +40,11 @@ function drawUntil(
   pred: (hand: CardType[]) => boolean,
   maxDraws = 8,
 ): boolean {
+  const maxHand = h.getState().settings.maxHandSize
   for (let i = 0; i < maxDraws; i++) {
     const hand = h.getState().teams[Number(teamId)].hand
     if (pred(hand)) return true
-    if (hand.length >= 5) return false
+    if (hand.length >= maxHand) return false
     h.dispatch({ type: 'DRAW_CARD', teamId })
   }
   return pred(h.getState().teams[Number(teamId)].hand)
@@ -79,8 +84,8 @@ describe('CARD_META', () => {
 })
 
 describe('card draw', () => {
-  it('เริ่มเกมทุกทีมได้ 1 ใบสุ่ม', () => {
-    const h = createGame(cardSettings(), 9)
+  it('เริ่มเกมทุกทีมได้ 1 ใบสุ่ม (เมื่อตั้ง startingHand = 1)', () => {
+    const h = createGame(cardSettings({ startingHand: 1 }), 9)
     for (const t of h.getState().teams) expect(t.hand).toHaveLength(1)
   })
 
@@ -112,8 +117,8 @@ describe('card draw', () => {
     expect(s.currentTeamIndex).toBe(1)
   })
 
-  it('มือเต็ม 5 ใบ → จั่วไม่เข้า', () => {
-    const settings = cardSettings({ teamNames: ['A', 'B', 'C', 'D'] })
+  it('มือเต็ม maxHandSize → จั่วไม่เข้า', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B', 'C', 'D'], maxHandSize: 5 })
     const h = createGame(settings, 5)
     for (let i = 0; i < 10; i++) {
       h.dispatch({ type: 'DRAW_CARD', teamId: '0' })

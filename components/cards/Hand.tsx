@@ -26,7 +26,8 @@ export function Hand() {
 
   const current = state.teams[state.currentTeamIndex]
   const canPlay = state.phase === 'cards' && !state.currentGlitched && !state.currentBlocked
-  const handFull = current.hand.length >= 5
+  const maxHand = state.settings.maxHandSize
+  const handFull = current.hand.length >= maxHand
 
   if (!state.settings.cardsEnabled || state.phase === 'gameover') return null
 
@@ -97,7 +98,7 @@ export function Hand() {
             'dark:bg-amber-900/50 dark:text-amber-100'
           }
         >
-          มือเต็ม 5 ใบ — จั่วไม่เข้าแล้ว
+          มือเต็ม {maxHand} ใบ — จั่วไม่เข้าแล้ว
         </p>
       )}
 

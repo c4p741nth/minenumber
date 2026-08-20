@@ -1,13 +1,22 @@
-import { CARD_WEIGHTS, LIMITS } from './config'
+import { CARD_WEIGHTS } from './config'
 import { weightedPick } from './rng'
 import type { CardType } from './types'
 
 type Rng = () => number
 
 // จั่วการ์ดสุ่ม 1 ใบ ตามน้ำหนัก (§7.2) — คืน null ถ้ามือเต็ม
-export function drawRandomCard(hand: CardType[], rng: Rng): CardType | null {
-  if (hand.length >= LIMITS.maxHandSize) return null
-  const card = weightedPick(rng, CARD_WEIGHTS)
+// cardWeights (optional) เป็นการ override น้ำหนักเฉพาะบางชนิด
+export function drawRandomCard(
+  hand: CardType[],
+  rng: Rng,
+  maxHandSize: number,
+  weights?: Partial<Record<CardType, number>>,
+): CardType | null {
+  if (hand.length >= maxHandSize) return null
+  const merged = weights
+    ? CARD_WEIGHTS.map(([c, w]) => [c, weights[c] ?? w] as const)
+    : CARD_WEIGHTS
+  const card = weightedPick(rng, merged)
   hand.push(card)
   return card
 }

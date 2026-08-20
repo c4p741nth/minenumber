@@ -6,17 +6,16 @@ type Rng = () => number
 
 // สร้างแผนที่ระเบิดตอนเริ่มเกม
 // ระเบิดจริง = ทีม − 1 (โควตา §2)
-// glitch เป็นส่วนเกินตามสัดส่วน (§4.2)
+// glitch เป็นส่วนเกิน — auto ตามสัดส่วน / manual ตามจำนวนที่ตั้ง
 export function setupBombs(settings: GameSettings, rng: Rng): Map<number, BombKind> {
-  const { rangeMin, rangeMax, teamNames, glitchEnabled, glitchRatio } = settings
+  const { rangeMin, rangeMax, teamNames, glitchEnabled, glitchMode, glitchRatio, glitchCount } = settings
   const totalCells = rangeMax - rangeMin + 1
   const realCount = Math.min(bombQuota(teamNames.length), totalCells)
-  let glitchCount = 0
+  let glitch = 0
   if (glitchEnabled) {
-    // glitch นับเฉพาะโควตา real (ปัดลง) — ตัดถ้าช่องเหลือไม่พอ
-    glitchCount = Math.min(glitchCountFor(realCount, glitchRatio), totalCells - realCount)
+    glitch = glitchCountFor(realCount, totalCells, glitchMode, glitchRatio, glitchCount)
   }
-  const count = realCount + glitchCount
+  const count = realCount + glitch
 
   const pool: number[] = []
   for (let n = rangeMin; n <= rangeMax; n++) pool.push(n)

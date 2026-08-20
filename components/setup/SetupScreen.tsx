@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { LIMITS, bombQuota, defaultTeamNames, glitchCountFor } from '@/lib/game/config'
+import { bombDensity, suggestRange, verdictFor } from '@/lib/game/balance'
 import { createRng, randomSeed, shuffle } from '@/lib/game/rng'
 import type { GameSettings } from '@/lib/game/types'
 import { RulesPanel } from './RulesPanel'
@@ -19,8 +20,12 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [rangeMax, setRangeMax] = useState(initial.rangeMax)
   const [turnSeconds, setTurnSeconds] = useState(initial.turnSeconds)
   const [glitchEnabled, setGlitchEnabled] = useState(initial.glitchEnabled)
+  const [glitchMode, setGlitchMode] = useState<'auto' | 'manual'>(initial.glitchMode)
   const [glitchRatio, setGlitchRatio] = useState(initial.glitchRatio)
+  const [glitchCountInput, setGlitchCountInput] = useState(String(initial.glitchCount))
   const [cardsEnabled, setCardsEnabled] = useState(initial.cardsEnabled)
+  const [maxHandSize, setMaxHandSize] = useState(initial.maxHandSize)
+  const [startingHand, setStartingHand] = useState(initial.startingHand)
   const [scanRadius, setScanRadius] = useState(initial.scanRadius)
   const [shrinkingEnabled, setShrinkingEnabled] = useState(initial.shrinkingEnabled)
   const [countInput, setCountInput] = useState(String(names.length))
@@ -28,7 +33,12 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const teams = names.length
   const cells = rangeMax - rangeMin + 1
   const quota = bombQuota(teams)
-  const glitchCount = glitchEnabled ? glitchCountFor(quota, glitchRatio) : 0
+  const glitchCount = glitchEnabled
+    ? glitchCountFor(quota, cells, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
+    : 0
+  const density = bombDensity(quota + glitchCount, cells)
+  const balance = verdictFor(density)
+  const suggestion = suggestRange(teams)
   const minCells = teams * LIMITS.minCellsPerTeam
   const canStart = cells >= minCells
 
@@ -90,8 +100,12 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       rangeMax,
       turnSeconds,
       glitchEnabled,
+      glitchMode,
       glitchRatio,
+      glitchCount: Number(glitchCountInput) || 0,
       cardsEnabled,
+      maxHandSize,
+      startingHand,
       scanRadius,
       shrinkingEnabled,
     })
@@ -243,6 +257,20 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
               (ถ้าให้ปรับได้เกมจะไม่จบ)
               {glitchEnabled ? ` + glitch ${glitchCount} ลูก` : ''}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-3 py-1 text-sm font-bold ${balanceBadgeClass(balance)}`}>
+                {balanceBadgeText(balance)} ({Math.round(density * 100)}% เต็ม)
+              </span>
+              <button
+                onClick={() => {
+                  setRangeMin(suggestion.min)
+                  setRangeMax(suggestion.max)
+                }}
+                className="rounded-lg border border-primary px-3 py-1 text-sm font-bold text-primary"
+              >
+                ใช้ค่าแนะนำ {suggestion.min}–{suggestion.max}
+              </button>
+            </div>
           </div>
 
           <div className="mt-auto">
@@ -330,19 +358,102 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
 
           <label className="block">
             <span className="mb-1 flex justify-between text-base font-semibold">
-              สัดส่วน Glitch
-              <span className="text-muted-foreground">{Math.round(glitchRatio * 100)}%</span>
+              จำนวน Glitch
+              <span className="text-muted-foreground">
+                {glitchMode === 'auto' ? `${Math.round(glitchRatio * 100)}% ของระเบิดจริง` : `${glitchCount} ลูก`}
+              </span>
+            </span>
+            <div className="flex gap-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+                <input
+                  type="radio"
+                  name="glitchMode"
+                  checked={glitchMode === 'auto'}
+                  onChange={() => setGlitchMode('auto')}
+                  disabled={!glitchEnabled}
+                  className="accent-[var(--primary)]"
+                />
+                อัตโนมัติ (ตามสัดส่วน)
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+                <input
+                  type="radio"
+                  name="glitchMode"
+                  checked={glitchMode === 'manual'}
+                  onChange={() => setGlitchMode('manual')}
+                  disabled={!glitchEnabled}
+                  className="accent-[var(--primary)]"
+                />
+                กำหนดเอง
+              </label>
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={LIMITS.maxGlitchRatio}
+                step={0.05}
+                value={glitchRatio}
+                disabled={!glitchEnabled || glitchMode !== 'auto'}
+                onChange={(e) => setGlitchRatio(Number(e.target.value))}
+                className="w-full accent-[var(--primary)] disabled:opacity-40"
+              />
+              {glitchMode === 'manual' && (
+                <input
+                  type="number"
+                  min={0}
+                  max={Math.max(cells - quota, 0)}
+                  value={glitchCountInput}
+                  onChange={(e) => setGlitchCountInput(e.target.value)}
+                  disabled={!glitchEnabled}
+                  className="control w-20 text-center font-mono text-lg font-bold"
+                />
+              )}
+            </div>
+            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+              ระเบิดปลอม เปิดโดนแล้วไม่ตาย แต่ทีมนั้นใช้การ์ดไม่ได้ 2 ตา
+              เป็นระเบิดส่วนเกินจากระเบิดจริง (ไม่เกินช่องว่าง)
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 flex justify-between text-base font-semibold">
+              มือสูงสุด (การ์ด)
+              <span className="text-muted-foreground">{maxHandSize} ใบ</span>
+            </span>
+            <input
+              type="range"
+              min={LIMITS.minHandSize}
+              max={LIMITS.maxHandSizeCap}
+              step={1}
+              value={maxHandSize}
+              disabled={!cardsEnabled}
+              onChange={(e) => setMaxHandSize(Number(e.target.value))}
+              className="w-full accent-[var(--primary)] disabled:opacity-40"
+            />
+            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+              จำนวนการ์ดสูงสุดที่ถือได้ในมือ เกินกว่านี้จั่วไม่เข้า
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 flex justify-between text-base font-semibold">
+              การ์ดเริ่มต้น (แจกตอนเริ่มเกม)
+              <span className="text-muted-foreground">{startingHand} ใบ/ทีม</span>
             </span>
             <input
               type="range"
               min={0}
-              max={0.5}
-              step={0.05}
-              value={glitchRatio}
-              disabled={!glitchEnabled}
-              onChange={(e) => setGlitchRatio(Number(e.target.value))}
+              max={LIMITS.maxStartingHand}
+              step={1}
+              value={startingHand}
+              disabled={!cardsEnabled}
+              onChange={(e) => setStartingHand(Number(e.target.value))}
               className="w-full accent-[var(--primary)] disabled:opacity-40"
             />
+            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+              การ์ดที่แจกให้ทุกทีมตั้งแต่เริ่มเกม (ปกติจั่วทีละ 1 ใบเมื่อรอดจบตา)
+            </span>
           </label>
         </section>
       </div>
@@ -368,4 +479,30 @@ function PreviewStat({ label, value }: { label: string; value: number }) {
       <p className="mt-1 font-mono text-2xl font-black text-primary">{value}</p>
     </div>
   )
+}
+
+function balanceBadgeClass(balance: 'too-easy' | 'good' | 'risky' | 'brutal'): string {
+  switch (balance) {
+    case 'too-easy':
+      return 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'
+    case 'good':
+      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+    case 'risky':
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+    case 'brutal':
+      return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+  }
+}
+
+function balanceBadgeText(balance: 'too-easy' | 'good' | 'risky' | 'brutal'): string {
+  switch (balance) {
+    case 'too-easy':
+      return 'ง่ายเกินไป'
+    case 'good':
+      return 'สมดุล'
+    case 'risky':
+      return 'เสี่ยง'
+    case 'brutal':
+      return 'โหดมาก'
+  }
 }
