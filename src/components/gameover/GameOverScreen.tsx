@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { CARD_LABELS } from '@/lib/game/cards'
+import { computeRankings, MEDAL_EMOJI, type RankedTeam } from '@/lib/game/ranking'
 import { appendGameLog } from '@/lib/storage/gamelog'
 import { appendMatch, totalCardsPlayed } from '@/lib/storage/leaderboard'
 import type { CardType, Team } from '@/lib/game/types'
@@ -10,11 +11,6 @@ interface Props {
   onRestart: () => void
   onExit: () => void
   onLeaderboard: () => void
-}
-
-interface RankedTeam {
-  team: Team
-  rank: number
 }
 
 export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
@@ -120,13 +116,12 @@ function Podium({ rankings }: { rankings: RankedTeam[] }) {
     rankings.find((r) => r.rank === 3),
   ]
   const heights = ['h-40', 'h-28', 'h-20']
-  const medals = ['🥇', '🥈', '🥉']
   return (
     <div className="mt-8 flex items-end justify-center gap-4">
       {top.map((r, i) =>
         r ? (
           <div key={r.team.id} className="flex flex-col items-center gap-1">
-            <span className="text-3xl">{medals[i]}</span>
+            <span className="text-3xl">{MEDAL_EMOJI[i]}</span>
             <span className="max-w-28 truncate text-base font-bold">{r.team.name}</span>
             <div
               className={
@@ -159,26 +154,4 @@ function StatsRow({ team }: { team: Team }) {
       </span>
     </span>
   )
-}
-
-function computeRankings(teams: Team[]): {
-  rankings: RankedTeam[]
-  isDraw: boolean
-  noWinner: boolean
-} {
-  const alive = teams.filter((t) => t.alive)
-  const dead = teams
-    .filter((t) => !t.alive)
-    .sort((a, b) => (b.eliminatedAt ?? 0) - (a.eliminatedAt ?? 0))
-  const isDraw = alive.length > 1
-  const noWinner = alive.length === 0
-  const rankings: RankedTeam[] = []
-  if (alive.length > 0) {
-    for (const t of alive) rankings.push({ team: t, rank: 1 })
-    dead.forEach((t, i) => rankings.push({ team: t, rank: i + 2 }))
-  } else {
-    // ทุกทีมตาย — ตายทีหลังสุด = อันดับดีกว่า
-    dead.forEach((t, i) => rankings.push({ team: t, rank: i + 1 }))
-  }
-  return { rankings, isDraw, noWinner }
 }
