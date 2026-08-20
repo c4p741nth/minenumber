@@ -11,6 +11,7 @@ import { MusicPlayer } from '@/components/effects/MusicPlayer'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
 import { hitChance } from '@/lib/game/balance'
+import { computeRankings, medalClass, MEDAL_EMOJI, visibleMedal } from '@/lib/game/ranking'
 import { BombMark } from '@/components/setup/SetupScreen'
 import { useGame } from './GameProvider'
 
@@ -327,21 +328,38 @@ export function nextAliveTeam(
 function TeamList() {
   const { state } = useGame()
   const currentIdx = state.currentTeamIndex
+  const isGameover = state.phase === 'gameover'
+  // FIX #38: อันดับ + เหรียญ — ระหว่างเล่นเปิดแค่ทองแดง (ทีมที่ตายจนเหลือ 3 ทีม)
+  // ทอง/เงินโผล่พร้อมกันตอนเกมจบ เพราะก่อนนั้นยังไม่รู้ว่าใครชนะ
+  const { rankings } = computeRankings(state.teams)
+  const rankOf = new Map(rankings.map((r) => [r.team.id, r.rank]))
   return (
     <aside className="panel flex h-max flex-col gap-1">
       <h3 className="section-label mb-2">ทีม</h3>
-      {state.teams.map((t, i) => (
+      {state.teams.map((t, i) => {
+        const medal = visibleMedal(t, state.teams.length, isGameover, rankOf.get(t.id) ?? 99)
+        // ลำดับความสำคัญ: ทีมปัจจุบัน > เหรียญ > ยังรอด > ตาย
+        // เหรียญต้องมาก่อน branch ตาย ไม่งั้นทีมที่ได้ทองแดงจะถูกหรี่จนมองไม่เห็น
+        // ทุก branch มี border-2 (branch ที่ไม่มีเหรียญใช้ border-transparent)
+        // เพื่อให้ความสูงแถวไม่ขยับตอนเหรียญโผล่ — ดู FIX #26 เรื่อง layout นิ่ง
+        const rowClass =
+          i === currentIdx && !isGameover
+            ? 'border-primary bg-primary/10 font-bold'
+            : medal !== null
+              ? `${medalClass(medal)} font-bold`
+              : t.alive
+                ? 'border-transparent bg-background'
+                : 'border-transparent opacity-40 line-through'
+        return (
         <div
           key={t.id}
-          className={
-            'flex items-center gap-2 rounded-lg px-3 py-2 ' +
-            (i === currentIdx && state.phase !== 'gameover'
-              ? 'border-2 border-primary bg-primary/10 font-bold'
-              : t.alive
-                ? 'bg-background'
-                : 'opacity-40 line-through')
-          }
+          className={'flex items-center gap-2 rounded-lg border-2 px-3 py-2 ' + rowClass}
         >
+          {medal !== null && (
+            <span className="shrink-0 text-base" title={`อันดับ ${medal}`}>
+              {MEDAL_EMOJI[medal - 1]}
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate text-base">{t.name}</span>
           {t.glitchTurnsLeft > 0 && (
             <span
@@ -376,7 +394,8 @@ function TeamList() {
             </span>
           )}
         </div>
-      ))}
+        )
+      })}
     </aside>
   )
 }

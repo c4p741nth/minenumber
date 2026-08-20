@@ -78,3 +78,45 @@ test('FIX #12: MainMenu renders with a rules button (modal, not a new screen)', 
   ).not.toThrow()
   expect(screen.getByText(/กฎกติกา/)).toBeDefined()
 })
+
+// FIX #38: TeamList คำนวณอันดับ + เหรียญทุกครั้งที่เรนเดอร์ — โค้ดนี้พังแล้วจอว่าง
+// เกมเริ่มใหม่ทุกทีมยังรอด เหรียญจึงไม่โผล่ (เทสอื่นครอบเคสนั้นอยู่แล้ว 6 อัน)
+// เทสนี้จับเคสที่โค้ดเหรียญทำงานจริง: 3 ทีม ตกรอบ 1 → ทีมที่ตกรอบได้ทองแดง
+// seed 1 คือ seed ที่ตัดสายพลาดจริง (seed 42 ที่เทสอื่นใช้ "รอด" เทสจะผ่านแบบว่างเปล่า)
+test('FIX #38: bronze medal shows mid-game for the team that placed 3rd', () => {
+  const settings: GameSettings = {
+    ...defaultSettings(),
+    teamNames: ['ทีม 1', 'ทีม 2', 'ทีม 3'],
+    rangeMin: 1,
+    rangeMax: 20,
+    cardsEnabled: false,
+  }
+  const handle = createGame(settings, 1)
+  const secret = handle.serializeSecret()
+  const bombCell = Number(Object.keys(secret).find((k) => secret[Number(k)] === 'real'))
+  handle.dispatch({ type: 'OPEN_CELL', cell: bombCell })
+  handle.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+
+  // ยืนยันว่า setup ไปถึงสถานะที่ต้องการจริง ไม่ใช่เทสผ่านเพราะไม่มีอะไรเกิดขึ้น
+  const st = handle.getState()
+  expect(st.teams.filter((t) => !t.alive)).toHaveLength(1)
+  expect(st.phase).not.toBe('gameover')
+
+  expect(() =>
+    render(
+      <GameProvider handle={handle}>
+        <GameScreen onRestart={() => {}} onExit={() => {}} onLeaderboard={() => {}} />
+      </GameProvider>,
+    ),
+  ).not.toThrow()
+
+  // ทองแดงต้องโผล่ ส่วนทอง/เงินยังไม่รู้ผล ห้ามโผล่
+  expect(screen.getAllByTitle('อันดับ 3').length).toBeGreaterThan(0)
+  expect(screen.queryByTitle('อันดับ 1')).toBeNull()
+  expect(screen.queryByTitle('อันดับ 2')).toBeNull()
+
+  // ทีมที่ตกรอบต้องยังเห็นชื่อ (ได้เหรียญแล้วต้องไม่ถูกหรี่จนหาย)
+  for (const t of st.teams) {
+    expect(screen.getAllByText(t.name).length).toBeGreaterThan(0)
+  }
+})

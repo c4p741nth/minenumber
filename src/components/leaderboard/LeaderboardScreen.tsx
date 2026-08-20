@@ -10,6 +10,7 @@ import { clearGameLogs, loadGameLogs, type GameLogRecord } from '@/lib/storage/g
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
 import { BombMark } from '@/components/setup/SetupScreen'
 import { logClass, logTime } from '@/components/game/GameScreen'
+import { medalClass, MEDAL_EMOJI } from '@/lib/game/ranking'
 
 interface Props {
   onBack: () => void
@@ -89,9 +90,15 @@ export function LeaderboardScreen({ onBack }: Props) {
               </tr>
             </thead>
             <tbody>
+              {/* FIX #38: 3 แถวแรก (แต้มสูงสุด) ได้สีทอง/เงิน/ทองแดง */}
               {aggregates.map((a, i) => (
-                <tr key={a.teamName} className="border-b border-border last:border-0">
-                  <td className="py-2 pr-3 font-mono font-bold">{i + 1}</td>
+                <tr
+                  key={a.teamName}
+                  className={`border-b border-border last:border-0 ${medalClass(i + 1)}`}
+                >
+                  <td className="py-2 pr-3 font-mono font-bold">
+                    {i < 3 ? MEDAL_EMOJI[i] : i + 1}
+                  </td>
                   <td className="py-2 pr-3 font-bold">{a.teamName}</td>
                   <td className="py-2 pr-3 text-right font-mono">{a.games}</td>
                   <td className="py-2 pr-3 text-right font-mono">{a.wins}</td>
@@ -110,9 +117,15 @@ export function LeaderboardScreen({ onBack }: Props) {
           <h2 className="section-label mb-3">ผลรายทีม 20 รายการล่าสุด</h2>
           <ul className="flex flex-col gap-1.5 text-sm">
             {recent.map((r) => (
-              <li key={r.id} className="flex items-center gap-3 border-b border-border py-1.5 last:border-0">
-                <span className="w-6 text-center font-mono text-xs font-bold text-muted-foreground">
-                  #{r.rank}
+              <li
+                key={r.id}
+                className={
+                  'flex items-center gap-3 rounded-lg border-b border-border px-2 py-1.5 last:border-0 ' +
+                  medalClass(r.rank)
+                }
+              >
+                <span className="w-6 text-center font-mono text-xs font-bold">
+                  {r.rank <= 3 ? MEDAL_EMOJI[r.rank - 1] : `#${r.rank}`}
                 </span>
                 <span className="min-w-0 flex-1 truncate font-bold">{r.teamName}</span>
                 <span className="text-muted-foreground">
