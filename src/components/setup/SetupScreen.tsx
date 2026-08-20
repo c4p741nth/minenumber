@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
-import { LIMITS, bombQuota, defaultTeamNames, glitchCountFor } from '@/lib/game/config'
+import {
+  LIMITS,
+  bombQuota,
+  defaultTeamNames,
+  glitchCountFor,
+  maxScanRadiusFor,
+  suggestedScanRadius,
+} from '@/lib/game/config'
 import { bombDensity, chanceDisplay, suggestRange, verdictFor, type BalanceVerdict } from '@/lib/game/balance'
 import { createRng, randomSeed, shuffle } from '@/lib/game/rng'
 import type { GameSettings } from '@/lib/game/types'
@@ -49,6 +56,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   // ค่าที่เอาไปใช้จริง — ว่าง = ใช้ค่าต่ำสุด (แต่ไม่ดีดค่าใน input ระหว่างพิมพ์)
   const teams = names.length
   const cells = clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange)
+  const scanR = clampInt(Number(scanRadiusInput), LIMITS.minScanRadius, maxScanRadiusFor(cells))
   const quota = bombQuota(teams)
   const glitchRatio = clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio)
   const glitchCount = glitchEnabled
@@ -123,7 +131,11 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
         ? clampInt(Number(maxHandInput), LIMITS.minHandSize, LIMITS.maxHandSizeCap)
         : 0, // 0 = ไม่จำกัด (W5.1)
       startingHand: clampInt(Number(startingHandInput), 0, LIMITS.maxStartingHand),
-      scanRadius: clampInt(Number(scanRadiusInput), LIMITS.minScanRadius, LIMITS.maxScanRadius),
+      scanRadius: clampInt(
+        Number(scanRadiusInput),
+        LIMITS.minScanRadius,
+        maxScanRadiusFor(cells),
+      ),
       shrinkingEnabled,
     })
   }
@@ -515,22 +527,28 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                   />
                   <NumberField
                     label="รัศมี Scan"
-                    hint="การ์ด Scan บอกว่ามีระเบิดในช่วง ±R รอบเลขที่เลือกหรือไม่ ยิ่งกว้างยิ่งเจอง่ายแต่ระบุตำแหน่งยาก"
+                    hint={`ตรวจช่วงเลขซ้าย–ขวารอบเป้าหมาย คลุม ${2 * scanR + 1} ช่อง (2R+1) — สูงสุดของกระดานนี้ ${maxScanRadiusFor(cells)}`}
                     value={scanRadiusInput}
                     onChange={setScanRadiusInput}
                     min={LIMITS.minScanRadius}
-                    max={LIMITS.maxScanRadius}
-                    suffix={`±${Number(scanRadiusInput) || LIMITS.minScanRadius}`}
+                    max={maxScanRadiusFor(cells)}
+                    suffix={`±${scanR} (ครอบ ${2 * scanR + 1} ช่อง)`}
                     onBlurFix={() =>
                       fixInput(
                         scanRadiusInput,
                         LIMITS.minScanRadius,
-                        LIMITS.maxScanRadius,
-                        LIMITS.minScanRadius,
+                        maxScanRadiusFor(cells),
+                        suggestedScanRadius(cells),
                         setScanRadiusInput,
                       )
                     }
                   />
+                  <button
+                    onClick={() => setScanRadiusInput(String(suggestedScanRadius(cells)))}
+                    className="rounded-lg border border-primary px-3 py-1.5 text-sm font-bold text-primary"
+                  >
+                    ใช้ค่าแนะนำ (±{suggestedScanRadius(cells)})
+                  </button>
                 </fieldset>
 
                 <NumberField

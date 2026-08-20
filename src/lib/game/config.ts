@@ -12,7 +12,7 @@ export const LIMITS = {
   maxTurnSeconds: 300,
   maxGlitchRatio: 0.5,
   minScanRadius: 1,
-  maxScanRadius: 5,
+  maxScanRadiusCap: 20,
   minHandSize: 3,
   maxHandSizeCap: 7,
   maxStartingHand: 5,
@@ -67,6 +67,22 @@ export function glitchCountFor(
 
 export function defaultTeamNames(count: number): string[] {
   return Array.from({ length: count }, (_, i) => `ทีม ${i + 1}`)
+}
+
+// รัศมี scan สูงสุดที่มีความหมาย ≈ 10% ของกระดาน (clamp 1–20) — W6.2
+export function maxScanRadiusFor(totalCells: number): number {
+  return Math.min(
+    Math.max(Math.round(totalCells * 0.1), LIMITS.minScanRadius),
+    LIMITS.maxScanRadiusCap,
+  )
+}
+
+// รัศมีแนะนำอัตโนมัติ ≈ 5% ของกระดาน (clamp 1–20) — W6.2
+export function suggestedScanRadius(totalCells: number): number {
+  return Math.min(
+    Math.max(Math.round(totalCells * 0.05), LIMITS.minScanRadius),
+    LIMITS.maxScanRadiusCap,
+  )
 }
 
 export function defaultSettings(): GameSettings {

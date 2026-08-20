@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Board } from '@/components/board/Board'
 import { TimerCircle } from '@/components/board/TimerCircle'
 import { Hand } from '@/components/cards/Hand'
@@ -7,7 +7,7 @@ import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
-import { confirmDialog } from '@/components/ui/alert'
+import { confirmDialog, infoDialog } from '@/components/ui/alert'
 import { useGame } from './GameProvider'
 
 interface Props {
@@ -16,11 +16,20 @@ interface Props {
   onLeaderboard: () => void
 }
 
+interface ScanInfo {
+  center: number
+  radius: number
+  found: boolean
+}
+
 export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
   const [typed, setTyped] = useState('')
   const [cardMode, setCardMode] = useState(true)
+  const [scanning, setScanning] = useState<{ center: number; radius: number } | null>(null)
+  const lastScanSig = useRef<string | null>(null)
+  const scanTimer = useRef<number | null>(null)
 
   // ขึ้นตาตอนใหม่ → กลับไปช่วงใช้การ์ดก่อน
   useEffect(() => {
@@ -70,6 +79,32 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
     })
   }
 
+  // W6.3: เล่น Scan → ให้ Board เรืองแสงช่วงที่ตรวจ แล้ว popup ผลหลัง animation จบ
+  // ใช้ ref กัน trigger ซ้ำตอน state อัปเดตเหตุอื่น (lastCardResult เปลี่ยน identity ทุกครั้ง)
+  useEffect(() => {
+    const lc = state.lastCardResult
+    const sig = lc ? JSON.stringify(lc) : null
+    if (!lc || lc.card !== 'scan' || sig === lastScanSig.current) return
+    lastScanSig.current = sig
+    const info: ScanInfo = {
+      center: lc.center,
+      radius: state.settings.scanRadius,
+      found: lc.found,
+    }
+    setScanning({ center: info.center, radius: info.radius })
+    if (scanTimer.current) window.clearTimeout(scanTimer.current)
+    scanTimer.current = window.setTimeout(() => {
+      setScanning(null)
+      const lo = Math.max(state.rangeMin, info.center - info.radius)
+      const hi = Math.min(state.rangeMax, info.center + info.radius)
+      void infoDialog({
+        title: info.found ? '⚠ มีระเบิดอยู่ใกล้ ๆ!' : '✓ ไม่มีระเบิดอยู่ใกล้ ๆ',
+        text: `ตรวจช่วง ${lo}–${hi} (รอบเลข ${info.center})`,
+        icon: info.found ? 'error' : 'success',
+      })
+    }, 2200)
+  }, [state.lastCardResult, state.rangeMin, state.rangeMax, state.settings.scanRadius])
+
   return (
     <div className="grid min-h-screen w-full place-content-center p-4">
       <div className="grid w-full max-w-375 gap-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
@@ -115,6 +150,7 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
             cells={state.cells}
             disabled={state.phase !== 'opening' && state.phase !== 'cards'}
             onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
+            scanning={scanning}
           />
           {current.pendingOpens > 1 && (
             <div

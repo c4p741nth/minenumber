@@ -49,7 +49,7 @@ export const CARD_COLORS: Record<CardType, string> = {
 }
 
 export const CARD_DESCRIPTIONS: Record<CardType, string> = {
-  scan: 'เลือกเลข → บอกว่ามีระเบิดในช่วง ±R หรือไม่ (มี/ไม่มี)',
+  scan: 'เลือกเลข → ตรวจช่วงเลขซ้าย–ขวารอบเลขนั้น (±R) เช่น เลือก 20 รัศมี 3 = ตรวจ 17–23 รวม 7 ช่อง บอกแค่มี/ไม่มีระเบิด',
   skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด)',
   block: 'ทีมเป้าหมายใช้การ์ดไม่ได้ใน turn ถัดไป',
   reverse: 'สลับทิศทาง + จบ turn ทันที',

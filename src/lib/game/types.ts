@@ -59,7 +59,7 @@ export type OpenResult =
   | { kind: 'glitch' }
 
 export type CardResult =
-  | { card: 'scan'; found: boolean }
+  | { card: 'scan'; found: boolean; center: number }
   | { card: 'skip' }
   | { card: 'block'; targetTeamId: string }
   | { card: 'reverse' }

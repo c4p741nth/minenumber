@@ -1,12 +1,19 @@
 
 import type { CellState } from '@/lib/game/types'
 
+interface ScanTarget {
+  center: number
+  radius: number
+}
+
 interface Props {
   rangeMin: number
   rangeMax: number
   cells: Record<number, CellState>
   disabled: boolean
   onOpen: (cell: number) => void
+  // ช่องที่ Scan กำลังสแกน (W6.3) — รับแค่ center/radius ไม่รับตำแหน่งระเบิด
+  scanning?: ScanTarget | null
 }
 
 const OPENED_STYLES: Record<Exclude<CellState, 'hidden'>, { cls: string; label: string }> = {
@@ -16,7 +23,7 @@ const OPENED_STYLES: Record<Exclude<CellState, 'hidden'>, { cls: string; label: 
   glitched: { cls: 'bg-purple-600 text-white', label: '⚡' },
 }
 
-export function Board({ rangeMin, rangeMax, cells, disabled, onOpen }: Props) {
+export function Board({ rangeMin, rangeMax, cells, disabled, onOpen, scanning = null }: Props) {
   const numbers: number[] = []
   for (let n = rangeMin; n <= rangeMax; n++) numbers.push(n)
 
@@ -27,17 +34,24 @@ export function Board({ rangeMin, rangeMax, cells, disabled, onOpen }: Props) {
     >
       {numbers.map((n) => {
         const state = cells[n] ?? 'hidden'
+        const inScan =
+          scanning !== null &&
+          n >= scanning.center - scanning.radius &&
+          n <= scanning.center + scanning.radius
+        const scanDelay = inScan ? Math.abs(n - scanning!.center) * 0.06 : 0
         if (state === 'hidden') {
           return (
             <button
               key={n}
               onClick={() => onOpen(n)}
               disabled={disabled}
+              style={inScan ? { animationDelay: `${scanDelay}s` } : undefined}
               className={
                 'grid min-h-[56px] place-items-center rounded-lg border-2 p-1 font-mono ' +
                 'text-xl font-black transition hover:border-primary hover:bg-primary ' +
                 'border-border bg-card hover:text-primary-foreground ' +
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50 ' +
+                (inScan ? 'cell-scan' : '')
               }
             >
               {n}

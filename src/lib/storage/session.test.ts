@@ -72,7 +72,9 @@ describe('snapshot', () => {
     expect(loaded).not.toBeNull()
     expect(loaded?.state).toEqual(state)
     expect(loaded?.secret).toEqual(secret)
-    expect(loaded?.state.settings).toEqual(settings)
+    // เปรียบเทียบกับ settings ที่เกมใช้จริง (createGame clamp scanRadius ให้พอดีกระดาน)
+    expect(loaded?.state.settings).toEqual(h.getState().settings)
+    void settings
   })
 
   it('ค่าใน localStorage เป็น ciphertext — ตำแหน่งระเบิดไม่อยู่ในรูปแบบอ่านได้', async () => {

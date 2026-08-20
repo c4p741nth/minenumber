@@ -1,6 +1,7 @@
 import { CARD_LABELS, drawRandomCard } from './cards'
 import { createRng, pickRandom, shuffle } from './rng'
 import { refillBombs, setupBombs } from './setup'
+import { maxScanRadiusFor } from './config'
 import type {
   BombKind,
   CardResult,
@@ -69,7 +70,14 @@ function zeroStats(): TeamStats {
 
 export function createGame(settings: GameSettings, seed: number): GameHandle {
   const rng = createRng(seed)
-  const teams = settings.teamNames.map((name, i) => ({
+  // clamp scanRadius ให้พอดีกับขนาดกระดานตอนเริ่มเกม (W6.2)
+  // กัน settings เก่าใน localStorage ที่ radius ใหญ่เกินกระดานใหม่
+  const totalCells = settings.rangeMax - settings.rangeMin + 1
+  const clampedSettings: GameSettings = {
+    ...settings,
+    scanRadius: Math.min(settings.scanRadius, maxScanRadiusFor(totalCells)),
+  }
+  const teams = clampedSettings.teamNames.map((name, i) => ({
     id: String(i),
     name,
     alive: true,
@@ -81,26 +89,26 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     stats: zeroStats(),
   }))
   // เริ่มเกมแจกการ์ดให้ทุกทีม (startingHand ใบ — default 3, maxHandSize 0 = ไม่จำกัด) (§7.1)
-  if (settings.cardsEnabled) {
+  if (clampedSettings.cardsEnabled) {
     for (const t of teams) {
-      for (let i = 0; i < settings.startingHand; i++) {
-        if (settings.maxHandSize > 0 && t.hand.length >= settings.maxHandSize) break
-        drawRandomCard(t.hand, rng, settings.maxHandSize, settings.cardWeights)
+      for (let i = 0; i < clampedSettings.startingHand; i++) {
+        if (clampedSettings.maxHandSize > 0 && t.hand.length >= clampedSettings.maxHandSize) break
+        drawRandomCard(t.hand, rng, clampedSettings.maxHandSize, clampedSettings.cardWeights)
       }
     }
   }
 
   const state: EngineState = {
-    settings,
+    settings: clampedSettings,
     rng,
-    bombs: setupBombs(settings, rng),
+    bombs: setupBombs(clampedSettings, rng),
     cells: {},
     teams,
     currentTeamIndex: 0,
     direction: 1,
-    phase: settings.cardsEnabled ? 'cards' : 'opening',
-    rangeMin: settings.rangeMin,
-    rangeMax: settings.rangeMax,
+    phase: clampedSettings.cardsEnabled ? 'cards' : 'opening',
+    rangeMin: clampedSettings.rangeMin,
+    rangeMax: clampedSettings.rangeMax,
     turnNumber: 1,
     log: [],
     nextLogId: 0,
@@ -533,7 +541,7 @@ function playScan(state: EngineState, target: number): void {
       break
     }
   }
-  state.lastCardResult = { card: 'scan', found }
+  state.lastCardResult = { card: 'scan', found, center: target }
   pushLog(state, team.id, `${team.name} Scan ${target}: ${found ? 'มีระเบิด!' : 'ไม่มีระเบิด'}`)
 }
 

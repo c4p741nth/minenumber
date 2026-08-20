@@ -733,6 +733,44 @@ describe('W5 — มือไม่จำกัด + ทิ้งการ์ด
   })
 })
 
+describe('W6 — scan radius clamp + result center', () => {
+  it('clamp scanRadius ตอนเริ่มเกม ถ้า settings เก่า radius เกินกระดาน', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 20,
+      scanRadius: 50,
+    })
+    const h = createGame(settings, 1)
+    expect(h.getState().settings.scanRadius).toBe(2) // maxScanRadiusFor(20) = 2
+  })
+
+  it('scan ผลมี center + found (ไม่รู้ตำแหน่งระเบิด)', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      startingHand: 1,
+      maxHandSize: 5,
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 20,
+      scanRadius: 2,
+    })
+    // หา seed ที่ทีม 0 เริ่มด้วยการ์ด scan
+    let seed = -1
+    for (let s = 0; s < 20000; s++) {
+      const h = createGame(settings, s)
+      if (h.getState().teams[0].hand[0] === 'scan') {
+        seed = s
+        break
+      }
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    const after = h.dispatch({ type: 'PLAY_CARD', card: 'scan', index: 0, targetCell: 10 })
+    expect(after.lastCardResult).toEqual({ card: 'scan', found: expect.any(Boolean), center: 10 })
+  })
+})
+
 describe('determinism / resume', () => {
   it('seed เดียวกัน + action ชุดเดียวกัน → state เหมือนกันทุกครั้ง', () => {
     const settings = baseSettings({ teamNames: ['A', 'B', 'C'], rangeMin: 1, rangeMax: 12 })

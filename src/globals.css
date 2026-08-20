@@ -118,3 +118,18 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .timer-pulse, .timer-urgent { animation: none !important; }
 }
+
+/* ---- Scan effect (W6.3) ---- */
+.cell-scan {
+  border-color: color-mix(in srgb, var(--primary) 80%, transparent) !important;
+  color: var(--primary-foreground) !important;
+  animation: mn-scan 0.6s ease-out forwards;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+@keyframes mn-scan {
+  0% { background: var(--primary); transform: scale(1.1); }
+  100% { background: color-mix(in srgb, var(--primary) 40%, var(--card)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-scan { animation: none !important; }
+}
