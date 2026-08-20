@@ -64,3 +64,29 @@ button { cursor: pointer; }
 .history-safe { background: #d7ebe4; color: #286c5d; }
 @media (max-width: 1023px) { .number-board { min-height: 240px; } }
 @media (max-width: 640px) { .wide-range span { font-size: 48px; } .item-button { font-size: 11px; } }
+
+/* ---- Defuse modal (Task 6) ---- */
+.defuse-vignette {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  background: radial-gradient(ellipse, rgba(60, 10, 10, 0.55), rgba(10, 5, 5, 0.92) 70%);
+  padding: 24px;
+  animation: mn-vignette 0.9s ease-in-out infinite;
+}
+@keyframes mn-vignette {
+  50% { background: radial-gradient(ellipse, rgba(90, 15, 15, 0.62), rgba(10, 5, 5, 0.92) 75%); }
+}
+.defuse-shake { animation: mn-shake 0.5s 3; }
+@keyframes mn-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-10px, 6px); }
+  50% { transform: translate(8px, -8px); }
+  75% { transform: translate(-6px, 6px); }
+}
+.defuse-flash { animation: mn-flash 0.7s forwards; }
+@keyframes mn-flash { 0% { opacity: 0.95; } 100% { opacity: 0; } }
+.defuse-cut { animation: mn-cut 0.5s ease-in forwards; }
+@keyframes mn-cut { 0% { opacity: 1; } 100% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .defuse-vignette, .defuse-shake, .defuse-flash, .defuse-cut { animation: none !important; }
+}

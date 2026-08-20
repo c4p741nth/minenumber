@@ -162,6 +162,26 @@ describe('defuse', () => {
       expect(s1.cells[cell]).toBe(s2.cells[cell])
     }
   })
+
+  it('defuse ประมาณ 50/50 และสีไม่มีผลเลย (DoD Task 6, 100 เกม)', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
+    const total = 100
+    let redSurvived = 0
+    let blueSurvived = 0
+    for (let seed = 0; seed < total; seed++) {
+      const hRed = createGame(settings, seed)
+      const hBlue = createGame(settings, seed)
+      hRed.dispatch({ type: 'OPEN_CELL', cell: bombCellOf(hRed, 'real') })
+      hBlue.dispatch({ type: 'OPEN_CELL', cell: bombCellOf(hBlue, 'real') })
+      if (hRed.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' }).teams[0].alive) redSurvived++
+      if (hBlue.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' }).teams[0].alive) blueSurvived++
+    }
+    // ~50/50 (rng < 0.5) — จาก 100 ควรอยู่ในช่วง 30–70
+    expect(redSurvived).toBeGreaterThan(30)
+    expect(redSurvived).toBeLessThan(70)
+    // seed เดียวกัน → ผลเดียวกัน ทั้งที่เลือกสีต่างกัน (พิสูจน์ว่าสีไม่มีผล)
+    expect(redSurvived).toBe(blueSurvived)
+  })
 })
 
 describe('end conditions', () => {

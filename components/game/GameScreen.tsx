@@ -2,7 +2,7 @@
 
 import { Board } from '@/components/board/Board'
 import { TimerCircle } from '@/components/board/TimerCircle'
-import { DefusePanel } from '@/components/defuse/DefusePanel'
+import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { useGame } from './GameProvider'
 
 export function GameScreen() {
@@ -13,35 +13,30 @@ export function GameScreen() {
     <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 p-4 lg:grid-cols-[240px_1fr_300px]">
       <TeamList />
       <main className="flex flex-col gap-3">
-        {state.phase === 'defusing' ? (
-          <DefusePanel />
-        ) : (
-          <>
-            <CurrentTeamBanner />
-            <Board
-              rangeMin={state.rangeMin}
-              rangeMax={state.rangeMax}
-              cells={state.cells}
-              disabled={state.phase !== 'opening'}
-              onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
-            />
-            {current.pendingOpens > 1 && (
-              <div
-                className={
-                  'rounded-xl border-2 border-amber-500 bg-amber-100 p-3 text-center ' +
-                  'text-lg font-bold text-amber-900 dark:bg-amber-900/50 dark:text-amber-100'
-                }
-              >
-                ⚔ {current.name} ต้องเปิดอีก {current.pendingOpens} ป้าย
-              </div>
-            )}
-          </>
+        <CurrentTeamBanner />
+        <Board
+          rangeMin={state.rangeMin}
+          rangeMax={state.rangeMax}
+          cells={state.cells}
+          disabled={state.phase !== 'opening'}
+          onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
+        />
+        {current.pendingOpens > 1 && (
+          <div
+            className={
+              'rounded-xl border-2 border-amber-500 bg-amber-100 p-3 text-center ' +
+              'text-lg font-bold text-amber-900 dark:bg-amber-900/50 dark:text-amber-100'
+            }
+          >
+            ⚔ {current.name} ต้องเปิดอีก {current.pendingOpens} ป้าย
+          </div>
         )}
       </main>
       <aside className="flex flex-col gap-3">
         <StatusPanel />
         <LogPanel />
       </aside>
+      {state.phase === 'defusing' && <DefuseModal />}
     </div>
   )
 }
