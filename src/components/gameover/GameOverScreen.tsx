@@ -80,7 +80,7 @@ export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
               </span>
               <span className={`min-w-0 flex-1 truncate text-lg font-bold ${r.team.alive ? '' : 'opacity-60'}`}>
                 {r.team.name}
-                {r.team.alive && <span className="ml-2 text-sm font-bold text-emerald-600">รอด</span>}
+                {r.team.alive && <span className="ml-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">รอด</span>}
               </span>
               <StatsRow team={r.team} />
             </li>

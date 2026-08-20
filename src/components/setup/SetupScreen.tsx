@@ -312,7 +312,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
             </div>
           ) : chance.kind === 'certain' ? (
             <div className="rounded-xl border-2 border-red-600 bg-red-600/10 p-4 text-center">
-              <p className="text-lg font-bold text-red-600">{chance.text}</p>
+              <p className="text-lg font-bold text-red-600 dark:text-red-400">{chance.text}</p>
             </div>
           ) : (
             <div className="rounded-xl border border-border bg-background p-4">

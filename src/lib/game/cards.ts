@@ -40,14 +40,17 @@ export const CARD_LABELS: Record<CardType, string> = Object.fromEntries(
 ) as Record<CardType, string>
 
 // สีของแต่ละการ์ด — ใช้ทั้งการ์ด (Hand) และ toast ตอนจั่ว (W5.4) → อยู่ที่นี่ไฟล์เดียว
+// FIX #41: ตัวหนังสือเดิมเป็น -700 บนพื้น -500/15 ซึ่งตกเกณฑ์ contrast ในโหมดสว่าง
+// ทุกสี (slate แย่สุด ~1.7:1) — ลึกลงเป็น -800/-900 ผ่านเกณฑ์และยังแยกสีออกจากกัน
+// คู่ dark:text-*-300 เดิมถูกต้องแล้ว (พื้นมืด ต้องการตัวสว่าง) จึงไม่แตะ
 export const CARD_COLORS: Record<CardType, string> = {
-  scan: 'border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  skip: 'border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  shield: 'border-cyan-500 bg-cyan-500/15 text-cyan-700 dark:text-cyan-300',
-  block: 'border-slate-500 bg-slate-500/15 text-slate-700 dark:text-slate-300',
-  reverse: 'border-orange-500 bg-orange-500/15 text-orange-700 dark:text-orange-300',
-  shuffle: 'border-purple-500 bg-purple-500/15 text-purple-700 dark:text-purple-300',
-  attack: 'border-red-500 bg-red-500/15 text-red-700 dark:text-red-300',
+  scan: 'border-sky-500 bg-sky-500/15 text-sky-900 dark:text-sky-300',
+  skip: 'border-emerald-500 bg-emerald-500/15 text-emerald-900 dark:text-emerald-300',
+  shield: 'border-cyan-500 bg-cyan-500/15 text-cyan-900 dark:text-cyan-300',
+  block: 'border-slate-500 bg-slate-500/15 text-slate-900 dark:text-slate-300',
+  reverse: 'border-orange-500 bg-orange-500/15 text-orange-900 dark:text-orange-300',
+  shuffle: 'border-purple-500 bg-purple-500/15 text-purple-900 dark:text-purple-300',
+  attack: 'border-red-500 bg-red-500/15 text-red-800 dark:text-red-300',
 }
 
 export const CARD_DESCRIPTIONS: Record<CardType, string> = {

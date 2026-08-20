@@ -89,7 +89,7 @@ export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeou
       </svg>
       <span
         className={`absolute inset-0 grid place-items-center font-mono text-2xl font-black ${
-          danger ? 'text-red-600' : ''
+          danger ? 'text-red-600 dark:text-red-400' : ''
         } ${urgent ? 'timer-urgent' : ''}`}
       >
         {label}

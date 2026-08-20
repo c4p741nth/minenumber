@@ -8,8 +8,13 @@
   --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring); --font-sans: 'Noto Sans Thai', 'Geist', 'Arial'; --font-serif: 'Noto Sans Thai', 'DM Serif Display', Georgia; --font-mono: 'Geist Mono', monospace;
 }
 
-:root { color-scheme: light; --background: #f5f3ee; --foreground: #202322; --card: #fbfaf7; --card-foreground: #202322; --primary: #e34d32; --primary-foreground: #fffaf5; --secondary: #e8e5dd; --secondary-foreground: #202322; --muted: #e8e5dd; --muted-foreground: #72756f; --accent: #f4c65d; --accent-foreground: #202322; --destructive: #c6382f; --border: #d8d5cc; --input: #d8d5cc; --ring: #e34d32; --radius: 0.75rem; --confirm: #16a34a; --cancel: #6b7280; }
-.dark { color-scheme: dark; --background: #171918; --foreground: #f5f3ee; --card: #232725; --card-foreground: #f5f3ee; --primary: #ff7253; --primary-foreground: #201512; --secondary: #303633; --secondary-foreground: #f5f3ee; --muted: #303633; --muted-foreground: #adb5ae; --border: #414a45; --input: #414a45; --ring: #ff7253; --confirm: #22c55e; --cancel: #9aa4ae; }
+:root { color-scheme: light; --background: #f5f3ee; --foreground: #202322; --card: #fbfaf7; --card-foreground: #202322; --primary: #e34d32; --primary-foreground: #fffaf5; --secondary: #e8e5dd; --secondary-foreground: #202322; --muted: #e8e5dd; --muted-foreground: #72756f; --accent: #f4c65d; --accent-foreground: #202322; --destructive: #c6382f; --border: #d8d5cc; --input: #d8d5cc; --ring: #e34d32; --radius: 0.75rem; --confirm: #16a34a; --cancel: #6b7280; --safe-bg: #d7ebe4; --safe-fg: #286c5d; }
+/* FIX #41: ธีม Dark tactical — พื้นน้ำเงินเข้ม, เขียว phosphor, ส้ม/แดง alarm
+   ⚠️ --confirm ต้องเข้มพอสำหรับ text-white (Board.tsx / BlockPrompt.tsx ใช้
+   bg-[var(--confirm)] คู่ text-white) เขียว phosphor #2ee66b ให้ contrast กับ
+   ตัวขาวแค่ ~1.6:1 จึงใช้ #15803d เป็นพื้นปุ่ม แล้วเก็บ phosphor ไว้ที่
+   --accent/--safe ซึ่งใช้เป็นตัวหนังสือ/เส้นบนพื้นเข้ม */
+.dark { color-scheme: dark; --background: #0d1117; --foreground: #e6edf3; --card: #161b22; --card-foreground: #e6edf3; --primary: #ff5c33; --primary-foreground: #1a0f0b; --secondary: #21262d; --secondary-foreground: #e6edf3; --muted: #21262d; --muted-foreground: #9aa7b4; --accent: #2ee66b; --accent-foreground: #0d1117; --destructive: #ff5c33; --border: #30363d; --input: #30363d; --ring: #ff5c33; --confirm: #15803d; --cancel: #6e7681; --safe-bg: #10291f; --safe-fg: #4ade80; }
 
 * { box-sizing: border-box; }
 /* FIX #34: กัน element ที่สั่น/ล้นขอบ ทำให้เกิด scrollbar แนวนอนชั่วขณะ */
@@ -44,7 +49,11 @@ button { cursor: pointer; }
 .mode-card span { margin-top: 8px; color: var(--muted-foreground); font-size: 15px; line-height: 1.6; }
 .mode-selected { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
 .popup-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(32 35 34 / 65%); padding: 20px; }
+/* FIX #41: 65% จางเกินบนพื้นมืด — popup กับพื้นหลังกลืนกัน ต้องทึบขึ้น */
+.dark .popup-backdrop { background: rgb(1 4 9 / 82%); }
 .bomb-popup { width: min(100%, 440px); border: 2px solid var(--primary); border-radius: 18px; background: var(--card); padding: 34px; text-align: center; box-shadow: 0 20px 70px rgb(32 35 34 / 30%); }
+/* FIX #41: เงาดำบนพื้นดำเป็น no-op — ใช้เส้นเรืองแสงสีเตือนภัยแทน */
+.dark .bomb-popup { box-shadow: 0 0 0 1px rgb(255 92 51 / 25%), 0 20px 70px rgb(0 0 0 / 70%); }
 .bomb-icon { display: grid; width: 72px; height: 72px; margin: 0 auto 18px; place-items: center; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-mono); font-size: 42px; font-weight: 900; }
 .bomb-popup h2 { margin: 8px 0; font-family: var(--font-serif); font-size: 48px; }
 .bomb-popup p:not(.section-label) { margin: 0 auto 24px; color: var(--muted-foreground); line-height: 1.7; }
@@ -54,7 +63,7 @@ button { cursor: pointer; }
 .turn-banner { display: flex; align-items: center; gap: 14px; border: 2px solid var(--primary); border-radius: 14px; background: color-mix(in srgb, var(--primary) 12%, var(--card)); padding: 16px 20px; box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 15%, transparent); }
 .turn-banner strong { display: block; margin-top: 2px; font-size: 30px; line-height: 1.1; }
 .turn-index { margin-left: auto; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 14px; font-weight: 700; }
-.dark .status-message { background: var(--secondary); }
+/* FIX #41: rule นี้ตั้งค่าเดียวกับ base อยู่แล้ว — .dark สลับ --secondary ให้เอง */
 .pulse-dot, .team-dot { display: inline-block; height: 9px; width: 9px; border-radius: 50%; background: var(--primary); }
 .pulse-dot { animation: pulse 1.7s infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
@@ -68,7 +77,8 @@ button { cursor: pointer; }
 .history-row { font-size: 12px; }
 .history-bomb, .history-safe { display: grid; height: 22px; width: 22px; place-items: center; border-radius: 50%; font-weight: 800; }
 .history-bomb { background: var(--primary); color: var(--primary-foreground); }
-.history-safe { background: #d7ebe4; color: #286c5d; }
+/* FIX #41: เดิม hardcode #d7ebe4/#286c5d เขียวอ่อนบนพื้นมืดกลายเป็นแผลสว่าง */
+.history-safe { background: var(--safe-bg); color: var(--safe-fg); }
 @media (max-width: 1023px) { .number-board { min-height: 240px; } }
 @media (max-width: 640px) { .wide-range span { font-size: 48px; } .item-button { font-size: 11px; } }
 

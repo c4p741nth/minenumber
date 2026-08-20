@@ -5,6 +5,7 @@ import { GameScreen } from '@/components/game/GameScreen'
 import { LeaderboardScreen } from '@/components/leaderboard/LeaderboardScreen'
 import { MainMenu } from '@/components/menu/MainMenu'
 import { SetupScreen } from '@/components/setup/SetupScreen'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
 import { randomSeed } from '@/lib/game/rng'
@@ -60,11 +61,20 @@ export default function Page() {
     setScreen('leaderboard')
   }
 
-  if (!ready) {
-    return <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
-  }
+  // FIX #41: ปุ่มสลับธีมต้องอยู่ทุกหน้า — switch ด้านล่าง return ตรงจากทุก branch
+  // จึงย้ายเข้า renderScreen() แล้วห่อด้วย fragment ที่นี่ครั้งเดียว
+  return (
+    <>
+      {renderScreen()}
+      <ThemeToggle />
+    </>
+  )
 
-  switch (screen) {
+  function renderScreen() {
+    if (!ready) {
+      return <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
+    }
+    switch (screen) {
     case 'menu':
       return (
         <MainMenu
@@ -97,5 +107,6 @@ export default function Page() {
       ) : (
         <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
       )
+    }
   }
 }

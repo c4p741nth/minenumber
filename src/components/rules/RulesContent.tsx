@@ -14,7 +14,7 @@ export function RulesContent() {
         <ol className="list-decimal space-y-1 pl-5">
           <li>ทีมที่ได้ตาเปิดป้าย 1 ช่อง (ถ้าถูก ⚔ Attack ต้องเปิดเพิ่ม)</li>
           <li>
-            ช่องปลอดภัย → ผ่าน <span className="text-emerald-600">✓</span>
+            ช่องปลอดภัย → ผ่าน <span className="text-emerald-600 dark:text-emerald-400">✓</span>
           </li>
           <li>
             เจอระเบิดจริง → โหมดตัดสาย เลือกสายแดง/น้ำเงิน
@@ -25,7 +25,7 @@ export function RulesContent() {
             </ul>
           </li>
           <li>
-            เจอ Glitch bomb <span className="text-purple-600">⚡</span> → ไม่ตาย แต่ติดกลิตช์
+            เจอ Glitch bomb <span className="text-purple-600 dark:text-purple-400">⚡</span> → ไม่ตาย แต่ติดกลิตช์
             2 ตา (ใช้/จั่วการ์ดไม่ได้เลย) — ระเบิด glitch จะย้ายไปช่องอื่นต่อ
           </li>
           <li>จบตาอย่างรอดและไม่ติด glitch → จั่วการ์ด 1 ใบ (มือถือได้ไม่จำกัด ถ้าตั้งจำกัดไว้ มือเต็มจั่วไม่เข้า)</li>

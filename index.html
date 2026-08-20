@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#f5f3ee" />
+    <!-- FIX #41: theme.ts เขียนทับ content ตอน bootstrap — 2 บรรทัดนี้คือค่าตั้งต้น
+         ก่อน JS รัน ใช้ media เพื่อไม่ให้เครื่องที่ตั้งโหมดมืดเห็นแถบสว่างแวบหนึ่ง -->
+    <meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
     <meta
       name="description"
       content="Minenumber (เลขระเบิด) — เกมกู้ระเบิดสุ่มตัวเลขเอาตัวรอดสำหรับเล่นหลายทีม"
