@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { CARD_LABELS } from '@/lib/game/cards'
+import { appendGameLog } from '@/lib/storage/gamelog'
 import { appendMatch, totalCardsPlayed } from '@/lib/storage/leaderboard'
 import type { CardType, Team } from '@/lib/game/types'
 
@@ -39,6 +40,25 @@ export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
         survived: r.team.alive,
       })),
     )
+    // FIX #36: เก็บ log เต็มเกมไว้ดูย้อนหลังใน leaderboard
+    // try/catch แยกของตัวเอง — log เก็บไม่ได้ต้องไม่ล้มการเขียนคะแนนข้างบน
+    try {
+      appendGameLog({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        // เกมก่อนอัปเกรดไม่มีค่านี้ → null (UI โชว์ '—') ไม่ใช่ default เป็น endedAt
+        // ซึ่งจะโกหกว่าเกมเริ่มและจบพร้อมกัน
+        startedAt: state.startedAt ?? null,
+        endedAt: Date.now(),
+        teamNames: state.teams.map((t) => t.name),
+        turnNumber: state.turnNumber,
+        log: state.log,
+      })
+    } catch {
+      // ignore
+    }
+    // ⚠️ dep array เป็น [rankings] โดยเจตนา — savedRef คือตัวรับประกันว่าเขียนครั้งเดียว
+    // เพิ่ม state เข้าไปจะทำให้ effect ยิงถี่ขึ้นโดยไม่ได้อะไรเพิ่ม
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankings])
 
   return (
