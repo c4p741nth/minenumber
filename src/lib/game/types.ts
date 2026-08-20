@@ -39,6 +39,8 @@ export interface GameSettings {
   cardWeights?: Partial<Record<CardType, number>> // optional override น้ำหนักจั่ว
   scanRadius: number // 1–5
   shrinkingEnabled: boolean // "Shrinking Mode" — default false
+  musicUrl: string // URL YouTube สำหรับเพลง background ('' = ไม่เปิดเพลง) (W8)
+  musicVolume: number // 0–100 (W8)
 }
 
 export type LogEntry = {

@@ -35,6 +35,8 @@ export const DEFAULTS = {
   startingHand: 3, // แจกขั้นต่ำ 3 ใบ/ทีม (W5.2)
   scanRadius: 3,
   shrinkingEnabled: false,
+  musicUrl: '',
+  musicVolume: 30,
 } as const
 
 // น้ำหนักสุ่มการ์ดตาม §7.2 — น้ำหนักรวม 100
@@ -100,5 +102,7 @@ export function defaultSettings(): GameSettings {
     startingHand: DEFAULTS.startingHand,
     scanRadius: DEFAULTS.scanRadius,
     shrinkingEnabled: DEFAULTS.shrinkingEnabled,
+    musicUrl: DEFAULTS.musicUrl,
+    musicVolume: DEFAULTS.musicVolume,
   }
 }

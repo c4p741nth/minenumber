@@ -5,6 +5,7 @@
 // ============================================================
 import { base64ToBytes, bytesToBase64, decrypt, deriveKey, encrypt, hmacNumber } from './crypto'
 import type { BombKind, GameSettings, PrivateBombState, PublicGameState } from '../game/types'
+import { defaultSettings } from '../game/config'
 
 // ตารางกติกาการเก็บ:
 // | settings, ชื่อทีม, mute | mn.prefs        | ไม่เข้ารหัส |
@@ -149,7 +150,8 @@ export function loadSettings(): GameSettings | null {
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<GameSettings>
     if (!parsed || !Array.isArray(parsed.teamNames)) return null
-    return parsed as GameSettings
+    // backward-compatible: เติม default ให้ field ใหม่ที่ settings เก่าไม่มี (W8.2)
+    return { ...defaultSettings(), ...parsed }
   } catch {
     return null
   }

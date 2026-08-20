@@ -6,6 +6,7 @@ import { Hand } from '@/components/cards/Hand'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
+import { MusicPlayer } from '@/components/effects/MusicPlayer'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
 import { useGame } from './GameProvider'
@@ -174,6 +175,7 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
       )}
       <Hand locked={!cardMode} />
       <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
+        <MusicPlayer />
         <button
           onClick={endGame}
           className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold text-destructive shadow"

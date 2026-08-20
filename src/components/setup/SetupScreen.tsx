@@ -13,6 +13,7 @@ import { createRng, randomSeed, shuffle } from '@/lib/game/rng'
 import type { GameSettings } from '@/lib/game/types'
 import { RulesPanel } from './RulesPanel'
 import { confirmDialog } from '@/components/ui/alert'
+import { parseYouTubeId } from '@/lib/audio/music'
 
 interface Props {
   initial: GameSettings
@@ -51,6 +52,8 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [startingHandInput, setStartingHandInput] = useState(String(initial.startingHand))
   const [scanRadiusInput, setScanRadiusInput] = useState(String(initial.scanRadius))
   const [shrinkingEnabled, setShrinkingEnabled] = useState(initial.shrinkingEnabled)
+  const [musicUrlInput, setMusicUrlInput] = useState(initial.musicUrl)
+  const [musicVolumeInput, setMusicVolumeInput] = useState(String(initial.musicVolume))
   const [countInput, setCountInput] = useState(String(names.length))
 
   // ค่าที่เอาไปใช้จริง — ว่าง = ใช้ค่าต่ำสุด (แต่ไม่ดีดค่าใน input ระหว่างพิมพ์)
@@ -68,6 +71,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const suggestion = suggestRange(teams)
   const minCells = teams * LIMITS.minCellsPerTeam
   const canStart = cells >= minCells
+  const musicId = musicUrlInput.trim() === '' ? null : parseYouTubeId(musicUrlInput)
 
   function isDefaultName(name: string, index: number): boolean {
     return name.trim() === `ทีม ${index + 1}`
@@ -137,6 +141,8 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
         maxScanRadiusFor(cells),
       ),
       shrinkingEnabled,
+      musicUrl: musicUrlInput.trim(),
+      musicVolume: clampInt(Number(musicVolumeInput), 0, 100),
     })
   }
 
@@ -560,6 +566,41 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                   max={LIMITS.maxTurnSeconds}
                   suffix={Number(turnInput) === 0 ? 'ไม่จับเวลา' : `${Number(turnInput) || 0} วิ`}
                   onBlurFix={() => fixInput(turnInput, 0, LIMITS.maxTurnSeconds, 0, setTurnInput)}
+                />
+              </section>
+
+              <section className="panel flex flex-col gap-4">
+                <h2 className="section-label">เพลงพื้นหลัง (YouTube)</h2>
+                <label className="block">
+                  <span className="mb-1 block text-base font-semibold">URL เพลง (ไม่บังคับ)</span>
+                  <input
+                    type="url"
+                    value={musicUrlInput}
+                    onChange={(e) => setMusicUrlInput(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=…"
+                    className="control w-full font-mono text-base"
+                  />
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                    ว่าง = ไม่เปิดเพลง รองรับ watch?v= / youtu.be / playlist?list= / shorts / ID 11 ตัว
+                    {musicUrlInput.trim() !== '' &&
+                      (musicId ? (
+                        <span className="ml-2 font-bold text-emerald-600 dark:text-emerald-400">
+                          ✓ ใช้ได้{musicId.length > 11 ? ' (เพลย์ลิสต์)' : ''}
+                        </span>
+                      ) : (
+                        <span className="ml-2 font-bold text-destructive">✗ URL ใช้ไม่ได้</span>
+                      ))}
+                  </span>
+                </label>
+                <NumberField
+                  label="ระดับเสียงเพลง"
+                  hint="เสียงเพลงพื้นหลัง แยกจากเสียง effect ของเกม"
+                  value={musicVolumeInput}
+                  onChange={setMusicVolumeInput}
+                  min={0}
+                  max={100}
+                  suffix={`${Number(musicVolumeInput) || 0}%`}
+                  onBlurFix={() => fixInput(musicVolumeInput, 0, 100, 30, setMusicVolumeInput)}
                 />
               </section>
             </div>

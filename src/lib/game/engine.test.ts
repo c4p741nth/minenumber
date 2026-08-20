@@ -20,6 +20,8 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     startingHand: 0,
     scanRadius: 3,
     shrinkingEnabled: false,
+    musicUrl: '',
+    musicVolume: 30,
     ...overrides,
   }
 }

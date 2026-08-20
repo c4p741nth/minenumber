@@ -50,6 +50,32 @@ describe('settings', () => {
   it('ไม่มี settings → null', () => {
     expect(loadSettings()).toBeNull()
   })
+
+  it('settings เก่า (ไม่มี musicUrl/musicVolume) → เติม default ให้ (W8.2 backward-compat)', () => {
+    const old = {
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 20,
+      turnSeconds: 60,
+      glitchEnabled: true,
+      glitchMode: 'auto',
+      glitchRatio: 0.3,
+      glitchCount: 0,
+      cardsEnabled: true,
+      maxHandSize: 0,
+      startingHand: 3,
+      scanRadius: 3,
+      shrinkingEnabled: false,
+    }
+    globalThis.localStorage.setItem('mn.prefs', JSON.stringify(old))
+    const loaded = loadSettings()
+    expect(loaded).not.toBeNull()
+    expect(loaded?.musicUrl).toBe('')
+    expect(loaded?.musicVolume).toBe(30)
+    // field เดิมยังครบ
+    expect(loaded?.teamNames).toEqual(['A', 'B'])
+    expect(loaded?.rangeMax).toBe(20)
+  })
 })
 
 describe('snapshot', () => {
