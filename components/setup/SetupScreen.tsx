@@ -8,13 +8,14 @@ import { RulesPanel } from './RulesPanel'
 interface Props {
   initial: GameSettings
   onStart: (s: GameSettings) => void
+  onBack: () => void
 }
 
 function letterName(index: number): string {
   return `ทีม ${String.fromCharCode(65 + index)}`
 }
 
-export function SetupScreen({ initial, onStart }: Props) {
+export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [names, setNames] = useState<string[]>(initial.teamNames)
   const [rangeMin, setRangeMin] = useState(initial.rangeMin)
   const [rangeMax, setRangeMax] = useState(initial.rangeMax)
@@ -78,6 +79,12 @@ export function SetupScreen({ initial, onStart }: Props) {
           <p className="section-label">MEETING GAME</p>
           <h1 className="font-serif text-3xl font-bold">วงระเบิด — ตั้งค่า</h1>
         </div>
+        <button
+          onClick={onBack}
+          className="ml-auto rounded-lg border border-border px-4 py-2 text-base font-bold"
+        >
+          ← กลับเมนู
+        </button>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -8,6 +8,7 @@ import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
+import { confirmDialog } from '@/components/ui/alert'
 import { useGame } from './GameProvider'
 
 interface Props {
@@ -52,9 +53,13 @@ export function GameScreen({ onRestart, onExit }: Props) {
   }, [typed, dispatch])
 
   function endGame() {
-    if (window.confirm('จบเกมนี้เลย? (เกมจะถูกบันทึกเป็นจบเกมและกลับหน้าตั้งค่า)')) {
-      onExit()
-    }
+    void confirmDialog({
+      title: 'จบเกมนี้เลย?',
+      text: 'เกมจะถูกบันทึกเป็นจบเกมและกลับหน้าตั้งค่า',
+      confirmText: 'จบเกม',
+    }).then((ok) => {
+      if (ok) onExit()
+    })
   }
 
   return (

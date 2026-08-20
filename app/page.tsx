@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { Autosave } from '@/components/game/Autosave'
 import { GameProvider } from '@/components/game/GameProvider'
 import { GameScreen } from '@/components/game/GameScreen'
-import { ResumePrompt } from '@/components/setup/ResumePrompt'
+import { LeaderboardScreen } from '@/components/leaderboard/LeaderboardScreen'
+import { MainMenu } from '@/components/menu/MainMenu'
+import { RulesScreen } from '@/components/rules/RulesScreen'
 import { SetupScreen } from '@/components/setup/SetupScreen'
 import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
@@ -13,12 +15,13 @@ import { unlockAudio } from '@/lib/audio/sfx'
 import { clearSnapshot, loadSettings, loadSnapshot, saveSettings } from '@/lib/storage/session'
 import type { GameSettings } from '@/lib/game/types'
 
+type Screen = 'menu' | 'setup' | 'rules' | 'leaderboard' | 'game'
+
 export default function Page() {
+  const [screen, setScreen] = useState<Screen>('menu')
   const [settings, setSettings] = useState<GameSettings>(defaultSettings())
   const [ready, setReady] = useState(false)
-  const [started, setStarted] = useState(false)
   const [hasSnapshot, setHasSnapshot] = useState(false)
-  const [snapshotHandled, setSnapshotHandled] = useState(false)
   const [game, setGame] = useState<GameHandle | null>(null)
 
   useEffect(() => {
@@ -34,7 +37,7 @@ export default function Page() {
     saveSettings(s)
     setSettings(s)
     setGame(createGame(s, randomSeed()))
-    setStarted(true)
+    setScreen('game')
   }
 
   // กู้เกมกลางคันกลับมา — สร้าง engine จาก snapshot (Task 10)
@@ -44,41 +47,52 @@ export default function Page() {
       unlockAudio()
       setSettings(snap.state.settings)
       setGame(createGameFromState(snap.state, snap.secret, randomSeed()))
-      setStarted(true)
+      setScreen('game')
     }
-    setSnapshotHandled(true)
-  }
-
-  async function discardSnapshot() {
-    await clearSnapshot()
-    setHasSnapshot(false)
-    setSnapshotHandled(true)
   }
 
   async function exitGame() {
     await clearSnapshot()
-    setStarted(false)
+    setHasSnapshot(false)
+    setGame(null)
+    setScreen('menu')
   }
 
   if (!ready) {
     return <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
   }
 
-  if (!started || !game) {
-    return (
-      <>
-        <SetupScreen initial={settings} onStart={startGame} />
-        {hasSnapshot && !snapshotHandled && (
-          <ResumePrompt onResume={resumeGame} onNewGame={discardSnapshot} />
-        )}
-      </>
-    )
+  switch (screen) {
+    case 'menu':
+      return (
+        <MainMenu
+          hasSnapshot={hasSnapshot}
+          onStart={() => setScreen('setup')}
+          onResume={() => void resumeGame()}
+          onLeaderboard={() => setScreen('leaderboard')}
+          onRules={() => setScreen('rules')}
+        />
+      )
+    case 'setup':
+      return (
+        <SetupScreen
+          initial={settings}
+          onStart={startGame}
+          onBack={() => setScreen('menu')}
+        />
+      )
+    case 'rules':
+      return <RulesScreen onBack={() => setScreen('menu')} />
+    case 'leaderboard':
+      return <LeaderboardScreen onBack={() => setScreen('menu')} />
+    case 'game':
+      return game ? (
+        <GameProvider handle={game}>
+          <Autosave />
+          <GameScreen onRestart={() => startGame(settings)} onExit={exitGame} />
+        </GameProvider>
+      ) : (
+        <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>
+      )
   }
-
-  return (
-    <GameProvider handle={game}>
-      <Autosave />
-      <GameScreen onRestart={() => startGame(settings)} onExit={exitGame} />
-    </GameProvider>
-  )
 }
