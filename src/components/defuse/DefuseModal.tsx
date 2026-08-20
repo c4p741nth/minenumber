@@ -19,6 +19,10 @@ export function DefuseModal() {
   const current = state.teams[state.currentTeamIndex]
   const survived = state.lastResult?.kind === 'real' ? state.lastResult.survived : false
 
+  // FIX #27: นับถอยหลังตอนเลือกสาย (ตั้งค่าได้ 0 = ไม่จับเวลา)
+  const limit = state.settings.defuseSeconds
+  const [left, setLeft] = useState(limit)
+
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
     setReducedMotion(mq.matches)
@@ -34,12 +38,12 @@ export function DefuseModal() {
     return () => window.clearInterval(t)
   }, [stage])
 
-  // เฉลยผล — กู้สำเร็จ = defuseSuccess, พลาด = defuseFailed (เสียง bomb-hit จะตามมา
-  // ตอนทีมตกรอบจริง ๆ จาก GameEffects — กันเสียงซ้อนกับ redflash)
+  // FIX #29: เดิมพลาดแล้วดัง 2 ครั้ง — defuseFailed ที่นี่ + explosion จาก GameEffects
+  // ตอนทีมตกรอบ ตอนนี้ให้ที่นี่เล่นเฉพาะตอนกู้สำเร็จ ส่วนตอนพลาดปล่อยให้
+  // GameEffects เล่น explosion ครั้งเดียวตอนทีมตกรอบจริง
   useEffect(() => {
     if (stage !== 'result') return
     if (survived) sfx.defuseSuccess()
-    else sfx.defuseFailed()
   }, [stage, survived])
 
   function choose(color: Wire) {
@@ -48,6 +52,19 @@ export function DefuseModal() {
     setStage('cutting')
     window.setTimeout(() => setStage('result'), SUSPENSE_MS)
   }
+
+  // FIX #27: นับถอยหลัง + เสียง tick ทุกวินาทีระหว่างเลือกสาย
+  // หมดเวลา → ถือว่าตัดสายที่ระบบสุ่มให้ (ผลถูกตัดสินไว้แล้วตั้งแต่ OPEN_CELL อยู่ดี)
+  useEffect(() => {
+    if (stage !== 'choosing' || limit <= 0) return
+    if (left <= 0) {
+      choose('red')
+      return
+    }
+    sfx.tick()
+    const t = window.setTimeout(() => setLeft((n) => n - 1), 1000)
+    return () => window.clearTimeout(t)
+  }, [stage, left, limit])
 
   function acknowledge() {
     dispatch({ type: 'CHOOSE_WIRE', wire: chosen ?? 'red' })
@@ -82,6 +99,17 @@ export function DefuseModal() {
             <p className="section-label text-red-300">ระเบิดจริง!</p>
             <h2 className="font-serif text-6xl font-bold">ตัดสาย</h2>
             <p className="text-xl text-white/70">{current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด</p>
+            {/* FIX #27: นับถอยหลัง */}
+            {limit > 0 && (
+              <p
+                className={`font-mono text-6xl font-black ${
+                  left <= 5 ? 'text-red-400 timer-urgent' : 'text-white'
+                }`}
+                aria-live="polite"
+              >
+                {Math.max(left, 0)}
+              </p>
+            )}
           </>
         )}
 

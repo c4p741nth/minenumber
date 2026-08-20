@@ -17,10 +17,11 @@ test('Board renders one button per cell', () => {
 })
 
 // B8: กระดาน 200 ช่องเคยดันหน้าให้ยาวมาก — ต้อง scroll ในกรอบตัวเอง ไม่ใช่ดันทั้งหน้า
+// (Board ห่อด้วย wrapper flex อีกชั้นสำหรับแถบยืนยัน FIX #16 — grid คือ div ตัวใน)
 test('Board scrolls within its own box instead of stretching the page (B8)', () => {
-  const grid = renderBoard(200).querySelector('div')
+  const grid = renderBoard(200).querySelector('[style*="grid-template-columns"]')
   expect(grid?.className).toContain('overflow-y-auto')
-  expect(grid?.className).toContain('max-h-[calc(100vh-14rem)]')
+  expect(grid?.className).toContain('max-h-[calc(100vh-20rem)]')
 })
 
 // ขนาดช่องต้องถูกส่งผ่าน inline style จริง ๆ — Tailwind ไม่ generate class จากตัวแปร
@@ -33,6 +34,6 @@ test('Board cell size is applied via inline style and shrinks on big boards (B8)
 })
 
 test('Board grid template uses the computed cell size (B8)', () => {
-  const grid = renderBoard(200).querySelector('div')
+  const grid = renderBoard(200).querySelector('[style*="grid-template-columns"]')
   expect(grid?.getAttribute('style')).toContain('40px')
 })

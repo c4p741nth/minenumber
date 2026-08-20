@@ -10,6 +10,7 @@ import type {
   GameAction,
   GameSettings,
   LogEntry,
+  LogLevel,
   OpenResult,
   Phase,
   PrivateBombState,
@@ -24,6 +25,10 @@ interface EngineState {
   rng: () => number
   bombs: Map<number, BombKind> // ตำแหน่งระเบิด — ห้าม export
   cells: Record<number, CellState>
+  // FIX #15: ช่องที่เปิดแล้วทำให้ได้การ์ด (cell -> teamId)
+  cardCells: Record<number, string>
+  // ช่องล่าสุดที่ทีมปัจจุบันเปิด — ใช้ผูกการ์ดที่จั่วตอนจบตากับช่องนั้น
+  lastOpenedCell: number | null
   teams: Team[]
   currentTeamIndex: number
   direction: 1 | -1
@@ -113,6 +118,8 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     rng,
     bombs: setupBombs(clampedSettings, rng),
     cells: {},
+    cardCells: {},
+    lastOpenedCell: null,
     teams,
     currentTeamIndex: 0,
     direction: 1,
@@ -153,6 +160,8 @@ export function createGameFromState(
     rng: createRng(seed),
     bombs,
     cells: { ...state.cells },
+    cardCells: { ...(state.cardCells ?? {}) },
+    lastOpenedCell: null,
     teams: state.teams.map((t) => ({
       ...t,
       hand: t.hand.slice(),
@@ -211,6 +220,7 @@ function buildPublic(state: EngineState): PublicGameState {
     currentTeamIndex: state.currentTeamIndex,
     direction: state.direction,
     cells: { ...state.cells },
+    cardCells: { ...state.cardCells },
     rangeMin: state.rangeMin,
     rangeMax: state.rangeMax,
     bombsRemaining: state.bombs.size,
@@ -253,6 +263,9 @@ function dispatchAction(state: EngineState, action: GameAction): void {
     case 'RESOLVE_BLOCK':
       resolveBlock(state, action.use)
       break
+    case 'UNDO_TURN':
+      undoTurn(state)
+      break
   }
 }
 
@@ -260,9 +273,17 @@ function pushLog(
   state: EngineState,
   teamId: string | null,
   message: string,
-  extra?: { kind?: 'draw'; card?: CardType },
+  extra?: { kind?: 'draw'; card?: CardType; level?: LogLevel },
 ): void {
-  state.log.push({ id: state.nextLogId++, turn: state.turnNumber, teamId, message, ...extra })
+  // FIX #33: ทุกบรรทัดมี timestamp
+  state.log.push({
+    id: state.nextLogId++,
+    turn: state.turnNumber,
+    teamId,
+    message,
+    at: Date.now(),
+    ...extra,
+  })
 }
 
 function currentTeam(state: EngineState): Team {
@@ -307,7 +328,9 @@ function openCell(state: EngineState, cell: number): void {
       state.cells[cell] = 'defused'
       relocateBomb(state, cell, 'real')
       state.lastResult = { kind: 'shielded' }
-      pushLog(state, team.id, `${team.name} มี Shield — รอดจากระเบิด ระเบิดย้ายไปที่อื่น`)
+      pushLog(state, team.id, `${team.name} มี Shield — รอดจากระเบิด ระเบิดย้ายไปที่อื่น`, {
+        level: 'good',
+      })
       endTurn(state)
       return
     }
@@ -317,7 +340,7 @@ function openCell(state: EngineState, cell: number): void {
     state.pendingDefuseSurvived = survived
     state.phase = 'defusing'
     state.lastResult = { kind: 'real', survived }
-    pushLog(state, team.id, `${team.name} เจอระเบิด! ต้องตัดสาย`)
+    pushLog(state, team.id, `${team.name} เจอระเบิด ต้องตัดสาย`, { level: 'warn' })
     return
   }
 
@@ -328,13 +351,16 @@ function openCell(state: EngineState, cell: number): void {
     relocateBomb(state, cell, 'glitch')
     team.glitchTurnsLeft = 2
     state.lastResult = { kind: 'glitch' }
-    pushLog(state, team.id, `${team.name} เจอ Glitch bomb — ติดกลิตช์ 2 turn`)
+    pushLog(state, team.id, `${team.name} เจอ Glitch bomb — ติดกลิตช์ 2 turn`, {
+      level: 'warn',
+    })
     endTurn(state, { draw: false }) // ติดกลิตช์ไม่ได้จั่วการ์ด
     return
   }
 
   // safe
   state.cells[cell] = 'safe'
+  state.lastOpenedCell = cell
   state.lastResult = { kind: 'safe' }
   pushLog(state, team.id, `${team.name} เปิด ${cell} — ปลอดภัย`)
   if (state.settings.shrinkingEnabled) applyShrink(state, cell)
@@ -361,6 +387,7 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
       moved
         ? `${team.name} กู้สำเร็จ! ระเบิดย้ายไปที่อื่น`
         : `${team.name} กู้สำเร็จ! ระเบิดลูกสุดท้ายถูกทำลาย`,
+      { level: 'good' },
     )
     // จบ turn ทันที ไม่ต้องเปิดต่อแม้ pendingOpens ยังเหลือ (§3.4.2)
     endTurn(state)
@@ -369,7 +396,7 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
     state.bombs.delete(cell)
     state.lastResult = { kind: 'real', survived: false }
     eliminateTeam(state, team)
-    pushLog(state, team.id, `${team.name} ระเบิด! ตกรอบ`)
+    pushLog(state, team.id, `${team.name} กู้ระเบิดพลาด ถูกคัดออก`, { level: 'danger' })
     endTurn(state)
   }
 }
@@ -387,7 +414,7 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
   }
   if (alive.length === 1) {
     state.phase = 'gameover'
-    pushLog(state, alive[0].id, `${alive[0].name} ชนะ!`)
+    pushLog(state, alive[0].id, `${alive[0].name} ชนะ!`, { level: 'good' })
     return
   }
   // ช่อง hidden หมดแต่ยังเหลือ >1 ทีม → เสมอ (§8)
@@ -420,6 +447,10 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
     // เก็บไว้ทำ toast สีตอนจั่ว (W5.4) — เคลียร์ใน advanceToNext ไม่ให้ทีมถัดไปเห็น
     if (card) {
       state.lastDraw = { teamId: acting.id, card }
+      // FIX #15: mark ช่องที่เปิดแล้วได้การ์ดใบนี้
+      if (state.lastOpenedCell !== null) {
+        state.cardCells[state.lastOpenedCell] = acting.id
+      }
       pushLog(state, acting.id, 'ได้การ์ด 1 ใบ', { kind: 'draw', card })
     }
   }
@@ -436,6 +467,7 @@ function advanceToNext(state: EngineState): void {
   }
   state.currentTeamIndex = i
   state.turnNumber += 1
+  state.lastOpenedCell = null
   // เคลียร์การ์ดที่ทีมก่อนหน้าจั่ว — กันทีมถัดไปเห็น (ข้อมูลรั่ว W5.4)
   state.lastDraw = null
   const team = state.teams[i]
@@ -451,7 +483,7 @@ function advanceToNext(state: EngineState): void {
 function timeout(state: EngineState): void {
   if (state.phase !== 'opening' && state.phase !== 'cards') return
   const team = currentTeam(state)
-  pushLog(state, team.id, `${team.name} หมดเวลา — เสีย turn`)
+  pushLog(state, team.id, `${team.name} หมดเวลา — เสีย turn`, { level: 'warn' })
   endTurn(state, { draw: false })
 }
 
@@ -638,6 +670,36 @@ function playAttack(state: EngineState, targetId: string): void {
   state.lastCardResult = { card: 'attack', targetTeamId: targetId }
   pushLog(state, team.id, `${team.name} โจมตี ${target.name} — ต้องเปิดเพิ่ม`)
   endTurn(state, { draw: false })
+}
+
+// FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้า — ใช้เมื่อทีมเสีย turn ไปแต่กรรมการเห็นว่าควรได้เล่น
+// ย้อนได้เฉพาะช่วงที่ยังไม่มีอะไรค้าง (ไม่ใช่ตอนตัดสาย/ตอบ popup/จบเกม)
+// ไม่ย้อนสถานะกระดาน — แค่คืนสิทธิ์ให้ทีมก่อนหน้าเล่นใหม่
+function undoTurn(state: EngineState): void {
+  if (state.phase !== 'cards' && state.phase !== 'opening') return
+  const len = state.teams.length
+  // เดินถอยหลังตามทิศตรงข้ามเพื่อหาทีมก่อนหน้าที่ยังรอด
+  let i = state.currentTeamIndex
+  let found = -1
+  for (let step = 1; step < len; step++) {
+    i = (i - state.direction + len) % len
+    if (state.teams[i].alive) {
+      found = i
+      break
+    }
+  }
+  if (found < 0 || found === state.currentTeamIndex) return
+
+  state.currentTeamIndex = found
+  state.turnNumber = Math.max(state.turnNumber - 1, 1)
+  state.lastDraw = null
+  state.lastOpenedCell = null
+  const team = state.teams[found]
+  team.pendingOpens = Math.max(team.pendingOpens, 1)
+  state.currentGlitched = team.glitchTurnsLeft > 0
+  state.currentBlocked = team.blockedTurnsLeft > 0
+  state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
+  pushLog(state, team.id, `กรรมการย้อนตากลับมาที่ ${team.name}`, { level: 'warn' })
 }
 
 // FIX #35: ย้ายระเบิดจากช่องที่เพิ่งเปิด ไปช่องที่ "ยังไม่เปิดจริง ๆ" และยังไม่มีระเบิด

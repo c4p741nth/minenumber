@@ -30,6 +30,8 @@ export function Hand({ locked = false }: HandProps) {
   const { state, dispatch } = useGame()
   const [revealed, setRevealed] = useState<number | null>(null)
   const [scanTarget, setScanTarget] = useState('')
+  // FIX #20: การ์ดเยอะ ๆ จะรกจอ — หุบเก็บได้
+  const [collapsed, setCollapsed] = useState(false)
 
   const current = state.teams[state.currentTeamIndex]
   const canPlay = state.phase === 'cards' && !locked && !state.currentGlitched && !state.currentBlocked
@@ -41,6 +43,7 @@ export function Hand({ locked = false }: HandProps) {
   useEffect(() => {
     setRevealed(null)
     setScanTarget('')
+    setCollapsed(false)
   }, [state.turnNumber, state.currentTeamIndex])
 
   if (!state.settings.cardsEnabled || state.phase === 'gameover') return null
@@ -78,7 +81,7 @@ export function Hand({ locked = false }: HandProps) {
   const cardWidth = cardWidthFor(handCount)
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2 pb-3">
+    <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2">
       {/* ใบที่เปิดอยู่ — เลือกใช้/ทิ้ง หรือเลือกเป้า */}
       {revealedCard && (
         <div
@@ -138,42 +141,68 @@ export function Hand({ locked = false }: HandProps) {
         </div>
       )}
 
-      {handFull && (
-        <p
-          className={
-            'rounded-full bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800 ' +
-            'dark:bg-amber-900/50 dark:text-amber-100'
-          }
-        >
-          มือเต็ม {maxHand} ใบ — จั่วไม่เข้าแล้ว
-        </p>
-      )}
-
-      {/* B7: มือถือได้ไม่จำกัด — การ์ดย่อลงตามจำนวนใบ แล้วถ้ายังไม่พอก็ scroll แนวนอน
-          (แถวเดียวเสมอ เพื่อไม่ให้มือสูงขึ้นไปบังกระดาน) */}
-      <div className="w-full overflow-x-auto px-3 pb-1">
-        <div className="mx-auto flex w-max gap-2">
-          {current.hand.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => onCardClick(i)}
-              aria-disabled={!canPlay}
-              title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
-              style={{ width: cardWidth }}
+      {/* FIX #20: ที่เก็บการ์ด — มีหัวแถบบอกจำนวน + ปุ่มหุบ กันรกจอตอนการ์ดเยอะ
+          การ์ดย่อลงตามจำนวนใบ (B7) แล้วถ้ายังไม่พอก็ scroll แนวนอน (แถวเดียวเสมอ) */}
+      <div className="hand-dock w-full rounded-t-2xl px-3 pt-2 pb-1 shadow-2xl">
+        <div className="mx-auto flex w-full max-w-375 items-center gap-3 pb-1">
+          <span className="section-label">🃏 การ์ดในมือ</span>
+          <span className="rounded-full bg-secondary px-2.5 py-0.5 font-mono text-sm font-black">
+            {handCount}
+          </span>
+          {handLimited && (
+            <span className="text-xs text-muted-foreground">/ {maxHand} ใบ</span>
+          )}
+          {handFull && (
+            <span
               className={
-                `flex shrink-0 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
-                `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
-                `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
+                'rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 ' +
+                'dark:bg-amber-900/50 dark:text-amber-100'
               }
             >
-              <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>🂠</span>
-              <span className={compact ? 'text-xs font-black' : 'text-sm font-black'}>#{i + 1}</span>
+              มือเต็ม — จั่วไม่เข้าแล้ว
+            </span>
+          )}
+          {handCount > 0 && (
+            <button
+              onClick={() => setCollapsed((c) => !c)}
+              className="ml-auto rounded-lg border border-border bg-background px-3 py-1 text-sm font-bold"
+              aria-expanded={!collapsed}
+            >
+              {collapsed ? `▲ กางการ์ด (${handCount})` : '▼ หุบเก็บ'}
             </button>
-          ))}
-          {current.hand.length === 0 && (
-            <p className="text-sm text-muted-foreground">ไม่มีการ์ดในมือ</p>
           )}
         </div>
+
+        {!collapsed && (
+          <div className="hand-scroll w-full overflow-x-auto pb-1">
+            <div className="mx-auto flex w-max gap-2">
+              {current.hand.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => onCardClick(i)}
+                  aria-disabled={!canPlay}
+                  title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
+                  style={{ width: cardWidth }}
+                  className={
+                    `flex shrink-0 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
+                    `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
+                    `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
+                  }
+                >
+                  <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>
+                    🂠
+                  </span>
+                  <span className={compact ? 'text-xs font-black' : 'text-sm font-black'}>
+                    #{i + 1}
+                  </span>
+                </button>
+              ))}
+              {current.hand.length === 0 && (
+                <p className="py-2 text-sm text-muted-foreground">ไม่มีการ์ดในมือ</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {!canPlay && state.phase === 'cards' && (

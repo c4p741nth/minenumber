@@ -7,17 +7,19 @@ interface Props {
   duration: number // วินาทีต่อ turn, 0 = ไม่จับเวลา
   phase: Phase
   turnKey: number // เปลี่ยนเมื่อขึ้น turn ใหม่ → รีเซ็ตจับเวลา
+  paused?: boolean // FIX #18: กรรมการหยุดเวลาชั่วคราว
   onTimeout: () => void
 }
 
 const R = 28
 const CIRC = 2 * Math.PI * R
 
-export function TimerCircle({ duration, phase, turnKey, onTimeout }: Props) {
+export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeout }: Props) {
   const [remaining, setRemaining] = useState(duration)
   // นับถอยหลังตั้งแต่ช่วงใช้การ์ด ('cards') จนถึงช่วงเปิดป้าย ('opening')
   // อย่าจับเวลาช่วง 'defusing' (modal ตัดสายมีจังหวะของตัวเอง) และ 'gameover'
-  const active = (phase === 'cards' || phase === 'opening') && duration > 0
+  // FIX #18: pause → เวลาหยุดเดิน แต่ยังโชว์เลขเดิมไว้
+  const active = (phase === 'cards' || phase === 'opening') && duration > 0 && !paused
 
   useEffect(() => {
     setRemaining(duration)
@@ -68,7 +70,7 @@ export function TimerCircle({ duration, phase, turnKey, onTimeout }: Props) {
           danger ? 'text-red-600' : ''
         } ${urgent ? 'timer-urgent' : ''}`}
       >
-        {active ? remaining : '∞'}
+        {paused && duration > 0 ? '⏸' : active ? remaining : '∞'}
       </span>
     </div>
   )

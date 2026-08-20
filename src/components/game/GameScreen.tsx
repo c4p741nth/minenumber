@@ -10,6 +10,8 @@ import { MuteButton } from '@/components/effects/MuteButton'
 import { MusicPlayer } from '@/components/effects/MusicPlayer'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
+import { hitChance } from '@/lib/game/balance'
+import { BombMark } from '@/components/setup/SetupScreen'
 import { useGame } from './GameProvider'
 
 interface Props {
@@ -63,16 +65,6 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [state.phase, typed, dispatch])
 
-  // พิมพ์ทิ้งไว้เกิน 700ms → เปิดให้อัตโนมัติ
-  useEffect(() => {
-    if (typed === '') return
-    const t = window.setTimeout(() => {
-      dispatch({ type: 'OPEN_CELL', cell: Number(typed) })
-      setTyped('')
-    }, 700)
-    return () => window.clearTimeout(t)
-  }, [typed, dispatch])
-
   function endGame() {
     void confirmDialog({
       title: 'จบเกมนี้เลย?',
@@ -109,42 +101,33 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
     }, 2200)
   }, [state.lastCardResult, state.rangeMin, state.rangeMax, state.settings.scanRadius])
 
+  // FIX #26: ใช้ layout ความกว้างคงที่ ไม่ place-content-center
+  // (เดิมจอ "ดิ้น" เพราะ content จัดกลางแล้วขนาดเปลี่ยนทุกครั้งที่เปลี่ยนทีม/เปิดช่อง)
   return (
-    <div className="grid min-h-screen w-full place-content-center p-4">
-      <div className="grid w-full max-w-375 gap-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
+    <div className="min-h-screen w-full p-4">
+      <GameHeader onExit={endGame} />
+      <div className="mx-auto grid w-full max-w-375 items-start gap-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
         <TeamList />
         <main className="flex flex-col gap-3">
           <CurrentTeamBanner />
+          {/* FIX #17: แทนเมนู "ตานี้จะทำอะไร?" ด้วยข้อความบอกตรง ๆ ว่าใครต้องทำอะไร */}
           {inCards && (
-            <div
-              className={
-                'flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 ' +
-                (cardMode ? 'border-primary bg-primary/5' : 'border-border bg-card')
-              }
-            >
-              <span className="text-base font-bold">ตานี้จะทำอะไร?</span>
-              <button
-                onClick={() => setCardMode(true)}
-                className={
-                  'rounded-lg px-4 py-2 text-base font-bold transition ' +
-                  (cardMode ? 'primary-button' : 'border border-border bg-background')
-                }
-              >
-                🃏 ใช้การ์ด ({current.hand.length} ใบในมือ)
-              </button>
-              <button
-                onClick={() => setCardMode(false)}
-                className={
-                  'rounded-lg px-4 py-2 text-base font-bold transition ' +
-                  (!cardMode ? 'primary-button' : 'border border-border bg-background')
-                }
-              >
-                🔢 เปิดป้ายเลย
-              </button>
-              {!cardMode && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-primary bg-primary/5 p-3">
+              <span className="text-lg font-bold">
+                {current.name} กรุณาเลือกแผ่นป้ายหรือใช้ item
+              </span>
+              {current.hand.length > 0 && (
                 <span className="text-sm text-muted-foreground">
-                  เปิดป้ายแล้วจะใช้การ์ดในตานี้ไม่ได้อีก
+                  ({current.hand.length} ใบในมือ — กดการ์ดด้านล่างเพื่อเปิดดู)
                 </span>
+              )}
+              {!cardMode && (
+                <button
+                  onClick={() => setCardMode(true)}
+                  className="ml-auto rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-bold"
+                >
+                  🃏 กลับไปใช้การ์ด
+                </button>
               )}
             </div>
           )}
@@ -152,6 +135,7 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
             rangeMin={state.rangeMin}
             rangeMax={state.rangeMax}
             cells={state.cells}
+            cardCells={state.cardCells}
             disabled={state.phase !== 'opening' && state.phase !== 'cards'}
             onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
             scanning={scanning}
@@ -167,7 +151,8 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
             </div>
           )}
         </main>
-        <aside className="flex flex-col gap-3 pt-14">
+        {/* FIX #16: ล็อก panel ขวาแบบ floating — เลื่อนกระดานยาว ๆ แล้วยังเห็นสถานะ/log */}
+        <aside className="flex flex-col gap-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
           <StatusPanel />
           <LogPanel />
         </aside>
@@ -180,22 +165,20 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
       <Hand locked={!cardMode} />
       <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
         <MusicPlayer />
-        <button
-          onClick={endGame}
-          className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-bold text-destructive shadow"
-        >
-          จบเกมนี้
-        </button>
         <MuteButton />
       </div>
+      {/* FIX #16: พิมพ์เลขแล้วต้องกด Enter ยืนยัน — ไม่เปิดให้อัตโนมัติ กันลั่นกดผิดช่อง */}
       {typed !== '' && state.phase !== 'gameover' && (
         <div
           className={
-            'fixed bottom-40 left-1/2 z-30 -translate-x-1/2 rounded-xl border-2 border-primary ' +
-            'bg-card px-4 py-2 font-mono text-3xl font-black shadow-2xl'
+            'fixed bottom-48 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-xl ' +
+            'border-2 border-primary bg-card px-4 py-2 shadow-2xl'
           }
         >
-          {typed}
+          <span className="font-mono text-3xl font-black">{typed}</span>
+          <span className="text-sm font-bold text-muted-foreground">
+            กด Enter เพื่อเปิด · Esc ยกเลิก
+          </span>
         </div>
       )}
       <GameEffects />
@@ -203,13 +186,68 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
   )
 }
 
+// FIX #19: ชื่อเกมอยู่หัวเว็บตอนเล่น (เดิมหน้าโล่งไปหน่อย)
+// FIX #21: ปุ่มจบเกมเป็น icon ออกห้อง
+function GameHeader({ onExit }: { onExit: () => void }) {
+  return (
+    <header className="mx-auto mb-4 flex w-full max-w-375 items-center gap-3">
+      <BombMark />
+      <div className="min-w-0">
+        <h1 className="truncate font-serif text-2xl font-bold leading-tight">Minenumber</h1>
+        <p className="section-label">เลขระเบิด</p>
+      </div>
+      <button
+        onClick={onExit}
+        title="จบเกมนี้ / ออกจากห้อง"
+        aria-label="จบเกมนี้ / ออกจากห้อง"
+        className={
+          'ml-auto mr-28 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 ' +
+          'text-sm font-bold text-destructive shadow transition hover:border-destructive'
+        }
+      >
+        <ExitIcon />
+        <span className="hidden sm:inline">ออกจากห้อง</span>
+      </button>
+    </header>
+  )
+}
+
+// icon ประตูออก (door-open + ลูกศร) — วาดเองไม่พึ่ง lib ภายนอก
+function ExitIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
 function CurrentTeamBanner() {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
+  const next = nextAliveTeam(state.teams, state.currentTeamIndex, state.direction)
+  // FIX #18: กรรมการกด pause เวลาได้
+  const [paused, setPaused] = useState(false)
+
+  // ขึ้นตาใหม่ → เลิก pause อัตโนมัติ
+  useEffect(() => {
+    setPaused(false)
+  }, [state.turnNumber, state.currentTeamIndex])
+
   return (
     <div
       className={
-        'flex items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 ' +
+        'flex flex-wrap items-center gap-4 rounded-2xl border-2 border-primary bg-card p-4 ' +
         'shadow-[0_0_24px_color-mix(in_srgb,var(--primary)_35%,transparent)]'
       }
     >
@@ -218,19 +256,70 @@ function CurrentTeamBanner() {
         <span className="section-label">ตาปัจจุบัน</span>
       </div>
       <h2 className="font-serif text-4xl font-bold">{current.name}</h2>
-      <span className="ml-auto text-muted-foreground">
-        {state.direction === 1 ? '→' : '←'} รอบ {state.turnNumber}
-      </span>
-      <TimerCircle
-        duration={state.settings.turnSeconds}
-        phase={state.phase}
-        // turnKey ต้องไม่ชนกันข้ามตาของทีมต่างกัน: turnNumber * 1000 + currentTeamIndex
-        // ใช้ได้ตราบใดที่ maxTeams < 1000 — ถ้าใครเพิ่ม maxTeams ต้องเปลี่ยนสูตรนี้
-        turnKey={state.turnNumber * 1000 + state.currentTeamIndex}
-        onTimeout={() => dispatch({ type: 'TIMEOUT' })}
-      />
+
+      {/* FIX #30: บอกทิศทางเกม + ทีมถัดไป */}
+      <div className="ml-auto flex items-center gap-3 text-sm">
+        <span
+          className="rounded-full bg-secondary px-3 py-1 font-bold"
+          title={state.direction === 1 ? 'เล่นไปทางขวา (ตามลำดับทีม)' : 'เล่นย้อนกลับ (ทวนลำดับทีม)'}
+        >
+          {state.direction === 1 ? '→ ตามลำดับ' : '← ย้อนกลับ'}
+        </span>
+        {next && (
+          <span className="text-muted-foreground">
+            ถัดไป: <b className="text-foreground">{next.name}</b>
+          </span>
+        )}
+        <span className="font-mono text-muted-foreground">รอบ {state.turnNumber}</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {/* FIX #18: pause เวลา — ทีมไหนเลือกไม่ทันจะเสีย turn ไม่มีการเลือกให้อัตโนมัติ */}
+        {state.settings.turnSeconds > 0 && (
+          <button
+            onClick={() => setPaused((p) => !p)}
+            title={paused ? 'เดินเวลาต่อ' : 'หยุดเวลาชั่วคราว'}
+            aria-label={paused ? 'เดินเวลาต่อ' : 'หยุดเวลาชั่วคราว'}
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold"
+          >
+            {paused ? '▶' : '⏸'}
+          </button>
+        )}
+        {/* FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้าได้ตามที่พิจารณา */}
+        <button
+          onClick={() => dispatch({ type: 'UNDO_TURN' })}
+          title="ย้อนกลับไปทีมก่อนหน้า (กรรมการพิจารณา)"
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold"
+        >
+          ↩ ย้อนทีม
+        </button>
+        <TimerCircle
+          duration={state.settings.turnSeconds}
+          phase={state.phase}
+          paused={paused}
+          // turnKey ต้องไม่ชนกันข้ามตาของทีมต่างกัน: turnNumber * 1000 + currentTeamIndex
+          // ใช้ได้ตราบใดที่ maxTeams < 1000 — ถ้าใครเพิ่ม maxTeams ต้องเปลี่ยนสูตรนี้
+          turnKey={state.turnNumber * 1000 + state.currentTeamIndex}
+          onTimeout={() => dispatch({ type: 'TIMEOUT' })}
+        />
+      </div>
     </div>
   )
+}
+
+// FIX #30: หาทีมถัดไปที่ยังรอด ตามทิศทางปัจจุบัน
+export function nextAliveTeam(
+  teams: { id: string; name: string; alive: boolean }[],
+  currentIndex: number,
+  direction: 1 | -1,
+): { id: string; name: string } | null {
+  const len = teams.length
+  let i = currentIndex
+  for (let step = 1; step < len; step++) {
+    i = (i + direction + len) % len
+    if (teams[i].alive) return teams[i]
+  }
+  return null
 }
 
 function TeamList() {
@@ -292,15 +381,58 @@ function TeamList() {
 
 function StatusPanel() {
   const { state } = useGame()
+  // FIX #28: โอกาสโดนระเบิดระหว่างเล่น = ระเบิดทั้งหมด / ช่องที่ยังไม่เปิด
+  let hidden = 0
+  for (let n = state.rangeMin; n <= state.rangeMax; n++) {
+    if (!(n in state.cells)) hidden++
+  }
+  const chance = Math.round(hitChance(state.bombsRemaining, hidden) * 100)
+  const chanceClass =
+    chance >= 50
+      ? 'text-red-600 dark:text-red-400'
+      : chance >= 30
+        ? 'text-orange-500'
+        : chance >= 15
+          ? 'text-yellow-500'
+          : 'text-emerald-600 dark:text-emerald-400'
+
   return (
-    <div className="panel flex items-center justify-between gap-2">
-      <div className="text-center">
-        <p className="section-label">ระเบิดเหลือ</p>
-        <p className="font-mono text-3xl font-black text-destructive">{state.bombsRemaining}</p>
+    <div className="panel flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-center">
+          <p className="section-label">ระเบิดเหลือ</p>
+          <p className="font-mono text-3xl font-black text-destructive">{state.bombsRemaining}</p>
+        </div>
+        <div className="text-center">
+          <p className="section-label">ช่องเหลือ</p>
+          <p className="font-mono text-3xl font-black">{hidden}</p>
+        </div>
+        <div className="text-center">
+          <p className="section-label">สถานะ</p>
+          <p className="text-lg font-bold">{phaseLabel(state.phase)}</p>
+        </div>
       </div>
-      <div className="text-center">
-        <p className="section-label">สถานะ</p>
-        <p className="text-lg font-bold">{phaseLabel(state.phase)}</p>
+
+      {/* FIX #28: แถบโอกาสโดนระเบิดถ้าเปิดช่องแบบสุ่ม */}
+      <div>
+        <div className="mb-1 flex items-center justify-between text-sm font-bold">
+          <span>โอกาสโดนระเบิด</span>
+          <span className={`font-mono text-xl font-black ${chanceClass}`}>{chance}%</span>
+        </div>
+        <div className="range-bar">
+          <div
+            className={
+              chance >= 50
+                ? 'bg-red-600'
+                : chance >= 30
+                  ? 'bg-orange-500'
+                  : chance >= 15
+                    ? 'bg-yellow-400'
+                    : 'bg-emerald-500'
+            }
+            style={{ width: `${Math.max(chance, 1)}%` }}
+          />
+        </div>
       </div>
     </div>
   )
@@ -310,18 +442,47 @@ function LogPanel() {
   const { state } = useGame()
   // engine push log ต่อท้าย (เก่า→ใหม่) — ต้องตัดท้ายแล้วกลับด้าน ไม่ใช่ slice(0,10)
   // ไม่งั้นพอเกิน 10 เหตุการณ์ panel จะค้างอยู่ที่ 10 อันแรกตลอดเกม
-  const latest = state.log.slice(-10).reverse()
+  const latest = state.log.slice(-40).reverse()
   return (
-    <div className="panel flex h-max flex-col gap-1">
+    <div className="panel flex min-h-0 flex-col gap-1">
       <h3 className="section-label mb-1">บันทึก</h3>
       {latest.length === 0 && <p className="text-sm text-muted-foreground">ยังไม่มีเหตุการณ์</p>}
-      {latest.map((l) => (
-        <p key={l.id} className="border-b border-border py-1.5 text-sm leading-5 last:border-0">
-          {l.message}
-        </p>
-      ))}
+      <div className="flex max-h-96 flex-col gap-0.5 overflow-y-auto">
+        {latest.map((l) => (
+          <p
+            key={l.id}
+            className={`border-b border-border py-1.5 text-sm leading-5 last:border-0 ${logClass(l.level)}`}
+          >
+            {/* FIX #33: timestamp ทุกบรรทัด */}
+            <span className="mr-2 font-mono text-xs text-muted-foreground">{logTime(l.at)}</span>
+            {l.message}
+          </p>
+        ))}
+      </div>
     </div>
   )
+}
+
+// FIX #31/#32: สีข้อความตามระดับ — danger แดง (ตกรอบ), warn เหลือง (ต้องตัดสาย)
+export function logClass(level?: string): string {
+  switch (level) {
+    case 'danger':
+      return 'font-bold text-red-600 dark:text-red-400'
+    case 'warn':
+      return 'font-bold text-yellow-600 dark:text-yellow-400'
+    case 'good':
+      return 'font-semibold text-emerald-600 dark:text-emerald-400'
+    default:
+      return ''
+  }
+}
+
+// FIX #33: แสดงเวลาแบบ HH:MM:SS (log เก่าที่ไม่มี at → ไม่แสดงเวลา)
+export function logTime(at?: number): string {
+  if (!at) return ''
+  const d = new Date(at)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 function phaseLabel(p: string): string {

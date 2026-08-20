@@ -48,11 +48,18 @@ export interface GameSettings {
   musicVolume: number // 0–100 (W8)
 }
 
+// FIX #31/#32: ระดับความสำคัญของ log → ใช้เลือกสีข้อความ
+export type LogLevel = 'info' | 'warn' | 'danger' | 'good'
+
 export type LogEntry = {
   id: number
   turn: number
   teamId: string | null
   message: string
+  // FIX #33: เวลาที่เกิดเหตุการณ์ (epoch ms)
+  at: number
+  // FIX #31/#32: สีของข้อความ — danger = แดง (ตกรอบ), warn = เหลือง (ต้องตัดสาย)
+  level?: LogLevel
   // สำหรับ toast สีการ์ดตอนจั่ว (W5.4) — มีเฉพาะรายการ "ได้การ์ด"
   kind?: 'draw'
   card?: CardType
@@ -86,6 +93,8 @@ export type GameAction =
   | { type: 'DRAW_CARD'; teamId: string }
   // FIX #25: ตอบ popup ว่าทีมเป้าหมายจะใช้ Block กันหรือไม่
   | { type: 'RESOLVE_BLOCK'; use: boolean }
+  // FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้า (เช่น ทีมเสีย turn เพราะหมดเวลาแต่ควรได้เล่น)
+  | { type: 'UNDO_TURN' }
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
 export interface PublicGameState {
   phase: Phase
@@ -94,6 +103,8 @@ export interface PublicGameState {
   currentTeamIndex: number
   direction: 1 | -1
   cells: Record<number, CellState>
+  // FIX #15: ช่องที่เปิดแล้วได้การ์ด — mark ไว้ให้เห็นว่าการ์ดมาจากช่องไหน
+  cardCells: Record<number, string> // cell -> teamId ที่ได้การ์ด
   rangeMin: number // เปลี่ยนได้ถ้าเปิด Shrinking Mode
   rangeMax: number
   bombsRemaining: number // จำนวนเท่านั้น ห้ามมีตำแหน่ง
