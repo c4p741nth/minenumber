@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
+import { USER_ENDED_LOG } from '@/lib/game/engine'
 import type { CardType } from '@/lib/game/types'
 
 type FxOverlay = 'glitch' | 'redflash' | null
@@ -44,11 +45,14 @@ export function GameEffects() {
     lastCardSig.current = sig
   }, [state.lastCardResult])
 
+  // FIX #44: การยุติเกมเองไม่ใช่ชัยชนะ — ไม่ต้องเป่าแตร
   useEffect(() => {
     const prev = phaseRef.current
     phaseRef.current = state.phase
-    if (state.phase === 'gameover' && prev !== 'gameover') sfx.fanfare()
-  }, [state.phase])
+    if (state.phase !== 'gameover' || prev === 'gameover') return
+    const userEnded = state.log.some((l) => l.message === USER_ENDED_LOG)
+    if (!userEnded) sfx.fanfare()
+  }, [state.phase, state.log])
 
   // ทีมตกรอบ (W7) — ระเบิดจริง + หน้าจอกระพริบแดง (bomb-hit ตามหลัง defuse-failed จาก DefuseModal)
   useEffect(() => {

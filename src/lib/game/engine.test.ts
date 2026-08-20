@@ -822,3 +822,96 @@ describe('log ordering', () => {
     expect([...ids].sort((a, b) => a - b)).toEqual(ids)
   })
 })
+
+// FIX #44 / ข้อ 54: กรรมการสั่งยุติเกม → เข้าหน้าสรุปอันดับทันทีเหมือนเกมจบตามปกติ
+describe('END_GAME (FIX #44)', () => {
+  it('กลางเกม → gameover ทันที และยังมีหลายทีมรอด (ไม่ผ่าน endTurn)', () => {
+    const h = createGame(baseSettings(), 7)
+    expect(h.getState().phase).not.toBe('gameover')
+    const teamBefore = h.getState().currentTeamIndex
+    const turnBefore = h.getState().turnNumber
+    const st = h.dispatch({ type: 'END_GAME' })
+    expect(st.phase).toBe('gameover')
+    // ยังรอดหลายทีม — พิสูจน์ว่าไม่ได้ไปผ่าน endTurn (ซึ่งจะเขียน phase ทับเป็น 'cards')
+    expect(st.teams.filter((t) => t.alive).length).toBeGreaterThan(1)
+    // ไม่เลื่อนทีม ไม่เพิ่มรอบ
+    expect(st.currentTeamIndex).toBe(teamBefore)
+    expect(st.turnNumber).toBe(turnBefore)
+  })
+
+  it('log มี "ยุติเกมโดยผู้ใช้" level warn, teamId null, มี timestamp', () => {
+    const h = createGame(baseSettings(), 7)
+    const st = h.dispatch({ type: 'END_GAME' })
+    const entry = st.log.find((l) => l.message === 'ยุติเกมโดยผู้ใช้')
+    expect(entry).toBeDefined()
+    expect(entry!.level).toBe('warn')
+    expect(entry!.teamId).toBeNull()
+    expect(entry!.at).toBeGreaterThan(0)
+  })
+
+  it('กดซ้ำ → log ตัวเดียว (idempotent)', () => {
+    const h = createGame(baseSettings(), 7)
+    h.dispatch({ type: 'END_GAME' })
+    h.dispatch({ type: 'END_GAME' })
+    const st = h.dispatch({ type: 'END_GAME' })
+    const n = st.log.filter((l) => l.message === 'ยุติเกมโดยผู้ใช้').length
+    expect(n).toBe(1)
+  })
+
+  it('ยุติตอนกำลังตัดสาย → pendingDefuse ถูกเคลียร์ (modal ไม่ทับหน้าสรุป)', () => {
+    const h = createGame(baseSettings(), 7)
+    const cell = bombCellOf(h, 'real')
+    h.dispatch({ type: 'OPEN_CELL', cell })
+    expect(h.getState().phase).toBe('defusing')
+    expect(h.getState().pendingDefuse).not.toBeNull()
+    const st = h.dispatch({ type: 'END_GAME' })
+    expect(st.phase).toBe('gameover')
+    expect(st.pendingDefuse).toBeNull()
+  })
+
+  it('ยุติตอน phase blocking → pendingBlock ถูกเคลียร์', () => {
+    const settings = baseSettings({
+      teamNames: ['A', 'B'],
+      cardsEnabled: true,
+      startingHand: 3,
+      maxHandSize: 0,
+      rangeMax: 30,
+    })
+    let h: GameHandle | null = null
+    for (let seed = 0; seed < 30000; seed++) {
+      const cand = createGame(settings, seed)
+      const st = cand.getState()
+      if (st.teams[0].hand.includes('attack') && st.teams[1].hand.includes('block')) {
+        h = cand
+        break
+      }
+    }
+    if (!h) throw new Error('no seed found')
+    // B กาง Block ไว้ก่อน แล้ววนกลับมาให้ A ใช้ Attack
+    while (h.getState().currentTeamIndex !== 1 && h.getState().phase !== 'gameover') {
+      h.dispatch({ type: 'END_TURN' })
+      if (h.getState().phase === 'cards') h.dispatch({ type: 'OPEN_CELL', cell: safeCellOf(h) })
+    }
+    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
+    while (h.getState().currentTeamIndex !== 0 && h.getState().phase !== 'gameover') {
+      h.dispatch({ type: 'END_TURN' })
+      if (h.getState().phase === 'cards') h.dispatch({ type: 'OPEN_CELL', cell: safeCellOf(h) })
+    }
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    if (st.phase !== 'blocking') return // seed พาไปทางอื่น — ข้อ assert หลักอยู่เทสอื่นแล้ว
+    const after = h.dispatch({ type: 'END_GAME' })
+    expect(after.phase).toBe('gameover')
+    expect(after.pendingBlock).toBeNull()
+  })
+
+  it('หลังยุติแล้ว OPEN_CELL ไม่มีผล', () => {
+    const h = createGame(baseSettings(), 7)
+    h.dispatch({ type: 'END_GAME' })
+    const before = h.getState()
+    const cell = safeCellOf(h)
+    const after = h.dispatch({ type: 'OPEN_CELL', cell })
+    expect(after.phase).toBe('gameover')
+    expect(after.cells[cell]).toBeUndefined()
+    expect(after.log.length).toBe(before.log.length)
+  })
+})

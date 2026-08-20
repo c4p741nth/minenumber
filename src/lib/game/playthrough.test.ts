@@ -65,6 +65,9 @@ function hiddenCells(h: GameHandle): number[] {
 }
 
 // เลือก action แบบสุ่ม — ช่วง 'cards' มีโอกาสเปิดป้ายทันที (จำลอง B1)
+// ⚠️ ห้ามเพิ่ม END_GAME ที่นี่ — invariant ของ suite นี้คือ "เกมต้องเดินถึงจุดจบตามธรรมชาติ"
+// (alive <= 1 || hiddenLeft === 0) ถ้าเกมหยุดเองได้ตอนไหนก็ได้ invariant จะเป็นจริงแบบว่างเปล่า
+// แล้ว suite จะเลิกพิสูจน์อะไรเลย END_GAME มีเทสของตัวเองใน engine.test.ts
 function randomAction(h: GameHandle, rng: () => number): GameAction {
   const s = h.getState()
   if (s.phase === 'defusing') {

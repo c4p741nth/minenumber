@@ -65,13 +65,15 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [state.phase, typed, dispatch])
 
+  // FIX #44: ยุติเกมแล้วต้องเห็นหน้าสรุปอันดับทันทีเหมือนเกมจบตามปกติ
+  // (เดิมเรียก onExit() ซึ่งทำลาย handle แล้วเด้งกลับหน้าตั้งค่า — อันดับหายไปเลย)
   function endGame() {
     void confirmDialog({
       title: 'จบเกมนี้เลย?',
-      text: 'เกมจะถูกบันทึกเป็นจบเกมและกลับหน้าตั้งค่า',
+      text: 'เกมจะถูกบันทึกเป็นจบเกม แล้วแสดงสรุปอันดับ',
       confirmText: 'จบเกม',
     }).then((ok) => {
-      if (ok) onExit()
+      if (ok) dispatch({ type: 'END_GAME' })
     })
   }
 

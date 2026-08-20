@@ -95,6 +95,8 @@ export type GameAction =
   | { type: 'RESOLVE_BLOCK'; use: boolean }
   // FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้า (เช่น ทีมเสีย turn เพราะหมดเวลาแต่ควรได้เล่น)
   | { type: 'UNDO_TURN' }
+  // FIX #44: กรรมการสั่งยุติเกม → เข้าหน้าสรุปอันดับทันทีเหมือนเกมจบตามปกติ
+  | { type: 'END_GAME' }
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
 export interface PublicGameState {
   phase: Phase

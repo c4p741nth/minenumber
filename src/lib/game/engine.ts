@@ -266,6 +266,9 @@ function dispatchAction(state: EngineState, action: GameAction): void {
     case 'UNDO_TURN':
       undoTurn(state)
       break
+    case 'END_GAME':
+      endGameNow(state)
+      break
   }
 }
 
@@ -704,6 +707,24 @@ function undoTurn(state: EngineState): void {
   state.currentBlocked = team.blockedTurnsLeft > 0
   state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
   pushLog(state, team.id, `กรรมการย้อนตากลับมาที่ ${team.name}`, { level: 'warn' })
+}
+
+// FIX #44: ข้อความ log ที่เป็น marker ของ "ผู้ใช้สั่งจบเกม" — UI ใช้เช็คว่าไม่ต้องเป่าแตร
+export const USER_ENDED_LOG = 'ยุติเกมโดยผู้ใช้'
+
+// FIX #44: กรรมการสั่งยุติเกมกลางทาง → เข้าหน้าสรุปอันดับทันทีเหมือนเกมจบตามปกติ
+// อันดับคำนวณจาก alive/eliminatedAt ที่มีอยู่แล้ว ไม่ต้องแก้อะไรเพิ่ม
+// (เหลือหลายทีมรอด → เสมอกัน ซึ่งเป็นการตีความที่ถูกของการหยุดกลางทาง)
+function endGameNow(state: EngineState): void {
+  // idempotent — ปุ่มออกยังกดได้ตอน gameover กดซ้ำต้องไม่ push log ซ้ำ
+  if (state.phase === 'gameover') return
+  state.phase = 'gameover'
+  // เคลียร์ของค้าง ไม่งั้น modal ตัดสาย/Block จะเรนเดอร์ทับหน้าสรุปอันดับ
+  state.pendingDefuse = null
+  state.pendingDefuseSurvived = false
+  state.pendingBlock = null
+  // ห้ามเรียก endTurn — มันจะจั่ว/เลื่อนทีม แล้วเขียน phase ทับกลับเป็น 'cards'
+  pushLog(state, null, USER_ENDED_LOG, { level: 'warn' })
 }
 
 // FIX #35: ย้ายระเบิดจากช่องที่เพิ่งเปิด ไปช่องที่ "ยังไม่เปิดจริง ๆ" และยังไม่มีระเบิด
