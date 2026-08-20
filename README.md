@@ -14,7 +14,7 @@
    - `safe` → ผ่าน ไปทีมถัดไป
    - `real bomb` → เข้าโหมด **ตัดสาย** เลือกแดง/น้ำเงิน (ผลสุ่ม 50/50 ตัดสินไว้ก่อนแล้ว)
    - `glitch bomb` → ไม่ตาย แต่ทีมติด glitch 2 turn ใช้/จั่วการ์ดไม่ได้
-3. **การ์ด** — ได้ 1 ใบตอนเริ่มเกม + จั่ว 1 ใบเมื่อรอดจบ turn (มือเต็ม 5 ใบ จั่วไม่เข้า)
+3. **การ์ด** — จั่ว 1 ใบเมื่อรอดจบ turn (มือเต็มจั่วไม่เข้า; ถ้าตั้ง "การ์ดเริ่มต้น" ไว้จะแจกตอนเริ่มเกม)
    - 🔍 Scan: มี/ไม่มีระเบิดในช่วง ±R
    - ⏭ Skip: จบ turn ทันที (ไม่ได้จั่ว)
    - 🛡 Block: เป้าหมายใช้การ์ดไม่ได้ในตาถัดไป (ซ้อนชั้นได้)
@@ -27,14 +27,17 @@
 ## วิธี run / deploy
 
 ```bash
-pnpm install
-pnpm dev          # dev server
-pnpm test         # vitest (RNG / engine / cards / crypto / session)
-pnpm build        # สร้าง static export ไปที่ out/
+bun install
+bun dev          # dev server (Vite)
+bun test         # bun test (RNG / engine / cards / crypto / session / playthrough)
+bun run build    # สร้าง static build ไปที่ dist/
 ```
 
-Deploy: เอาไฟล์ใน `out/` ขึ้น static hosting ใดก็ได้ (GitHub Pages / Vercel / Netlify)
-— หรือเปิด `out/index.html` ตรง ๆ ก็เล่นได้ (ไม่ต้องมี server)
+Deploy: เอาไฟล์ใน `dist/` ขึ้น static hosting ใดก็ได้ (GitHub Pages / Vercel / Netlify)
+— หรือเปิด `dist/index.html` ตรง ๆ ก็เล่นได้ (ไม่ต้องมี server)
+
+Stack: **Bun + Vite + React + Tailwind** (ไม่ใช้ pnpm/Next อีกแล้ว)
+ส่วน `src/lib/` เป็น logic บริสุทธิ์ที่ framework-agnostic — ย้ายไปใช้ที่อื่นได้โดยไม่แก้
 
 ## หมายเหตุ (anti-cheat)
 
@@ -53,8 +56,9 @@ Deploy: เอาไฟล์ใน `out/` ขึ้น static hosting ใดก
 ## โครงสร้าง
 
 ```
-lib/game/        engine บริสุทธิ์ (types, rng, config, engine, setup, cards)
-lib/storage/     crypto + session (save/load/clear snapshot, settings)
-lib/audio/       เสียงทั้งหมด generate ด้วย WebAudio API
-components/      setup, board, game, defuse, cards, effects, gameover
+src/lib/game/        engine บริสุทธิ์ (types, rng, config, engine, setup, cards, balance)
+src/lib/storage/     crypto + session + leaderboard (save/load/clear snapshot, settings)
+src/lib/audio/       เสียงทั้งหมด generate ด้วย WebAudio API
+src/components/      menu, setup, board, game, defuse, cards, effects, gameover, rules
+src/App.tsx          สลับหน้าเมนู/ตั้งค่า/กติกา/leaderboard/เกม
 ```
