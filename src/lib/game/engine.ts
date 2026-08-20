@@ -296,10 +296,15 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
       const target = pickRandom(state.rng, candidates)
       state.bombs.delete(cell)
       state.bombs.set(target, 'real')
+      state.lastResult = { kind: 'real', survived: true }
+      pushLog(state, team.id, `${team.name} กู้สำเร็จ! ระเบิดย้ายไปที่อื่น`)
+    } else {
+      // ไม่มีช่องว่างให้ย้าย → ระเบิดโดนกู้สำเร็จถาวร หายจากระบบ
+      // (ถ้าค้างไว้จะกลายเป็นระเบิด "ผี" — bombsRemaining เพี้ยน และเกมวนตัดสายไม่จบ)
+      state.bombs.delete(cell)
+      state.lastResult = { kind: 'real', survived: true }
+      pushLog(state, team.id, `${team.name} กู้สำเร็จ! ระเบิดลูกสุดท้ายถูกทำลาย`)
     }
-    // ไม่มี hidden ให้ย้าย → ระเบิดคงค้างที่เดิม (dormant กดซ้ำไม่ได้) ไม่หายจากระบบ
-    state.lastResult = { kind: 'real', survived: true }
-    pushLog(state, team.id, `${team.name} กู้สำเร็จ! ระเบิดย้ายไปที่อื่น`)
     // จบ turn ทันที ไม่ต้องเปิดต่อแม้ pendingOpens ยังเหลือ (§3.4.2)
     endTurn(state)
   } else {

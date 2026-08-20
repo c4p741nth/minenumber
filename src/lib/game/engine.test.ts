@@ -163,6 +163,37 @@ describe('defuse', () => {
     expect(state.bombsRemaining).toBe(before - 1) // หายจากระบบ (คัดทีมออก)
   })
 
+  it('defuse สำเร็จแต่ไม่มีช่องให้ย้าย → ระเบิดถูกทำลาย หายจากระบบ (ไม่ค้างเป็นระเบิดผี)', () => {
+    // 2 ทีม range 1–3 ระเบิดจริง 1 ลูก — เปิด safe 2 ช่องก่อน เหลือแต่ช่องระเบิด
+    const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 3, cardsEnabled: false })
+    let seed = -1
+    for (let s = 0; s < 5000; s++) {
+      const h = createGame(settings, s)
+      const cell = bombCellOf(h, 'real')
+      const safe = [1, 2, 3].filter((n) => n !== cell)
+      for (const c of safe) h.dispatch({ type: 'OPEN_CELL', cell: c })
+      h.dispatch({ type: 'OPEN_CELL', cell })
+      if (h.getState().phase !== 'defusing') continue
+      const after = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      if (after.teams[0].alive) {
+        seed = s
+        break
+      }
+    }
+    expect(seed).toBeGreaterThanOrEqual(0)
+    const h = createGame(settings, seed)
+    const cell = bombCellOf(h, 'real')
+    const safe = [1, 2, 3].filter((n) => n !== cell)
+    for (const c of safe) h.dispatch({ type: 'OPEN_CELL', cell: c })
+    const before = h.getState().bombsRemaining
+    h.dispatch({ type: 'OPEN_CELL', cell })
+    const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    expect(state.teams[0].alive).toBe(true)
+    expect(state.cells[cell]).toBe('defused')
+    expect(state.bombsRemaining).toBe(before - 1) // ถูกทำลาย ไม่ย้าย ไม่ค้าง
+    expect(Object.keys(h.serializeSecret())).toHaveLength(0) // ไม่มีระเบิดผีค้าง
+  })
+
   it('ผลไม่ขึ้นกับสีที่เลือก — แดงกับน้ำเงินให้ผลเท่ากัน (ตัดสินไว้ก่อนแล้ว)', () => {
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     for (let seed = 0; seed < 50; seed++) {
