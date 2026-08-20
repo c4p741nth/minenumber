@@ -386,8 +386,10 @@ function advanceToNext(state: EngineState): void {
 }
 
 // หมดเวลา → สุ่มเปิดช่อง hidden ให้ 1 ช่อง (§6)
+// ใช้ได้ทั้งช่วงใช้การ์ด ('cards') และช่วงเปิดป้าย ('opening') — ถ้าเหลือเวลา
+// ที่ช่วงคิดจะได้โดนสุ่มเปิดให้ด้วย ไม่งั้นเกมค้าง (W4)
 function timeout(state: EngineState): void {
-  if (state.phase !== 'opening') return
+  if (state.phase !== 'opening' && state.phase !== 'cards') return
   const team = currentTeam(state)
   const hidden = hiddenCells(state)
   if (hidden.length === 0) {

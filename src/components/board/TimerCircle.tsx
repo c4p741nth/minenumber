@@ -15,7 +15,9 @@ const CIRC = 2 * Math.PI * R
 
 export function TimerCircle({ duration, phase, turnKey, onTimeout }: Props) {
   const [remaining, setRemaining] = useState(duration)
-  const active = phase === 'opening' && duration > 0
+  // นับถอยหลังตั้งแต่ช่วงใช้การ์ด ('cards') จนถึงช่วงเปิดป้าย ('opening')
+  // อย่าจับเวลาช่วง 'defusing' (modal ตัดสายมีจังหวะของตัวเอง) และ 'gameover'
+  const active = (phase === 'cards' || phase === 'opening') && duration > 0
 
   useEffect(() => {
     setRemaining(duration)

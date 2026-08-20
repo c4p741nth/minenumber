@@ -180,6 +180,8 @@ function CurrentTeamBanner() {
       <TimerCircle
         duration={state.settings.turnSeconds}
         phase={state.phase}
+        // turnKey ต้องไม่ชนกันข้ามตาของทีมต่างกัน: turnNumber * 1000 + currentTeamIndex
+        // ใช้ได้ตราบใดที่ maxTeams < 1000 — ถ้าใครเพิ่ม maxTeams ต้องเปลี่ยนสูตรนี้
         turnKey={state.turnNumber * 1000 + state.currentTeamIndex}
         onTimeout={() => dispatch({ type: 'TIMEOUT' })}
       />

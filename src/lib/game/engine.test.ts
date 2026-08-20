@@ -231,6 +231,30 @@ describe('defuse', () => {
 })
 
 describe('end conditions', () => {
+  it('TIMEOUT ตอน phase=cards → สุ่มเปิดช่องให้ + ขึ้นตาถัดไป (W4)', () => {
+    const settings = baseSettings({
+      cardsEnabled: true,
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 8,
+    })
+    const h = createGame(settings, 5)
+    expect(h.getState().phase).toBe('cards')
+    const before = h.getState()
+    const after = h.dispatch({ type: 'TIMEOUT' })
+    // มีช่องถูกเปิดเพิ่มขึ้นจากหมดเวลา
+    const openedMore = Object.keys(after.cells).length > Object.keys(before.cells).length
+    expect(openedMore).toBe(true)
+    // ตาจบ → ขึ้นตาถัดไป หรือเจอระเบิดจริง → เข้าโหมดตัดสาย
+    const turnAdvanced =
+      after.currentTeamIndex !== before.currentTeamIndex || after.turnNumber > before.turnNumber
+    expect(after.phase === 'defusing' || turnAdvanced).toBe(true)
+    // ถ้าตาจบจริง phase ต้องกลับมาที่ 'cards' (การ์ดเปิด) หรือ 'opening' (การ์ดปิด)
+    if (turnAdvanced) {
+      expect(['cards', 'opening']).toContain(after.phase)
+    }
+  })
+
   it('ทีมสุดท้ายรอด → phase = gameover, อันดับถูกต้อง', () => {
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     const seed = findDefuseSeed(settings, false)
