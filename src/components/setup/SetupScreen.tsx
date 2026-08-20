@@ -1,4 +1,3 @@
-
 import { useState } from 'react'
 import { LIMITS, bombQuota, defaultTeamNames, glitchCountFor } from '@/lib/game/config'
 import { bombDensity, suggestRange, verdictFor } from '@/lib/game/balance'
@@ -13,25 +12,43 @@ interface Props {
   onBack: () => void
 }
 
+// เก็บเลขเป็น string เสมอ — พิมพ์ลบจนว่างได้โดยไม่ดีดค่า/ไม่ขึ้น NaN
+// ค่าจริงคำนวณตอนใช้ (clamp) และ fix ตอน blur/start เท่านั้น (W1.2)
+function fixInput(
+  current: string,
+  min: number,
+  max: number,
+  fallback: number,
+  set: (v: string) => void,
+): void {
+  const n = Number(current)
+  if (current.trim() === '' || Number.isNaN(n)) {
+    set(String(fallback))
+    return
+  }
+  set(String(Math.min(Math.max(n, min), max)))
+}
+
 export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [names, setNames] = useState<string[]>(initial.teamNames)
-  const [rangeMin, setRangeMin] = useState(initial.rangeMin)
-  const [rangeMax, setRangeMax] = useState(initial.rangeMax)
-  const [turnSeconds, setTurnSeconds] = useState(initial.turnSeconds)
+  const [cellsInput, setCellsInput] = useState(String(initial.rangeMax))
+  const [turnInput, setTurnInput] = useState(String(initial.turnSeconds))
   const [glitchEnabled, setGlitchEnabled] = useState(initial.glitchEnabled)
   const [glitchMode, setGlitchMode] = useState<'auto' | 'manual'>(initial.glitchMode)
-  const [glitchRatio, setGlitchRatio] = useState(initial.glitchRatio)
+  const [glitchRatioInput, setGlitchRatioInput] = useState(String(Math.round(initial.glitchRatio * 100)))
   const [glitchCountInput, setGlitchCountInput] = useState(String(initial.glitchCount))
   const [cardsEnabled, setCardsEnabled] = useState(initial.cardsEnabled)
-  const [maxHandSize, setMaxHandSize] = useState(initial.maxHandSize)
-  const [startingHand, setStartingHand] = useState(initial.startingHand)
-  const [scanRadius, setScanRadius] = useState(initial.scanRadius)
+  const [maxHandInput, setMaxHandInput] = useState(String(initial.maxHandSize))
+  const [startingHandInput, setStartingHandInput] = useState(String(initial.startingHand))
+  const [scanRadiusInput, setScanRadiusInput] = useState(String(initial.scanRadius))
   const [shrinkingEnabled, setShrinkingEnabled] = useState(initial.shrinkingEnabled)
   const [countInput, setCountInput] = useState(String(names.length))
 
+  // ค่าที่เอาไปใช้จริง — ว่าง = ใช้ค่าต่ำสุด (แต่ไม่ดีดค่าใน input ระหว่างพิมพ์)
   const teams = names.length
-  const cells = rangeMax - rangeMin + 1
+  const cells = clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange)
   const quota = bombQuota(teams)
+  const glitchRatio = clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio)
   const glitchCount = glitchEnabled
     ? glitchCountFor(quota, cells, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
     : 0
@@ -41,7 +58,6 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const minCells = teams * LIMITS.minCellsPerTeam
   const canStart = cells >= minCells
 
-  // ชื่อ default ของตำแหน่งนั้น (ทีม 1, ทีม 2, …) — ใช้ตรวจว่าชื่อถูกแก้เองไหม
   function isDefaultName(name: string, index: number): boolean {
     return name.trim() === `ทีม ${index + 1}`
   }
@@ -51,10 +67,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   }
 
   async function applyCount() {
-    const target = Math.min(
-      Math.max(Number(countInput) || teams, LIMITS.minTeams),
-      LIMITS.maxTeams,
-    )
+    const target = clampInt(Number(countInput) || teams, LIMITS.minTeams, LIMITS.maxTeams)
     if (target === teams) return
     if (target < teams) {
       const removed = names.slice(target)
@@ -95,17 +108,17 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   function handleStart() {
     onStart({
       teamNames: names.map((n, i) => n.trim() || `ทีม ${i + 1}`),
-      rangeMin,
-      rangeMax,
-      turnSeconds,
+      rangeMin: 1, // W1.1: เลขเริ่มต้นคือ 1 เสมอ → ล็อกตายตัว
+      rangeMax: clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange),
+      turnSeconds: clampInt(Number(turnInput), 0, LIMITS.maxTurnSeconds),
       glitchEnabled,
       glitchMode,
-      glitchRatio,
-      glitchCount: Number(glitchCountInput) || 0,
+      glitchRatio: clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio),
+      glitchCount: clampInt(Number(glitchCountInput), 0, LIMITS.maxGlitchCount),
       cardsEnabled,
-      maxHandSize,
-      startingHand,
-      scanRadius,
+      maxHandSize: clampInt(Number(maxHandInput), LIMITS.minHandSize, LIMITS.maxHandSizeCap),
+      startingHand: clampInt(Number(startingHandInput), 0, LIMITS.maxStartingHand),
+      scanRadius: clampInt(Number(scanRadiusInput), LIMITS.minScanRadius, LIMITS.maxScanRadius),
       shrinkingEnabled,
     })
   }
@@ -162,13 +175,19 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                 min={LIMITS.minTeams}
                 max={LIMITS.maxTeams}
                 onChange={(e) => setCountInput(e.target.value)}
+                onBlur={() =>
+                  fixInput(countInput, LIMITS.minTeams, LIMITS.maxTeams, teams, setCountInput)
+                }
                 className="control w-20 text-center text-lg font-bold"
               />
               <span className="text-sm font-normal text-muted-foreground">
                 ({LIMITS.minTeams}–{LIMITS.maxTeams})
               </span>
             </label>
-            <button onClick={() => void applyCount()} className="rounded-lg border border-primary px-3 py-2 text-sm font-bold text-primary">
+            <button
+              onClick={() => void applyCount()}
+              className="rounded-lg border border-primary px-3 py-2 text-sm font-bold text-primary"
+            >
               ยืนยัน
             </button>
           </div>
@@ -205,43 +224,35 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
           </button>
         </section>
 
-        {/* ช่วงตัวเลข + ระเบิด */}
+        {/* จำนวนช่อง + ระเบิด */}
         <section className="panel flex flex-col gap-5">
           <div>
-            <h2 className="section-label mb-3">ช่วงตัวเลข</h2>
+            <h2 className="section-label mb-3">จำนวนช่องทั้งหมด</h2>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-base font-semibold">
-                จาก
+                ช่อง
                 <input
                   type="number"
-                  value={rangeMin}
+                  value={cellsInput}
                   min={LIMITS.minRange}
                   max={LIMITS.maxRange}
-                  onChange={(e) => {
-                    const v = Number(e.target.value)
-                    setRangeMin(Math.min(Math.max(v, LIMITS.minRange), rangeMax))
-                  }}
+                  onChange={(e) => setCellsInput(e.target.value)}
+                  onBlur={() =>
+                    fixInput(cellsInput, LIMITS.minRange, LIMITS.maxRange, LIMITS.minRange, setCellsInput)
+                  }
                   className="control w-24 text-lg font-bold"
                 />
               </label>
-              <label className="flex items-center gap-2 text-base font-semibold">
-                ถึง
-                <input
-                  type="number"
-                  value={rangeMax}
-                  min={LIMITS.minRange}
-                  max={LIMITS.maxRange}
-                  onChange={(e) => {
-                    const v = Number(e.target.value)
-                    setRangeMax(Math.max(Math.min(v, LIMITS.maxRange), rangeMin))
-                  }}
-                  className="control w-24 text-lg font-bold"
-                />
-              </label>
+              <span className="text-sm font-normal text-muted-foreground">
+                ({LIMITS.minRange}–{LIMITS.maxRange})
+              </span>
               <span className="ml-auto rounded-lg bg-secondary px-3 py-2 text-sm font-bold text-muted-foreground">
                 {cells} ช่อง
               </span>
             </div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              เลขเริ่มต้นคือ 1 เสมอ — กรอกจำนวนช่องทั้งหมด จะได้ช่วง 1–{cells}
+            </p>
           </div>
 
           <div className="rounded-xl border border-border bg-background p-4">
@@ -261,10 +272,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                 {balanceBadgeText(balance)} ({Math.round(density * 100)}% เต็ม)
               </span>
               <button
-                onClick={() => {
-                  setRangeMin(suggestion.min)
-                  setRangeMax(suggestion.max)
-                }}
+                onClick={() => setCellsInput(String(suggestion.max))}
                 className="rounded-lg border border-primary px-3 py-1 text-sm font-bold text-primary"
               >
                 ใช้ค่าแนะนำ {suggestion.min}–{suggestion.max}
@@ -299,77 +307,31 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
           )}
           {toggle(
             'ระบบการ์ด',
-            'ทีมที่รอดจบตาจะได้จั่วการ์ด 1 ใบ (ถือได้สูงสุด 5 ใบ) ใช้ในตาตัวเองได้ไม่จำกัดจำนวนใบ',
+            'ทีมที่รอดจบตาจะได้จั่วการ์ด 1 ใบ (ถือได้ไม่จำกัด) ใช้ในตาตัวเองได้ไม่จำกัดจำนวนใบ',
             cardsEnabled,
             setCardsEnabled,
           )}
           {toggle(
-            'โหมดเร่ง (วงหด)',
+            'Shrinking Mode (วงหด)',
             'เมื่อเปิดช่องปลอดภัย ขอบซ้าย/ขวาของกระดานจะหดเข้า ช่องเหลือน้อยลงเรื่อย ๆ เกมจบเร็วขึ้น แต่ทีมที่เล่นทีหลังเสี่ยงกว่า',
             shrinkingEnabled,
             setShrinkingEnabled,
           )}
         </section>
 
-        {/* Sliders */}
+        {/* ตัวเลขปรับค่า */}
         <section className="panel flex flex-col gap-5">
-          <h2 className="section-label">สไลด์ปรับค่า</h2>
+          <h2 className="section-label">การตั้งค่า</h2>
 
-          <label className="block">
-            <span className="mb-1 flex justify-between text-base font-semibold">
-              เวลา/ตารอบ
-              <span className="text-muted-foreground">
-                {turnSeconds === 0 ? 'ไม่จับเวลา' : `${turnSeconds} วิ`}
-              </span>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={LIMITS.maxTurnSeconds}
-              step={5}
-              value={turnSeconds}
-              onChange={(e) => setTurnSeconds(Number(e.target.value))}
-              className="w-full accent-[var(--primary)]"
-            />
-            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-              หมดเวลาแล้วระบบจะสุ่มเปิดช่องให้อัตโนมัติ ตั้ง 0 = ไม่จับเวลา
-            </span>
-          </label>
-
-          <label className="block">
-            <span className="mb-1 flex justify-between text-base font-semibold">
-              รัศมี Scan
-              <span className="text-muted-foreground">±{scanRadius}</span>
-            </span>
-            <input
-              type="range"
-              min={LIMITS.minScanRadius}
-              max={LIMITS.maxScanRadius}
-              step={1}
-              value={scanRadius}
-              onChange={(e) => setScanRadius(Number(e.target.value))}
-              className="w-full accent-[var(--primary)]"
-            />
-            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-              การ์ด Scan บอกว่ามีระเบิดในช่วง ±R รอบเลขที่เลือกหรือไม่ ยิ่งกว้างยิ่งเจอง่ายแต่ระบุตำแหน่งยาก
-            </span>
-          </label>
-
-          <label className="block">
-            <span className="mb-1 flex justify-between text-base font-semibold">
-              จำนวน Glitch
-              <span className="text-muted-foreground">
-                {glitchMode === 'auto' ? `${Math.round(glitchRatio * 100)}% ของระเบิดจริง` : `${glitchCount} ลูก`}
-              </span>
-            </span>
-            <div className="flex gap-2">
+          <fieldset disabled={!glitchEnabled} className={glitchEnabled ? '' : 'opacity-40'}>
+            <legend className="sr-only">Glitch bomb</legend>
+            <div className="mb-3 flex gap-2">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold">
                 <input
                   type="radio"
                   name="glitchMode"
                   checked={glitchMode === 'auto'}
                   onChange={() => setGlitchMode('auto')}
-                  disabled={!glitchEnabled}
                   className="accent-[var(--primary)]"
                 />
                 อัตโนมัติ (ตามสัดส่วน)
@@ -380,80 +342,102 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                   name="glitchMode"
                   checked={glitchMode === 'manual'}
                   onChange={() => setGlitchMode('manual')}
-                  disabled={!glitchEnabled}
                   className="accent-[var(--primary)]"
                 />
                 กำหนดเอง
               </label>
             </div>
-            <div className="mt-2 flex items-center gap-3">
-              <input
-                type="range"
+            {glitchMode === 'auto' ? (
+              <NumberField
+                label="สัดส่วน Glitch"
+                hint="เปอร์เซ็นต์ของระเบิดจริงที่จะกลายเป็น glitch (0–50%)"
+                value={glitchRatioInput}
+                onChange={setGlitchRatioInput}
                 min={0}
-                max={LIMITS.maxGlitchRatio}
-                step={0.05}
-                value={glitchRatio}
-                disabled={!glitchEnabled || glitchMode !== 'auto'}
-                onChange={(e) => setGlitchRatio(Number(e.target.value))}
-                className="w-full accent-[var(--primary)] disabled:opacity-40"
+                max={Math.round(LIMITS.maxGlitchRatio * 100)}
+                suffix={`${Math.round(Number(glitchRatioInput) || 0)}%`}
+                onBlurFix={() =>
+                  fixInput(
+                    glitchRatioInput,
+                    0,
+                    Math.round(LIMITS.maxGlitchRatio * 100),
+                    0,
+                    setGlitchRatioInput,
+                  )
+                }
               />
-              {glitchMode === 'manual' && (
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.max(cells - quota, 0)}
-                  value={glitchCountInput}
-                  onChange={(e) => setGlitchCountInput(e.target.value)}
-                  disabled={!glitchEnabled}
-                  className="control w-20 text-center font-mono text-lg font-bold"
-                />
-              )}
-            </div>
-            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-              ระเบิดปลอม เปิดโดนแล้วไม่ตาย แต่ทีมนั้นใช้การ์ดไม่ได้ 2 ตา
-              เป็นระเบิดส่วนเกินจากระเบิดจริง (ไม่เกินช่องว่าง)
-            </span>
-          </label>
+            ) : (
+              <NumberField
+                label="จำนวน Glitch"
+                hint={`ระเบิดปลอมส่วนเกินจากระเบิดจริง (ไม่เกินช่องว่าง ${Math.max(cells - quota, 0)})`}
+                value={glitchCountInput}
+                onChange={setGlitchCountInput}
+                min={0}
+                max={Math.max(cells - quota, 0)}
+                suffix={`${Number(glitchCountInput) || 0} ลูก`}
+                onBlurFix={() =>
+                  fixInput(
+                    glitchCountInput,
+                    0,
+                    Math.max(cells - quota, 0),
+                    0,
+                    setGlitchCountInput,
+                  )
+                }
+              />
+            )}
+          </fieldset>
 
-          <label className="block">
-            <span className="mb-1 flex justify-between text-base font-semibold">
-              มือสูงสุด (การ์ด)
-              <span className="text-muted-foreground">{maxHandSize} ใบ</span>
-            </span>
-            <input
-              type="range"
+          <fieldset disabled={!cardsEnabled} className={cardsEnabled ? '' : 'opacity-40'}>
+            <legend className="sr-only">ระบบการ์ด</legend>
+            <NumberField
+              label="มือสูงสุด (การ์ด)"
+              hint="จำนวนการ์ดสูงสุดที่ถือได้ในมือ เกินกว่านี้จั่วไม่เข้า"
+              value={maxHandInput}
+              onChange={setMaxHandInput}
               min={LIMITS.minHandSize}
               max={LIMITS.maxHandSizeCap}
-              step={1}
-              value={maxHandSize}
-              disabled={!cardsEnabled}
-              onChange={(e) => setMaxHandSize(Number(e.target.value))}
-              className="w-full accent-[var(--primary)] disabled:opacity-40"
+              suffix={`${Number(maxHandInput) || LIMITS.minHandSize} ใบ`}
+              onBlurFix={() =>
+                fixInput(maxHandInput, LIMITS.minHandSize, LIMITS.maxHandSizeCap, LIMITS.minHandSize, setMaxHandInput)
+              }
             />
-            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-              จำนวนการ์ดสูงสุดที่ถือได้ในมือ เกินกว่านี้จั่วไม่เข้า
-            </span>
-          </label>
-
-          <label className="block">
-            <span className="mb-1 flex justify-between text-base font-semibold">
-              การ์ดเริ่มต้น (แจกตอนเริ่มเกม)
-              <span className="text-muted-foreground">{startingHand} ใบ/ทีม</span>
-            </span>
-            <input
-              type="range"
+            <NumberField
+              label="การ์ดเริ่มต้น (แจกตอนเริ่มเกม)"
+              hint="การ์ดที่แจกให้ทุกทีมตั้งแต่เริ่มเกม (ปกติจั่วทีละ 1 ใบเมื่อรอดจบตา)"
+              value={startingHandInput}
+              onChange={setStartingHandInput}
               min={0}
               max={LIMITS.maxStartingHand}
-              step={1}
-              value={startingHand}
-              disabled={!cardsEnabled}
-              onChange={(e) => setStartingHand(Number(e.target.value))}
-              className="w-full accent-[var(--primary)] disabled:opacity-40"
+              suffix={`${Number(startingHandInput) || 0} ใบ/ทีม`}
+              onBlurFix={() =>
+                fixInput(startingHandInput, 0, LIMITS.maxStartingHand, 0, setStartingHandInput)
+              }
             />
-            <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-              การ์ดที่แจกให้ทุกทีมตั้งแต่เริ่มเกม (ปกติจั่วทีละ 1 ใบเมื่อรอดจบตา)
-            </span>
-          </label>
+            <NumberField
+              label="รัศมี Scan"
+              hint="การ์ด Scan บอกว่ามีระเบิดในช่วง ±R รอบเลขที่เลือกหรือไม่ ยิ่งกว้างยิ่งเจอง่ายแต่ระบุตำแหน่งยาก"
+              value={scanRadiusInput}
+              onChange={setScanRadiusInput}
+              min={LIMITS.minScanRadius}
+              max={LIMITS.maxScanRadius}
+              suffix={`±${Number(scanRadiusInput) || LIMITS.minScanRadius}`}
+              onBlurFix={() =>
+                fixInput(scanRadiusInput, LIMITS.minScanRadius, LIMITS.maxScanRadius, LIMITS.minScanRadius, setScanRadiusInput)
+              }
+            />
+          </fieldset>
+
+          <NumberField
+            label="เวลา/ตารอบ"
+            hint="หมดเวลาแล้วระบบจะสุ่มเปิดช่องให้อัตโนมัติ ตั้ง 0 = ไม่จับเวลา"
+            value={turnInput}
+            onChange={setTurnInput}
+            min={0}
+            max={LIMITS.maxTurnSeconds}
+            suffix={Number(turnInput) === 0 ? 'ไม่จับเวลา' : `${Number(turnInput) || 0} วิ`}
+            onBlurFix={() => fixInput(turnInput, 0, LIMITS.maxTurnSeconds, 0, setTurnInput)}
+          />
         </section>
       </div>
 
@@ -468,6 +452,44 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
 
       <RulesPanel />
     </div>
+  )
+}
+
+function clampInt(n: number, min: number, max: number): number {
+  if (Number.isNaN(n)) return min
+  return Math.min(Math.max(n, min), max)
+}
+
+// ช่องกรอกเลขที่รับค่าเป็น string — ใช้แทนสไลด์ทุกตัว (W1.3)
+function NumberField(props: {
+  label: string
+  hint: string
+  value: string
+  onChange: (v: string) => void
+  min: number
+  max: number
+  suffix?: string
+  disabled?: boolean
+  onBlurFix: () => void
+}) {
+  return (
+    <label className={`block ${props.disabled ? 'opacity-40' : ''}`}>
+      <span className="mb-1 flex justify-between gap-2 text-base font-semibold">
+        {props.label}
+        <span className="text-muted-foreground">{props.suffix}</span>
+      </span>
+      <input
+        type="number"
+        value={props.value}
+        min={props.min}
+        max={props.max}
+        disabled={props.disabled}
+        onChange={(e) => props.onChange(e.target.value)}
+        onBlur={props.onBlurFix}
+        className="control w-full text-lg font-bold"
+      />
+      <span className="mt-1 block text-sm leading-6 text-muted-foreground">{props.hint}</span>
+    </label>
   )
 }
 

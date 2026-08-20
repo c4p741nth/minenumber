@@ -518,7 +518,7 @@ function playAttack(state: EngineState, targetId: string): void {
   endTurn(state, { draw: false })
 }
 
-// โหมดเร่ง (§9): หด range หลังเปิด safe จากฝั่งที่ใกล้เลขที่เลือกกว่า
+// Shrinking Mode (§9): หด range หลังเปิด safe จากฝั่งที่ใกล้เลขที่เลือกกว่า
 function applyShrink(state: EngineState, openedCell: number): void {
   const prevMin = state.rangeMin
   const prevMax = state.rangeMax
@@ -561,7 +561,7 @@ function applyShrink(state: EngineState, openedCell: number): void {
 
   state.rangeMin = newMin
   state.rangeMax = newMax
-  pushLog(state, currentTeam(state).id, `โหมดเร่ง — ช่วงหดเหลือ ${newMin}–${newMax}`)
+  pushLog(state, currentTeam(state).id, `Shrinking Mode — ช่วงหดเหลือ ${newMin}–${newMax}`)
 }
 
 function hiddenInRange(state: EngineState, min: number, max: number): number[] {

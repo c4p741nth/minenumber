@@ -37,7 +37,7 @@ export interface GameSettings {
   startingHand: number // 0–3 การ์ดแจกตอนเริ่มเกม
   cardWeights?: Partial<Record<CardType, number>> // optional override น้ำหนักจั่ว
   scanRadius: number // 1–5
-  shrinkingEnabled: boolean // "โหมดเร่ง" — default false
+  shrinkingEnabled: boolean // "Shrinking Mode" — default false
 }
 
 export type LogEntry = {
@@ -77,7 +77,7 @@ export interface PublicGameState {
   currentTeamIndex: number
   direction: 1 | -1
   cells: Record<number, CellState>
-  rangeMin: number // เปลี่ยนได้ถ้าเปิดโหมดเร่ง
+  rangeMin: number // เปลี่ยนได้ถ้าเปิด Shrinking Mode
   rangeMax: number
   bombsRemaining: number // จำนวนเท่านั้น ห้ามมีตำแหน่ง
   turnNumber: number
