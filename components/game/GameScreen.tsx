@@ -58,7 +58,7 @@ export function GameScreen({ onRestart, onExit }: Props) {
   }
 
   return (
-    <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 p-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
+    <div className="mx-auto grid min-h-screen w-full max-w-375 gap-4 p-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
       <TeamList />
       <main className="flex flex-col gap-3">
         <CurrentTeamBanner />
