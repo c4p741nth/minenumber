@@ -101,9 +101,69 @@
 
 ---
 
+## รอบแก้บั๊กจากการเทสเว็บ (2026-08-20)
+
+หลังจบ W1–W9 มีการเทสจริงบนเว็บ เจอบั๊ก 8 ข้อ (B1–B8) — แก้ครบแล้ว รายละเอียดอยู่ใน `TODO.md`
+
+| # | บั๊ก | commit |
+|---|------|--------|
+| B1 | หน้าจอว่างเปล่าตอนกดเริ่มเกม (`Dialog.Trigger` นอก `Dialog.Root`) — **blocker** | `2fac476` |
+| B2 | LogPanel ค้างที่ 10 เหตุการณ์แรก (`slice(0,10)` → `slice(-10).reverse()`) | `2fac476` |
+| B3 | โหมดใช้การ์ด/เปิดป้าย ไม่รีเซ็ตตอนขึ้นตาใหม่ | `2fac476` |
+| B4 | StatusPanel โชว์ค่าดิบ `cards` | `2fac476` |
+| B5 | toolbar มุมขวาบนทับ StatusPanel | `2fac476` |
+| B6 | ข้อความซ้ำ "ทีม ทีม 6" | `2fac476` |
+| B7 | มือการ์ดล้นจอแนวนอนเมื่อถือหลายใบ | รอบนี้ |
+| B8 | กระดาน 200 ช่องสูงมาก + มือการ์ดบังกระดาน | รอบนี้ |
+
+### B7 — มือการ์ดล้นจอ
+- ย่อขนาดการ์ดตามจำนวนใบ: `>20 ใบ` = 36px, `>12 ใบ` = 48px, ปกติ 64px (`compact` ย่อ font/emoji ตาม)
+- ห่อแถวมือด้วย `w-full overflow-x-auto` + แถวใน `w-max` → scroll แนวนอนได้เมื่อยังล้น
+- คงเป็นแถวเดียวเสมอ (ไม่ใช้ `flex-wrap`) เพราะมือเป็น `fixed bottom` — ถ้า wrap จะสูงขึ้นไปบังกระดาน
+
+### B8 — กระดานสูงเกิน
+- ใหม่ `cellSizeFor(count)` ใน `Board.tsx` (export เพื่อเทสได้): `≤60`=56px, `61–120`=48px, `>120`=40px
+- ขนาดช่องคุมด้วย `style={{ minHeight: size }}` แทน class `min-h-[56px]` (class คงที่ ย่อไม่ได้) + font ย่อตาม `small`
+- Board scroll ในกรอบตัวเอง `max-h-[calc(100vh-14rem)] overflow-y-auto` → หน้าไม่ยาว และมือ (fixed) ไม่บังกระดานอีก
+- test ใหม่ `src/components/board/Board.test.ts` 4 ข้อ (รวม monotonic: ช่องยิ่งเยอะขนาดยิ่งไม่โตขึ้น)
+
+**ผลตรวจรอบนี้:** `bun test` 125/125 ผ่าน, `bun run tsc --noEmit` clean, `bun run build` สำเร็จ
+
+---
+
+## รอบเสริม — เพิ่ม DOM test environment (ปิดช่องโหว่ที่ B1/B7/B8 หลุดมาได้)
+
+ปัญหาเดิม: repo ไม่มี jsdom/happy-dom/testing-library เลย → **ไม่มีเทสที่ render component**
+บั๊กแบบ B1 (crash ตอน render = จอว่างเปล่า) จึงหลุดผ่านเทส 120 ตัวไปได้ทั้งหมด
+และงาน layout อย่าง B7/B8 ก็ไม่มีอะไรจับนอกจากเปิดดูด้วยตา
+
+- เพิ่ม devDeps: `@happy-dom/global-registrator`, `@testing-library/react`, `@testing-library/dom`
+- `test-setup.ts` ลงทะเบียน happy-dom เป็น global DOM + ตั้ง `IS_REACT_ACT_ENVIRONMENT`
+  โหลดผ่าน `bunfig.toml` (`[test] preload`) → ไม่กระทบ build (ยืนยันแล้วว่าไม่มี dep เทสหลุดเข้า `dist/`)
+- **`SetupScreen.render.test.tsx`** — เทสกัน regression ของ B1 โดยตรง
+  *ยืนยันแล้วว่าเทสนี้จับบั๊กได้จริง*: ลองใส่ `<Dialog.Trigger>` กลับเข้าไปนอก `<Dialog.Root>`
+  เทสแดงทันทีด้วยข้อความเดียวกับตอนเจอบั๊กครั้งแรก แล้วจึงคืนโค้ดที่แก้แล้ว
+- **`Board.render.test.tsx`** (4 ข้อ) — เทส DOM จริงของ B8: จำนวนปุ่มตรงกับจำนวนช่อง,
+  Board มี `overflow-y-auto` + `max-h-[calc(100vh-14rem)]`, ขนาดช่องออกมาเป็น inline style จริง
+  (กันคนย้ายกลับไปใช้ Tailwind class ที่ย่อตามตัวแปรไม่ได้), grid template ใช้ขนาดที่คำนวณ
+- **`cardWidthFor()`** แยกออกจาก `Hand.tsx` เป็น pure function ที่ export (แพตเทิร์นเดียวกับ `cellSizeFor`)
+  + `Hand.test.ts` 4 ข้อ รวม monotonic — เดิม threshold ของ B7 ฝังเป็น ternary inline ไม่มีเทสคุม
+- **แก้ผลข้างเคียง:** happy-dom ให้ `localStorage` จริงซึ่งเป็น readonly accessor
+  เทส storage 3 ไฟล์ที่ assign `globalThis.localStorage = mockStorage()` ตรง ๆ เลยพัง 20 ข้อ
+  → เปลี่ยนเป็น `Object.defineProperty` (ทำงานได้ทั้งมีและไม่มี happy-dom)
+
+**ผลตรวจ:** `bun test` **135/135 ผ่าน** (จาก 125), `tsc --noEmit` clean, `bun run build` สำเร็จ
+
+---
+
 ## งานที่เหลือ
 
-ไม่มี — ครบ W1–W9 แล้ว
+- ครบ W1–W9 + บั๊ก B1–B8 แล้ว
+- **ยังไม่ได้ verify บนเบราว์เซอร์จริง** — Chrome extension (MCP) ไม่เชื่อมต่อทั้ง 2 รอบที่ลอง
+  ส่วนที่เป็น CSS ล้วนจึงยังไม่มีหลักฐานจากจอจริง โดยเฉพาะค่า `14rem` ใน
+  `max-h-[calc(100vh-14rem)]` ที่จับคู่กับ `pb-44` (11rem) ใน `GameScreen.tsx` — เป็นตัวเลขที่เดาจาก layout
+  → ผู้ใช้เปิดเกม 200 ช่อง + จั่วการ์ดเกิน 20 ใบ ดูด้วยตาว่าลงตัวไหม
+- branch `fix/setup-blank-screen` ยังไม่ merge เข้า `main`
 
 ---
 

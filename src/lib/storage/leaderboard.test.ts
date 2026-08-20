@@ -29,7 +29,13 @@ function mockStorage(): Storage {
 }
 
 beforeEach(() => {
-  ;(globalThis as { localStorage?: Storage }).localStorage = mockStorage()
+  // happy-dom (preload ผ่าน test-setup.ts) ให้ localStorage จริงซึ่งเป็น readonly accessor
+  // assign ตรง ๆ จะ throw "Attempted to assign to readonly property" → ต้องใช้ defineProperty
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mockStorage(),
+    configurable: true,
+    writable: true,
+  })
   clearLeaderboard()
 })
 

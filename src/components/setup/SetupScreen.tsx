@@ -55,6 +55,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [musicUrlInput, setMusicUrlInput] = useState(initial.musicUrl)
   const [musicVolumeInput, setMusicVolumeInput] = useState(String(initial.musicVolume))
   const [countInput, setCountInput] = useState(String(names.length))
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // ค่าที่เอาไปใช้จริง — ว่าง = ใช้ค่าต่ำสุด (แต่ไม่ดีดค่าใน input ระหว่างพิมพ์)
   const teams = names.length
@@ -346,11 +347,12 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
               >
                 เริ่มเกม
               </button>
-              <Dialog.Trigger
-                render={<button className="rounded-lg border border-border bg-background px-4 py-3 text-base font-bold" />}
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="rounded-lg border border-border bg-background px-4 py-3 text-base font-bold"
               >
                 ⚙ ตั้งค่าเพิ่มเติม
-              </Dialog.Trigger>
+              </button>
             </div>
             {!canStart && (
               <p className="mt-2 text-center text-sm font-semibold text-destructive">
@@ -379,7 +381,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       <RulesPanel />
 
       {/* ตั้งค่าเพิ่มเติม — popup modal (W2.1) */}
-      <Dialog.Root>
+      <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/60" />
           <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[min(100%,640px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl">

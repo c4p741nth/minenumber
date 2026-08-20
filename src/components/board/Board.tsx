@@ -23,14 +23,26 @@ const OPENED_STYLES: Record<Exclude<CellState, 'hidden'>, { cls: string; label: 
   glitched: { cls: 'bg-purple-600 text-white', label: '⚡' },
 }
 
+// B8: กระดานช่องเยอะ (เช่น 200 ช่อง) ในคอลัมน์กลางที่แคบ ได้แค่ ~7 คอลัมน์ → หน้ายาวมาก
+// ย่อขนาดช่องขั้นบันไดตามจำนวนช่อง เพื่อให้ได้คอลัมน์ต่อแถวมากขึ้น
+export function cellSizeFor(count: number): number {
+  if (count > 120) return 40
+  if (count > 60) return 48
+  return 56
+}
+
 export function Board({ rangeMin, rangeMax, cells, disabled, onOpen, scanning = null }: Props) {
   const numbers: number[] = []
   for (let n = rangeMin; n <= rangeMax; n++) numbers.push(n)
 
+  const size = cellSizeFor(numbers.length)
+  const small = size < 56
+
   return (
     <div
-      className="grid gap-2"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))' }}
+      // scroll ในกรอบตัวเองเมื่อกระดานสูงเกินจอ — ไม่ดันหน้าให้ยาวจนต้องเลื่อนทั้งหน้า
+      className="grid max-h-[calc(100vh-14rem)] gap-2 overflow-y-auto pr-1"
+      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${size}px, 1fr))` }}
     >
       {numbers.map((n) => {
         const state = cells[n] ?? 'hidden'
@@ -45,12 +57,13 @@ export function Board({ rangeMin, rangeMax, cells, disabled, onOpen, scanning = 
               key={n}
               onClick={() => onOpen(n)}
               disabled={disabled}
-              style={inScan ? { animationDelay: `${scanDelay}s` } : undefined}
+              style={{ minHeight: size, ...(inScan ? { animationDelay: `${scanDelay}s` } : {}) }}
               className={
-                'grid min-h-[56px] place-items-center rounded-lg border-2 p-1 font-mono ' +
-                'text-xl font-black transition hover:border-primary hover:bg-primary ' +
+                'grid place-items-center rounded-lg border-2 p-1 font-mono ' +
+                'font-black transition hover:border-primary hover:bg-primary ' +
                 'border-border bg-card hover:text-primary-foreground ' +
                 'disabled:cursor-not-allowed disabled:opacity-50 ' +
+                (small ? 'text-base ' : 'text-xl ') +
                 (inScan ? 'cell-scan' : '')
               }
             >
@@ -63,9 +76,10 @@ export function Board({ rangeMin, rangeMax, cells, disabled, onOpen, scanning = 
           <button
             key={n}
             disabled
+            style={{ minHeight: size }}
             className={
-              `grid min-h-[56px] place-items-center rounded-lg border-2 border-transparent ` +
-              `p-1 font-mono text-2xl font-black ${s.cls}`
+              `grid place-items-center rounded-lg border-2 border-transparent ` +
+              `p-1 font-mono font-black ${small ? 'text-lg' : 'text-2xl'} ${s.cls}`
             }
             title={state}
           >
