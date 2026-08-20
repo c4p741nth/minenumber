@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
+import { sfx } from '@/lib/audio/sfx'
 import {
   CARD_COLORS,
   CARD_DESCRIPTIONS,
@@ -52,8 +53,12 @@ export function Hand({ locked = false }: HandProps) {
   }
 
   function onCardClick(i: number) {
-    if (!canPlay) return
+    if (!canPlay) {
+      sfx.itemUnavailable()
+      return
+    }
     if (revealed !== null) return // กันเปิดซ้อนระหว่างเปิดใบหนึ่งอยู่
+    sfx.selectItem()
     setRevealed(i)
   }
 
@@ -136,12 +141,12 @@ export function Hand({ locked = false }: HandProps) {
           <button
             key={i}
             onClick={() => onCardClick(i)}
-            disabled={!canPlay}
+            aria-disabled={!canPlay}
             title={`ใบที่ ${i + 1} — กดเพื่อเปิดดู`}
             className={
               `flex w-16 flex-col items-center gap-0.5 rounded-xl border-2 p-2 ` +
               `border-border bg-secondary text-secondary-foreground transition hover:scale-105 ` +
-              `disabled:cursor-not-allowed disabled:opacity-40`
+              `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
             }
           >
             <span className="text-2xl leading-none">🂠</span>

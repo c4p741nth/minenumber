@@ -15,6 +15,8 @@ export function GameEffects() {
   const lastResultSig = useRef<string | null>(null)
   const lastCardSig = useRef<string | null>(null)
   const lastDrawLogId = useRef(0)
+  const deadSig = useRef('')
+  const rangeSig = useRef('')
   const phaseRef = useRef(state.phase)
   const overlayTimer = useRef<number | null>(null)
   const drawTimer = useRef<number | null>(null)
@@ -49,11 +51,33 @@ export function GameEffects() {
     if (state.phase === 'gameover' && prev !== 'gameover') sfx.fanfare()
   }, [state.phase])
 
+  // ทีมตกรอบ (W7) — ระเบิดจริง + หน้าจอกระพริบแดง (bomb-hit ตามหลัง defuse-failed จาก DefuseModal)
+  useEffect(() => {
+    const sig = state.teams
+      .filter((t) => t.eliminatedAt !== null)
+      .map((t) => t.id)
+      .sort()
+      .join(',')
+    if (sig && sig !== deadSig.current) {
+      sfx.explosion()
+      showOverlay('redflash', 600)
+    }
+    deadSig.current = sig
+  }, [state.teams])
+
+  // Shrinking Mode (W7) — ช่วงหดแล้ว (secure-block / shrink)
+  useEffect(() => {
+    const sig = `${state.rangeMin},${state.rangeMax}`
+    if (sig !== rangeSig.current && rangeSig.current !== '') sfx.secureBlock()
+    rangeSig.current = sig
+  }, [state.rangeMin, state.rangeMax])
+
   // toast สีการ์ดตอนจั่ว (W5.4) — อ่านจาก log ที่มี kind='draw' (lastDraw เคลียร์ตอนขึ้นตาใหม่)
   useEffect(() => {
     const drawLog = state.log.find((l) => l.kind === 'draw' && l.id > lastDrawLogId.current)
     if (drawLog?.card) {
       lastDrawLogId.current = drawLog.id
+      sfx.gotItem()
       setDrawToast(drawLog.card)
       if (drawTimer.current) window.clearTimeout(drawTimer.current)
       drawTimer.current = window.setTimeout(() => setDrawToast(null), 1500)

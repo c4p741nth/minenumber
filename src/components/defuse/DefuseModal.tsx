@@ -34,11 +34,12 @@ export function DefuseModal() {
     return () => window.clearInterval(t)
   }, [stage])
 
-  // เฉลยผล
+  // เฉลยผล — กู้สำเร็จ = defuseSuccess, พลาด = defuseFailed (เสียง bomb-hit จะตามมา
+  // ตอนทีมตกรอบจริง ๆ จาก GameEffects — กันเสียงซ้อนกับ redflash)
   useEffect(() => {
     if (stage !== 'result') return
     if (survived) sfx.defuseSuccess()
-    else sfx.explosion()
+    else sfx.defuseFailed()
   }, [stage, survived])
 
   function choose(color: Wire) {
