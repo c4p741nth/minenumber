@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
+import { sfx } from '@/lib/audio/sfx'
 
 type Stage = 'choosing' | 'cutting' | 'result'
 type Wire = 'red' | 'blue'
@@ -26,6 +27,20 @@ export function DefuseModal() {
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
   }, [])
+
+  // เสียง tick วนตอนช่วงลุ้น (ตัดสาย)
+  useEffect(() => {
+    if (stage !== 'cutting') return
+    const t = window.setInterval(() => sfx.tick(), 1000)
+    return () => window.clearInterval(t)
+  }, [stage])
+
+  // เฉลยผล
+  useEffect(() => {
+    if (stage !== 'result') return
+    if (survived) sfx.defuseSuccess()
+    else sfx.explosion()
+  }, [stage, survived])
 
   function choose(color: Wire) {
     if (stage !== 'choosing') return

@@ -8,6 +8,7 @@ import { SetupScreen } from '@/components/setup/SetupScreen'
 import { createGame, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
 import { randomSeed } from '@/lib/game/rng'
+import { unlockAudio } from '@/lib/audio/sfx'
 import { clearSnapshot, loadSettings, loadSnapshot, saveSettings } from '@/lib/storage/session'
 import type { GameSettings } from '@/lib/game/types'
 
@@ -27,6 +28,7 @@ export default function Page() {
   }, [])
 
   function startGame(s: GameSettings) {
+    unlockAudio() // ปลดล็อก autoplay ด้วย user gesture แรก
     saveSettings(s)
     setSettings(s)
     setGame(createGame(s, randomSeed()))

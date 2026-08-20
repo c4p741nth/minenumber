@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { sfx } from '@/lib/audio/sfx'
 import type { Phase } from '@/lib/game/types'
 
 interface Props {
@@ -24,6 +25,7 @@ export function TimerCircle({ duration, phase, turnKey, onTimeout }: Props) {
   useEffect(() => {
     if (!active) return
     if (remaining <= 0) {
+      sfx.timeout()
       setRemaining(duration)
       onTimeout()
       return
