@@ -71,65 +71,67 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
   }
 
   return (
-    <div className="mx-auto grid min-h-screen w-full max-w-375 gap-4 p-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
-      <TeamList />
-      <main className="flex flex-col gap-3">
-        <CurrentTeamBanner />
-        {inCards && (
-          <div
-            className={
-              'flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 ' +
-              (cardMode ? 'border-primary bg-primary/5' : 'border-border bg-card')
-            }
-          >
-            <span className="text-base font-bold">ตานี้จะทำอะไร?</span>
-            <button
-              onClick={() => setCardMode(true)}
+    <div className="grid min-h-screen w-full place-content-center p-4">
+      <div className="grid w-full max-w-375 gap-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
+        <TeamList />
+        <main className="flex flex-col gap-3">
+          <CurrentTeamBanner />
+          {inCards && (
+            <div
               className={
-                'rounded-lg px-4 py-2 text-base font-bold transition ' +
-                (cardMode ? 'primary-button' : 'border border-border bg-background')
+                'flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 ' +
+                (cardMode ? 'border-primary bg-primary/5' : 'border-border bg-card')
               }
             >
-              🃏 ใช้การ์ด ({current.hand.length} ใบในมือ)
-            </button>
-            <button
-              onClick={() => setCardMode(false)}
+              <span className="text-base font-bold">ตานี้จะทำอะไร?</span>
+              <button
+                onClick={() => setCardMode(true)}
+                className={
+                  'rounded-lg px-4 py-2 text-base font-bold transition ' +
+                  (cardMode ? 'primary-button' : 'border border-border bg-background')
+                }
+              >
+                🃏 ใช้การ์ด ({current.hand.length} ใบในมือ)
+              </button>
+              <button
+                onClick={() => setCardMode(false)}
+                className={
+                  'rounded-lg px-4 py-2 text-base font-bold transition ' +
+                  (!cardMode ? 'primary-button' : 'border border-border bg-background')
+                }
+              >
+                🔢 เปิดป้ายเลย
+              </button>
+              {!cardMode && (
+                <span className="text-sm text-muted-foreground">
+                  เปิดป้ายแล้วจะใช้การ์ดในตานี้ไม่ได้อีก
+                </span>
+              )}
+            </div>
+          )}
+          <Board
+            rangeMin={state.rangeMin}
+            rangeMax={state.rangeMax}
+            cells={state.cells}
+            disabled={state.phase !== 'opening' && state.phase !== 'cards'}
+            onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
+          />
+          {current.pendingOpens > 1 && (
+            <div
               className={
-                'rounded-lg px-4 py-2 text-base font-bold transition ' +
-                (!cardMode ? 'primary-button' : 'border border-border bg-background')
+                'rounded-xl border-2 border-amber-500 bg-amber-100 p-3 text-center ' +
+                'text-lg font-bold text-amber-900 dark:bg-amber-900/50 dark:text-amber-100'
               }
             >
-              🔢 เปิดป้ายเลย
-            </button>
-            {!cardMode && (
-              <span className="text-sm text-muted-foreground">
-                เปิดป้ายแล้วจะใช้การ์ดในตานี้ไม่ได้อีก
-              </span>
-            )}
-          </div>
-        )}
-        <Board
-          rangeMin={state.rangeMin}
-          rangeMax={state.rangeMax}
-          cells={state.cells}
-          disabled={state.phase !== 'opening' && state.phase !== 'cards'}
-          onOpen={(cell) => dispatch({ type: 'OPEN_CELL', cell })}
-        />
-        {current.pendingOpens > 1 && (
-          <div
-            className={
-              'rounded-xl border-2 border-amber-500 bg-amber-100 p-3 text-center ' +
-              'text-lg font-bold text-amber-900 dark:bg-amber-900/50 dark:text-amber-100'
-            }
-          >
-            ⚔ {current.name} ต้องเปิดอีก {current.pendingOpens} ป้าย
-          </div>
-        )}
-      </main>
-      <aside className="flex flex-col gap-3">
-        <StatusPanel />
-        <LogPanel />
-      </aside>
+              ⚔ {current.name} ต้องเปิดอีก {current.pendingOpens} ป้าย
+            </div>
+          )}
+        </main>
+        <aside className="flex flex-col gap-3">
+          <StatusPanel />
+          <LogPanel />
+        </aside>
+      </div>
       {state.phase === 'defusing' && <DefuseModal />}
       {state.phase === 'gameover' && (
         <GameOverScreen onRestart={onRestart} onExit={onExit} onLeaderboard={onLeaderboard} />
