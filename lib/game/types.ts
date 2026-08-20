@@ -57,9 +57,9 @@ export type GameAction =
   | { type: 'END_TURN' }
   | { type: 'PLAY_CARD'; card: CardType; targetTeamId?: string; targetCell?: number }
   | { type: 'DRAW_CARD'; teamId: string }
-
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
-export interface PublicGameState {  phase: Phase
+export interface PublicGameState {
+  phase: Phase
   settings: GameSettings
   teams: Team[]
   currentTeamIndex: number
@@ -72,4 +72,8 @@ export interface PublicGameState {  phase: Phase
   log: LogEntry[]
   pendingDefuse: { cell: number } | null
   lastResult: OpenResult | null
+  lastCardResult: CardResult | null
+  // ทีมปัจจุบันใช้การ์ดไม่ได้ไหม (สำหรับ UI เทา/บอกเหตุผล)
+  currentGlitched: boolean
+  currentBlocked: boolean
 }

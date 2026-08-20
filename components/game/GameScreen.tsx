@@ -2,6 +2,7 @@
 
 import { Board } from '@/components/board/Board'
 import { TimerCircle } from '@/components/board/TimerCircle'
+import { Hand } from '@/components/cards/Hand'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { useGame } from './GameProvider'
 
@@ -10,7 +11,7 @@ export function GameScreen() {
   const current = state.teams[state.currentTeamIndex]
 
   return (
-    <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 p-4 lg:grid-cols-[240px_1fr_300px]">
+    <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 p-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
       <TeamList />
       <main className="flex flex-col gap-3">
         <CurrentTeamBanner />
@@ -37,6 +38,7 @@ export function GameScreen() {
         <LogPanel />
       </aside>
       {state.phase === 'defusing' && <DefuseModal />}
+      <Hand />
     </div>
   )
 }

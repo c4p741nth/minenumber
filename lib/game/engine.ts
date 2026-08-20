@@ -1,7 +1,11 @@
+import { drawRandomCard } from './cards'
+import { LIMITS } from './config'
 import { createRng, pickRandom, shuffle } from './rng'
 import { refillBombs, setupBombs } from './setup'
 import type {
   BombKind,
+  CardResult,
+  CardType,
   CellState,
   GameAction,
   GameSettings,
@@ -33,6 +37,10 @@ interface EngineState {
   // ตัดสินไว้ตอน OPEN_CELL (§5) — สีที่เลือกไม่มีผล
   pendingDefuseSurvived: boolean
   lastResult: OpenResult | null
+  lastCardResult: CardResult | null
+  // ทีมปัจจุบันติด glitch/block ไหม (ตั้งตอนเริ่ม turn ของตัวเอง)
+  currentGlitched: boolean
+  currentBlocked: boolean
 }
 
 export interface GameHandle {
@@ -44,24 +52,30 @@ export interface GameHandle {
 
 export function createGame(settings: GameSettings, seed: number): GameHandle {
   const rng = createRng(seed)
+  const teams = settings.teamNames.map((name, i) => ({
+    id: String(i),
+    name,
+    alive: true,
+    hand: [] as CardType[],
+    glitchTurnsLeft: 0,
+    blockedTurnsLeft: 0,
+    pendingOpens: 1,
+    eliminatedAt: null,
+  }))
+  // เริ่มเกมทุกทีมได้ 1 ใบสุ่ม (§7.1)
+  if (settings.cardsEnabled) {
+    for (const t of teams) drawRandomCard(t.hand, rng)
+  }
+
   const state: EngineState = {
     settings,
     rng,
     bombs: setupBombs(settings, rng),
     cells: {},
-    teams: settings.teamNames.map((name, i) => ({
-      id: String(i),
-      name,
-      alive: true,
-      hand: [],
-      glitchTurnsLeft: 0,
-      blockedTurnsLeft: 0,
-      pendingOpens: 1,
-      eliminatedAt: null,
-    })),
+    teams,
     currentTeamIndex: 0,
     direction: 1,
-    phase: 'opening',
+    phase: settings.cardsEnabled ? 'cards' : 'opening',
     rangeMin: settings.rangeMin,
     rangeMax: settings.rangeMax,
     turnNumber: 1,
@@ -71,6 +85,9 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     pendingDefuse: null,
     pendingDefuseSurvived: false,
     lastResult: null,
+    lastCardResult: null,
+    currentGlitched: false,
+    currentBlocked: false,
   }
 
   return {
@@ -102,6 +119,9 @@ function buildPublic(state: EngineState): PublicGameState {
     log: state.log.map((l) => ({ ...l })),
     pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
+    lastCardResult: state.lastCardResult ? { ...state.lastCardResult } : null,
+    currentGlitched: state.currentGlitched,
+    currentBlocked: state.currentBlocked,
   }
 }
 
@@ -117,11 +137,14 @@ function dispatchAction(state: EngineState, action: GameAction): void {
       timeout(state)
       break
     case 'END_TURN':
-      if (state.phase !== 'gameover') endTurn(state)
+      // จบ turn ได้เฉพาะช่วงเปิดป้าย — ไม่ให้จบฟรีช่วงใช้การ์ด
+      if (state.phase === 'opening') endTurn(state)
       break
     case 'PLAY_CARD':
+      playCard(state, action)
+      break
     case 'DRAW_CARD':
-      // การ์ดยังไม่ทำ — Task 7
+      drawCardAction(state, action.teamId)
       break
   }
 }
@@ -156,9 +179,11 @@ function eliminateTeam(state: EngineState, team: Team): void {
 
 // เปิดช่องหนึ่งช่อง — ตรวจชนิด → resolve ตาม §4
 function openCell(state: EngineState, cell: number): void {
-  if (state.phase !== 'opening') return
+  if (state.phase !== 'opening' && state.phase !== 'cards') return
   if (cell < state.rangeMin || cell > state.rangeMax) return
   if (cell in state.cells) return
+  // เข้าช่วงเปิดป้าย (ทีมใช้การ์ดเสร็จแล้ว)
+  if (state.phase === 'cards') state.phase = 'opening'
   const team = currentTeam(state)
 
   const bomb = state.bombs.get(cell)
@@ -179,7 +204,7 @@ function openCell(state: EngineState, cell: number): void {
     team.glitchTurnsLeft = 2
     state.lastResult = { kind: 'glitch' }
     pushLog(state, team.id, `${team.name} เจอ Glitch bomb — ติดกลิตช์ 2 turn`)
-    endTurn(state)
+    endTurn(state, { draw: false }) // ติดกลิตช์ไม่ได้จั่วการ์ด
     return
   }
 
@@ -223,7 +248,8 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
 }
 
 // จบ turn ของทีมปัจจุบัน → ตรวจจบเกม/เสมอ/เติมระเบิด → ส่งต่อทีมถัดไป
-function endTurn(state: EngineState): void {
+function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
+  const draw = opts?.draw ?? true
   const acting = currentTeam(state)
   const alive = aliveTeams(state)
 
@@ -258,8 +284,18 @@ function endTurn(state: EngineState): void {
   }
 
   if (acting.alive) acting.pendingOpens = 1
+  // จั่วการ์ดเมื่อรอดจบ turn และไม่ติด glitch (§7.1)
+  if (
+    draw &&
+    acting.alive &&
+    !state.currentGlitched &&
+    state.settings.cardsEnabled &&
+    acting.hand.length < LIMITS.maxHandSize
+  ) {
+    drawRandomCard(acting.hand, state.rng)
+  }
   advanceToNext(state)
-  state.phase = 'opening'
+  state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
 }
 
 function advanceToNext(state: EngineState): void {
@@ -272,8 +308,11 @@ function advanceToNext(state: EngineState): void {
   state.currentTeamIndex = i
   state.turnNumber += 1
   const team = state.teams[i]
-  // glitchTurnsLeft ลดตอนเริ่ม turn ของทีมนั้นเอง (§3.4.9)
-  if (team.glitchTurnsLeft > 0) team.glitchTurnsLeft -= 1
+  // glitch/block ลดตอนเริ่ม turn ของทีมนั้นเอง (§3.4.9)
+  state.currentBlocked = team.blockedTurnsLeft > 0
+  if (state.currentBlocked) team.blockedTurnsLeft -= 1
+  state.currentGlitched = team.glitchTurnsLeft > 0
+  if (state.currentGlitched) team.glitchTurnsLeft -= 1
 }
 
 // หมดเวลา → สุ่มเปิดช่อง hidden ให้ 1 ช่อง (§6)
@@ -288,6 +327,122 @@ function timeout(state: EngineState): void {
   const cell = pickRandom(state.rng, hidden)
   pushLog(state, team.id, 'หมดเวลา — สุ่มเปิดช่องให้อัตโนมัติ')
   openCell(state, cell)
+}
+
+function drawCardAction(state: EngineState, teamId: string): void {
+  const team = state.teams.find((t) => t.id === teamId)
+  if (!team || !team.alive || !state.settings.cardsEnabled) return
+  if (team.glitchTurnsLeft > 0 || team.hand.length >= LIMITS.maxHandSize) return
+  drawRandomCard(team.hand, state.rng)
+}
+
+// ใช้การ์ด 1 ใบ — ต้องอยู่ในช่วงใช้การ์ด ('cards') และไม่ติด glitch/block
+function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_CARD' }>): void {
+  if (state.phase !== 'cards') return
+  const team = currentTeam(state)
+  if (state.currentGlitched || state.currentBlocked) return
+  const idx = team.hand.indexOf(action.card)
+  if (idx < 0) return
+
+  // ตรวจ target ก่อนหักการ์ด (ถ้า invalid = ไม่ใช้การ์ด)
+  switch (action.card) {
+    case 'scan':
+      if (
+        action.targetCell === undefined ||
+        action.targetCell < state.rangeMin ||
+        action.targetCell > state.rangeMax
+      ) {
+        return
+      }
+      break
+    case 'block':
+    case 'attack':
+      if (
+        action.targetTeamId === undefined ||
+        !state.teams.some((t) => t.id === action.targetTeamId && t.alive)
+      ) {
+        return
+      }
+      break
+    default:
+      break
+  }
+
+  team.hand.splice(idx, 1)
+
+  switch (action.card) {
+    case 'scan':
+      playScan(state, action.targetCell!)
+      break
+    case 'skip':
+      pushLog(state, team.id, `${team.name} ใช้ Skip — ข้าม turn`)
+      endTurn(state, { draw: false })
+      break
+    case 'block':
+      playBlock(state, action.targetTeamId!)
+      break
+    case 'reverse':
+      state.direction = (state.direction === 1 ? -1 : 1) as 1 | -1
+      state.lastCardResult = { card: 'reverse' }
+      pushLog(state, team.id, `${team.name} ใช้ Reverse — สลับทิศทาง`)
+      endTurn(state, { draw: false })
+      break
+    case 'shuffle':
+      playShuffle(state)
+      break
+    case 'attack':
+      playAttack(state, action.targetTeamId!)
+      break
+  }
+}
+
+function playScan(state: EngineState, target: number): void {
+  const team = currentTeam(state)
+  const r = state.settings.scanRadius
+  const lo = Math.max(state.rangeMin, target - r)
+  const hi = Math.min(state.rangeMax, target + r)
+  let found = false
+  for (let n = lo; n <= hi; n++) {
+    if (state.bombs.has(n)) {
+      found = true
+      break
+    }
+  }
+  state.lastCardResult = { card: 'scan', found }
+  pushLog(state, team.id, `${team.name} Scan ${target}: ${found ? 'มีระเบิด!' : 'ไม่มีระเบิด'}`)
+}
+
+function playBlock(state: EngineState, targetId: string): void {
+  const team = currentTeam(state)
+  const target = state.teams.find((t) => t.id === targetId)
+  if (!target) return
+  target.blockedTurnsLeft += 1 // ซ้อนชั้นได้
+  state.lastCardResult = { card: 'block', targetTeamId: targetId }
+  pushLog(state, team.id, `${team.name} Block ${target.name} — แบนการ์ดในตาถัดไป`)
+}
+
+function playShuffle(state: EngineState): void {
+  const team = currentTeam(state)
+  const bombs = Array.from(state.bombs.entries())
+  const targets = hiddenCells(state).filter((c) => !state.bombs.has(c))
+  const shuffled = shuffle(state.rng, targets)
+  state.bombs.clear()
+  for (let i = 0; i < bombs.length && i < shuffled.length; i++) {
+    state.bombs.set(shuffled[i], bombs[i][1])
+  }
+  state.lastCardResult = { card: 'shuffle' }
+  pushLog(state, team.id, `${team.name} ใช้ Shuffle — ระเบิดย้ายตำแหน่งใหม่`)
+}
+
+// Attack: เป้าหมายรับกองทั้งหมด + ใบใหม่ แล้วกลับเป็นปกติ จบ turn ทันที (§7.3)
+function playAttack(state: EngineState, targetId: string): void {
+  const team = currentTeam(state)
+  const target = state.teams.find((t) => t.id === targetId)
+  if (!target) return
+  target.pendingOpens += team.pendingOpens
+  state.lastCardResult = { card: 'attack', targetTeamId: targetId }
+  pushLog(state, team.id, `${team.name} โจมตี ${target.name} — ต้องเปิดเพิ่ม`)
+  endTurn(state, { draw: false })
 }
 
 // โหมดเร่ง (§9): หด range หลังเปิด safe จากฝั่งที่ใกล้เลขที่เลือกกว่า
