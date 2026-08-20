@@ -1,7 +1,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
-import { CARD_COLORS } from '@/lib/game/cards'
 import { sfx } from '@/lib/audio/sfx'
 import type { CardType } from '@/lib/game/types'
 
@@ -88,11 +87,13 @@ export function GameEffects() {
     <>
       {overlay === 'glitch' && <div className="fx-glitch-overlay" />}
       {overlay === 'redflash' && <div className="fx-red-flash" />}
+      {/* FIX #42: สีกรอบต้องเป็นกลาง — เดิมใช้ CARD_COLORS[drawToast] ทำให้คนที่เคย
+          เห็น UI เดาชนิดการ์ดออกจากสี (ฟ้า = scan, แดง = attack) ทั้งที่ข้อความปิดไว้แล้ว */}
       {drawToast && (
         <div
           className={
             `fixed bottom-32 left-1/2 z-50 -translate-x-1/2 rounded-xl border-2 px-5 py-3 ` +
-            `text-lg font-black shadow-2xl ${CARD_COLORS[drawToast]}`
+            `border-border bg-card text-lg font-black text-foreground shadow-2xl`
           }
         >
           ได้การ์ด 1 ใบ
