@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
 import {
+  CARD_ART,
   CARD_COLORS,
   CARD_DESCRIPTIONS,
   CARD_META,
@@ -26,7 +27,7 @@ export function cardWidthFor(count: number): number {
 
 // FIX #43: Block หงายหน้าอยู่แล้ว + เก็บไว้ในมือได้ (ไม่ถูกบังคับใช้/ทิ้ง)
 // การ์ดอื่นเปิดดูแล้ว "เห็นข้อมูลลับ" (เช่น Scan รู้ผลก่อนตัดสินใจ) จึงต้องบังคับตัดสินใจ
-// แต่ Block เป็น defensive charge หงายอยู่แล้วไม่มีอะไรรั่ว → ปิดกลับได้
+// แต่ Block เป็นการ์ดตั้งรับ หงายอยู่แล้วไม่มีอะไรรั่ว → ปิดกลับได้
 export function isFaceUpCard(card: CardType): boolean {
   return card === 'block'
 }
@@ -102,7 +103,11 @@ export function Hand({ locked = false }: HandProps) {
           // FIX_LISTS #10: จอแคบ — การ์ดที่เปิดอยู่ต้องไม่ล้นขอบจอ
           className={`mx-2 flex max-w-[calc(100vw-1rem)] flex-wrap items-center gap-3 rounded-xl border-2 p-3 shadow-2xl ${CARD_COLORS[revealedCard]}`}
         >
-          <span className="text-3xl leading-none">{CARD_META[revealedCard].emoji}</span>
+          <img
+            src={CARD_ART[revealedCard]}
+            alt={CARD_META[revealedCard].name}
+            className="h-24 w-auto shrink-0 rounded-lg shadow-lg"
+          />
           <div className="min-w-0">
             <p className="text-lg font-black">{CARD_META[revealedCard].name}</p>
             <p className="text-sm leading-5">{CARD_DESCRIPTIONS[revealedCard]}</p>
@@ -141,7 +146,14 @@ export function Hand({ locked = false }: HandProps) {
                 </button>
               </>
             )}
-            {!needsTeam && !needsCell && (
+            {/* Block ใช้เล่นตรง ๆ ไม่ได้ — ต้องรอทีมอื่นใช้ Attack/Reverse/Shuffle
+                ถึงจะถูกถาม (popup) ว่าจะใช้กันไหม → ไม่มีปุ่ม ใช้ */}
+            {revealedCard === 'block' && (
+              <p className="text-sm font-semibold text-muted-foreground">
+                ใช้ตอนทีมอื่นใช้ Attack / Reverse / Shuffle เท่านั้น
+              </p>
+            )}
+            {revealedCard !== 'block' && !needsTeam && !needsCell && (
               <button onClick={() => playRevealed()} className="primary-button">
                 ใช้
               </button>
@@ -224,9 +236,17 @@ export function Hand({ locked = false }: HandProps) {
                       `${canPlay ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-40'}`
                     }
                   >
-                    <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>
-                      {faceUp ? CARD_META[card].emoji : '🂠'}
-                    </span>
+                    {faceUp ? (
+                      <img
+                        src={CARD_ART[card]}
+                        alt={CARD_META[card].name}
+                        className={compact ? 'h-8 w-auto' : 'h-11 w-auto'}
+                      />
+                    ) : (
+                      <span className={compact ? 'text-lg leading-none' : 'text-2xl leading-none'}>
+                        🂠
+                      </span>
+                    )}
                     <span
                       className={
                         (compact ? 'text-xs font-black' : 'text-sm font-black') +

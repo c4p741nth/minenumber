@@ -31,8 +31,8 @@ describe('timerDisplay (FIX bullet 52: pause ต้องแช่เวลา�
     expect(timerDisplay('cards', 60, 11).danger).toBe(false)
   })
 
-  it('phase ที่ไม่จับเวลา (defusing/blocking/gameover/setup) → ∞', () => {
-    for (const p of ['defusing', 'blocking', 'gameover', 'setup'] as const) {
+  it('phase ที่ไม่จับเวลา (defusing/blocking/defending/gameover/setup) → ∞', () => {
+    for (const p of ['defusing', 'blocking', 'defending', 'gameover', 'setup'] as const) {
       const d = timerDisplay(p, 60, 30)
       expect(d.label).toBe('∞')
       expect(d.frac).toBe(1)

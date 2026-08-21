@@ -79,6 +79,15 @@ function randomAction(h: GameHandle, rng: () => number): GameAction {
   if (s.phase === 'blocking') {
     return { type: 'RESOLVE_BLOCK', use: rng() < 0.5 }
   }
+  // โดนโจมตีค้างถึงตา — เลือกสุ่มว่าจะกันกี่ใบ (0..จำนวนที่กันได้)
+  if (s.phase === 'defending') {
+    const cur = s.teams[s.currentTeamIndex]
+    const max = Math.min(
+      cur.pendingAttacks.length,
+      cur.hand.filter((c) => c === 'block').length,
+    )
+    return { type: 'RESOLVE_ATTACK_DEFENSE', use: Math.floor(rng() * (max + 1)) }
+  }
   const hidden = hiddenCells(h)
   if (hidden.length === 0) return { type: 'TIMEOUT' }
   if (s.phase === 'opening') {
@@ -89,7 +98,13 @@ function randomAction(h: GameHandle, rng: () => number): GameAction {
   const canPlay = cur.hand.length > 0 && !s.currentGlitched && !s.currentBlocked
   if (canPlay && rng() < 0.3) {
     const card = cur.hand[Math.floor(rng() * cur.hand.length)]
-    if (card === 'attack') {
+    if (card === 'block') {
+      // Block ใช้เล่นตรง ๆ ไม่ได้ — เก็บไว้ในมือ (ใช้ได้ตอนถูกถามผ่าน popup เท่านั้น)
+      // บางครั้งทิ้งทิ้งบ้าง ไม่งั้นมือจะล้น (maxHandSize จำกัด)
+      if (rng() < 0.5) {
+        return { type: 'DISCARD_CARD', index: cur.hand.indexOf(card) }
+      }
+    } else if (card === 'attack') {
       const targets = s.teams.filter((t) => t.alive && t.id !== cur.id)
       if (targets.length > 0) {
         return {
@@ -240,11 +255,11 @@ describe('FIX #35/#40 — โควตาระเบิดจริงคงท
         const aliveCount = st.teams.filter((t) => t.alive).length
 
         // ระหว่างตัดสาย/ตอบ popup ระเบิดยังไม่ resolve — ข้ามการเช็ก
-        if (st.phase !== 'defusing' && st.phase !== 'blocking') {
+        if (st.phase !== 'defusing' && st.phase !== 'blocking' && st.phase !== 'defending') {
           const hiddenLeft = hiddenCells(h).length
           const expected = Math.max(aliveCount - 1, 0)
-          // FIX_LISTS ชุดใหม่ #1: "สนามตัดสาย" (ช่องหมดแล้วเปิดรอบใหม่) ตั้งใจให้ระเบิดจริง
-          // เต็มทุกช่อง โควตา (ทีมรอด − 1) จึงไม่ใช้กับสถานะนั้น — ที่ต้องจริงคือ
+          // "สนามตัดสาย" (ทุกช่องที่เหลือเป็นระเบิดจริง) ตั้งใจให้ระเบิดจริงเต็มทุกช่อง
+          // โควตา (ทีมรอด − 1) จึงไม่ใช้กับสถานะนั้น — ที่ต้องจริงคือ
           // ระเบิดจริงไม่เกินจำนวนช่องที่ยังเปิดได้
           const inWireCutArena = realCount >= hiddenLeft && hiddenLeft > 0
           if (inWireCutArena) {
@@ -260,8 +275,8 @@ describe('FIX #35/#40 — โควตาระเบิดจริงคงท
     }
   })
 
-  // FIX_LISTS ชุดใหม่ #1: จบเกมต้องเหลือผู้ชนะทีมเดียวเท่านั้น
-  // ช่องหมดแล้วยังเหลือหลายทีม → เอนจินเปิดสนามตัดสายรอบใหม่ ไม่จบแบบเสมอ
+  // FIX: จบเกมต้องเหลือผู้ชนะทีมเดียวเท่านั้น
+  // ทุกช่องที่เหลือเป็นระเบิด = บังคับตัดสายสลับทีมไปจนเหลือทีมเดียว (ไม่จบเสมอ)
   it('จบเกมแล้วต้องเหลือทีมรอด 1 ทีมเท่านั้น', () => {
     const settings = baseSettings({
       teamNames: ['A', 'B', 'C', 'D', 'E'],

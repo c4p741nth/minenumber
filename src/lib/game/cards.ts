@@ -1,6 +1,13 @@
 import { CARD_WEIGHTS } from './config'
 import { weightedPick } from './rng'
 import type { CardType } from './types'
+import cardAttack from '@/assets/cards/Card-ATTACK.png'
+import cardBlock from '@/assets/cards/Card-BLOCK.png'
+import cardReverse from '@/assets/cards/Card-REVERSE.png'
+import cardScan from '@/assets/cards/Card-SCAN.png'
+import cardShield from '@/assets/cards/Card-SHIELD.png'
+import cardShuffle from '@/assets/cards/Card-SHUFFLE.png'
+import cardSkip from '@/assets/cards/Card-SKIP.png'
 
 type Rng = () => number
 
@@ -34,6 +41,17 @@ export const CARD_META: Record<CardType, { emoji: string; name: string; th: stri
   attack: { emoji: '⚔', name: 'Attack', th: 'โจมตี' },
 }
 
+// ภาพ splash art ของการ์ดแต่ละใบ — ใช้แทน emoji ตอนแสดงผล (ใบหงาย / ใบที่เปิดดู)
+export const CARD_ART: Record<CardType, string> = {
+  scan: cardScan,
+  skip: cardSkip,
+  shield: cardShield,
+  block: cardBlock,
+  reverse: cardReverse,
+  shuffle: cardShuffle,
+  attack: cardAttack,
+}
+
 // derived — เก็บไว้เพื่อไม่ให้ที่อื่นพัง (เดิมใช้ label แบบรวม)
 export const CARD_LABELS: Record<CardType, string> = Object.fromEntries(
   (Object.keys(CARD_META) as CardType[]).map((c) => [c, `${CARD_META[c].emoji} ${CARD_META[c].name}`]),
@@ -57,10 +75,10 @@ export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   scan: 'เลือกเลข → ตรวจช่วงเลขซ้าย–ขวารอบเลขนั้น (±R) เช่น เลือก 20 รัศมี 3 = ตรวจ 17–23 รวม 7 ช่อง บอกแค่มี/ไม่มีระเบิด',
   skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด)',
   shield: 'กางโล่ให้ทีมตัวเอง — ถ้าเหยียบระเบิดจะรอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น (ใช้กับทีมตัวเองเท่านั้น กันได้เฉพาะระเบิด)',
-  block: 'เก็บไว้กัน effect ของทีมอื่น (Attack / Reverse / Shuffle) — จะกันให้ทีมตัวเองหรือกันแทนทีมอื่นก็ได้ เมื่อมีคนใช้จะมี popup ถามทีละทีม ใช้ซ้อน Block ด้วยกันไม่ได้',
+  block: 'ใช้เล่นตรง ๆ ไม่ได้ — โดนโจมตีแล้วจะถูกถามตอนเริ่มตาตัวเองว่าจะกันกี่ใบ (เลือกได้ 1 ใบต่อ 1 การ์ดโจมตี) หรือกัน Reverse / Shuffle ได้ทันทีตอนทีมอื่นใช้ กัน Shield ไม่ได้',
   reverse: 'สลับทิศทาง + จบ turn ทันที',
   shuffle: 'สุ่มย้ายตำแหน่งระเบิดทั้งหมดใหม่',
-  attack: 'ทีมเป้าหมายต้องเปิดเพิ่ม +1 (โอนกองต่อได้)',
+  attack: 'ทีมเป้าหมายโดนคิวโจมตี — ต้องเปิดเพิ่ม +1 ตอนถึงตาตัวเอง (โอนกองต่อได้) กันด้วย Block ได้ก่อน',
 }
 
 // จำนวนชนิดการ์ดในสำรับ — ใช้แสดงที่หน้าตั้งค่า (FIX #11) ห้าม hardcode เลขที่อื่น
@@ -83,8 +101,9 @@ export function cardEndsTurn(card: CardType): boolean {
 // FIX_LISTS #10: การ์ดที่ "ส่งผลกับทีมอื่น" → ทีมอื่นมีสิทธิ์เอา Block มากันได้
 // Attack ใส่ทีมอื่นตรง ๆ, Reverse สลับลำดับของทั้งวง, Shuffle ย้ายระเบิดทั้งกระดาน
 // Shield/Block เป็นการ์ดตั้งรับของทีมตัวเอง ไม่กระทบใคร จึงกันไม่ได้
+// (Shield กันไม่ได้ด้วย — ใช้กับทีมตัวเองเท่านั้น ไม่มีเป้าหมายให้กัน)
 // Skip แค่จบตาตัวเอง ไม่ได้บังคับใคร จึงกันไม่ได้เช่นกัน
-// FIX_LISTS #15: Block เองอยู่นอกรายการนี้ — กัน Block ซ้อน Block ไม่ได้ (ห้าม stack)
+// FIX_LISTS #15: Block เองอยู่นอกรายการนี้ — ใช้เล่นตรง ๆ ไม่ได้ด้วยซ้ำ (ห้าม stack)
 export function cardIsBlockable(card: CardType): boolean {
   return card === 'attack' || card === 'reverse' || card === 'shuffle'
 }

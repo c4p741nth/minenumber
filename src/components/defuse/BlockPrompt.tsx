@@ -40,7 +40,8 @@ export function BlockPrompt() {
           จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          (ไม่บอกว่าเป็น effect อะไร — เหลือ Block อยู่ {responder.blockCharges} ใบ)
+          (ไม่บอกว่าเป็น effect อะไร — เหลือ Block อยู่{' '}
+          {responder.hand.filter((c) => c === 'block').length} ใบ)
         </p>
         {waiting > 0 && (
           <p className="mt-1 text-xs text-muted-foreground">

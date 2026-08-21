@@ -46,7 +46,7 @@ function record(i: number, teamName: string, rank: number, totalTeams: number): 
     teamName,
     rank,
     totalTeams,
-    opens: i,
+    survivedRounds: i,
     defusesSucceeded: 0,
     cardsPlayed: 0,
     survived: rank === 1,
@@ -106,5 +106,18 @@ describe('aggregateByTeam', () => {
     // C กับ A ได้ 2 แต้มเท่ากัน → เรียงตามชนะ (เท่ากัน) แล้วชื่อ
     expect(agg[1]).toMatchObject({ teamName: 'A', games: 1, wins: 1, points: 2 })
     expect(agg[2]).toMatchObject({ teamName: 'C', games: 2, wins: 1, points: 2 })
+  })
+
+  it('รวม "รอบที่รอด" แทน "ป้ายที่เปิด"', () => {
+    appendMatch([record(1, 'A', 1, 2), record(2, 'A', 1, 2), record(3, 'B', 2, 2)])
+    const agg = aggregateByTeam(loadLeaderboard())
+    expect(agg.find((a) => a.teamName === 'A')?.survivedRounds).toBe(3)
+    expect(agg.find((a) => a.teamName === 'B')?.survivedRounds).toBe(3)
+  })
+
+  it('record เก่าที่ไม่มี survivedRounds → นับ 0 ไม่พัง', () => {
+    appendMatch([{ ...record(1, 'A', 1, 2), survivedRounds: undefined }])
+    const agg = aggregateByTeam(loadLeaderboard())
+    expect(agg[0].survivedRounds).toBe(0)
   })
 })

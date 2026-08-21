@@ -42,7 +42,8 @@ export function GameOverScreen({ onExit }: Props) {
         teamName: r.team.name,
         rank: r.rank,
         totalTeams: rankings.length,
-        opens: r.team.stats.opens,
+        // FIX: บันทึก "รอบที่รอด" แทน "ป้ายที่เปิด" — ดูเท่กว่า
+        survivedRounds: r.team.stats.turnsSurvived ?? 0,
         defusesSucceeded: r.team.stats.defusesSucceeded,
         cardsPlayed: totalCardsPlayed(r.team.stats.cardsPlayed),
         survived: r.team.alive,
@@ -58,6 +59,8 @@ export function GameOverScreen({ onExit }: Props) {
         startedAt: state.startedAt ?? null,
         endedAt: Date.now(),
         teamNames: state.teams.map((t) => t.name),
+        // อันดับสุดท้ายของทุกทีม — ใช้เรียงชื่อทีมในหัว log (ที่ 1 อยู่หน้า)
+        rankings: rankings.map((r) => ({ teamName: r.team.name, rank: r.rank })),
         turnNumber: state.turnNumber,
         log: state.log,
       })
@@ -169,7 +172,7 @@ function StatsRow({ team }: { team: Team }) {
   )
   return (
     <span className="flex w-full shrink-0 flex-wrap items-center gap-x-3 pl-11 text-sm text-muted-foreground sm:w-auto sm:pl-0">
-      <span title="ป้ายที่เปิด">🔎 {team.stats.opens}</span>
+      <span title="รอบที่รอด">🕐 {team.stats.turnsSurvived ?? 0}</span>
       <span title="กู้สำเร็จ">🧨 {team.stats.defusesSucceeded}</span>
       <span title="การ์ดที่ทิ้ง">🗑 {team.stats.cardsDiscarded}</span>
       <span title="การ์ดที่ใช้เยอะสุด">

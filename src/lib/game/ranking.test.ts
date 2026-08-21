@@ -17,11 +17,12 @@ function team(id: string, alive: boolean, eliminatedAt: number | null = null): T
     glitchTurnsLeft: 0,
     blockedTurnsLeft: 0,
     shieldCharges: 0,
-    blockCharges: 0,
+    pendingAttacks: [],
     pendingOpens: 1,
     eliminatedAt,
     stats: {
       opens: 0,
+      turnsSurvived: 0,
       defusesSucceeded: 0,
       cardsPlayed: {} as Record<CardType, number>,
       cardsDiscarded: 0,

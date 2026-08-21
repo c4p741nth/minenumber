@@ -3,7 +3,11 @@ export type BombKind = 'real' | 'glitch'
 // ตำแหน่งระเบิด (secret) — ใช้เฉพาะตอน save เข้ารหัส ห้ามโผล่ใน UI
 export type PrivateBombState = Record<number, BombKind>
 export type CardType = 'scan' | 'skip' | 'shield' | 'block' | 'reverse' | 'shuffle' | 'attack'
-export type Phase = 'setup' | 'cards' | 'opening' | 'defusing' | 'blocking' | 'gameover'
+export type Phase = 'setup' | 'cards' | 'opening' | 'defusing' | 'blocking' | 'defending' | 'gameover'
+
+// โจมตีที่ค้างอยู่บนทีมเป้าหมาย (โดน attack ไปแล้วแต่ยังไม่ถึงตาของเป้าหมาย)
+// opens = จำนวนป้ายที่เป้าหมายต้องเปิดเพิ่มถ้าไม่กัน (โอนกองของผู้โจมตีตอนใช้การ์ด)
+export type PendingAttack = { opens: number }
 
 export interface Team {
   id: string
@@ -14,15 +18,19 @@ export interface Team {
   blockedTurnsLeft: number // >0 = ใช้การ์ดไม่ได้ (เหลือไว้กัน state เก่าใน snapshot)
   // FIX #24: Shield ที่กาง — กันระเบิดจริง 1 ครั้ง (ใช้กับทีมตัวเองเท่านั้น)
   shieldCharges: number
-  // FIX #25: Block ที่ถือไว้ — กัน effect จากทีมอื่นได้ 1 ครั้ง (ถามก่อนใช้ผ่าน popup)
-  blockCharges: number
+  // Block ไม่มี charge — ถือการ์ดอยู่ในมือเท่านั้น ใช้ได้ตอนถูกถาม (phase blocking)
+  // ต่อเมื่อทีมอื่นใช้ Attack/Reverse/Shuffle (กัน Shield ไม่ได้)
+  // โจมตีที่ค้างอยู่ — จะโดนตอนเริ่มตาของทีมนี้ กันด้วย Block ได้ (phase 'defending')
+  pendingAttacks: PendingAttack[]
   pendingOpens: number // จำนวนป้ายที่ต้องเปิดในตานี้
   eliminatedAt: number | null // ลำดับการตกรอบ (1 = ตายคนแรก)
   stats: TeamStats
 }
 
 export interface TeamStats {
-  opens: number // จำนวนป้ายที่เปิด (รวมที่ทำให้ตาย)
+  opens: number // จำนวนป้ายที่เปิด (รวมที่ทำให้ตาย) — ใช้ภายในเท่านั้น ไม่โชว์อีกแล้ว
+  // FIX: นับ "รอบที่รอด" — จบตาแบบยังรอด 1 ครั้ง = 1 รอบ (โชว์ใน leaderboard แทน opens)
+  turnsSurvived: number
   defusesSucceeded: number
   cardsPlayed: Record<CardType, number>
   cardsDiscarded: number // จำนวนการ์ดที่ทิ้ง (W5.3)
@@ -46,6 +54,8 @@ export interface GameSettings {
   scanRadius: number // 1–5
   shrinkingEnabled: boolean // "Shrinking Mode" — default false
   defuseSeconds: number // เวลานับถอยหลังตอนตัดสายระเบิด (0 = ไม่จับเวลา) (FIX #27)
+  // เวลาตัดสินใจเลือกการ์ดที่จะ Block ตอนโดนโจมตี (0 = ไม่จับเวลา) — หมดเวลา = ไม่กัน โดนทั้งหมด
+  defendSeconds: number
   // FIX_LISTS #9: เอา YouTube link ออกแล้ว — เหลือแค่ระดับเสียง effect ของเกม
   sfxVolume: number // 0–100
 }
@@ -97,6 +107,9 @@ export type GameAction =
   | { type: 'DRAW_CARD'; teamId: string }
   // FIX #25: ตอบ popup ว่าทีมเป้าหมายจะใช้ Block กันหรือไม่
   | { type: 'RESOLVE_BLOCK'; use: boolean }
+  // ตอบ phase 'defending' — จำนวนการ์ดโจมตีที่จะกันด้วย Block (0 = ไม่กันเลย โดนทั้งหมด)
+// เลือกเองได้ว่าจะกันกี่ใบ (เผื่ออยากเก็บ Block ไว้กัน Reverse/Shuffle ภายหลัง)
+  | { type: 'RESOLVE_ATTACK_DEFENSE'; use: number }
   // FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้า (เช่น ทีมเสีย turn เพราะหมดเวลาแต่ควรได้เล่น)
   | { type: 'UNDO_TURN' }
   // FIX #44: กรรมการสั่งยุติเกม → เข้าหน้าสรุปอันดับทันทีเหมือนเกมจบตามปกติ

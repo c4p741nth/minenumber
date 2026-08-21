@@ -13,6 +13,7 @@ export const LIMITS = {
   minRangeSize: 10,
   maxTurnSeconds: 300,
   maxDefuseSeconds: 120,
+  maxDefendSeconds: 120,
   maxGlitchRatio: 0.5,
   minScanRadius: 1,
   maxScanRadiusCap: 20,
@@ -63,6 +64,8 @@ export const DEFAULTS = {
   scanRadius: 3,
   shrinkingEnabled: false,
   defuseSeconds: 15,
+  // เวลาตัดสินใจเลือกการ์ดที่จะ Block ตอนโดนโจมตี (0 = ไม่จับเวลา)
+  defendSeconds: 30,
   sfxVolume: 80, // FIX_LISTS #9
 } as const
 
@@ -133,6 +136,7 @@ export function defaultSettings(): GameSettings {
     scanRadius: DEFAULTS.scanRadius,
     shrinkingEnabled: DEFAULTS.shrinkingEnabled,
     defuseSeconds: DEFAULTS.defuseSeconds,
+    defendSeconds: DEFAULTS.defendSeconds,
     sfxVolume: DEFAULTS.sfxVolume,
   }
 }

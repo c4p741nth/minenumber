@@ -10,7 +10,8 @@ export interface MatchRecord {
   teamName: string
   rank: number
   totalTeams: number
-  opens: number
+  // FIX: "รอบที่รอด" แทน "ป้ายที่เปิด" — optional เพราะ record เก่ายังมี opens ไม่มีค่านี้
+  survivedRounds?: number
   defusesSucceeded: number
   cardsPlayed: number
   survived: boolean
@@ -21,7 +22,7 @@ export interface TeamAggregate {
   games: number
   wins: number
   points: number
-  opens: number
+  survivedRounds: number
   survived: number
 }
 
@@ -84,13 +85,14 @@ export function aggregateByTeam(records: MatchRecord[]): TeamAggregate[] {
       games: 0,
       wins: 0,
       points: 0,
-      opens: 0,
+      survivedRounds: 0,
       survived: 0,
     }
     cur.games += 1
     if (r.rank === 1) cur.wins += 1
     cur.points += pointsForRank(r.rank, r.totalTeams)
-    cur.opens += r.opens
+    // record เก่าไม่มี survivedRounds → นับ 0
+    cur.survivedRounds += r.survivedRounds ?? 0
     if (r.survived) cur.survived += 1
     map.set(r.teamName, cur)
   }

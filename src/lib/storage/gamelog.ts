@@ -14,6 +14,13 @@ import type { LogEntry } from '../game/types'
 const KEY = 'mn.gamelogs'
 const MAX_GAMES = 20
 
+// อันดับสุดท้ายของแต่ละทีม (rank 1 = ชนะ) — ใช้เรียงชื่อทีมในหัว log
+// optional เพราะ record เก่าไม่มี field นี้
+export interface GameLogRank {
+  teamName: string
+  rank: number
+}
+
 export interface GameLogRecord {
   id: string
   // null = เกมที่เล่นก่อนอัปเกรด (engine ยังไม่มี startedAt) — UI โชว์ '—'
@@ -21,7 +28,14 @@ export interface GameLogRecord {
   endedAt: number
   teamNames: string[]
   turnNumber: number
+  rankings?: GameLogRank[]
   log: LogEntry[]
+}
+
+// ชื่อทีมเรียงตามอันดับ (ที่ 1 → ท้าย) — record เก่าไม่มี rankings → คืนลำดับเดิม
+export function orderedTeamNames(rec: GameLogRecord): string[] {
+  if (!rec.rankings || rec.rankings.length === 0) return rec.teamNames
+  return [...rec.rankings].sort((a, b) => a.rank - b.rank).map((r) => r.teamName)
 }
 
 function emptyRecord(): GameLogRecord {

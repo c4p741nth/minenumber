@@ -63,6 +63,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   // FIX_LISTS #9: เอา YouTube link ออก — เหลือระดับเสียง effect อย่างเดียว
   const [sfxVolumeInput, setSfxVolumeInput] = useState(String(initial.sfxVolume))
   const [defuseSecondsInput, setDefuseSecondsInput] = useState(String(initial.defuseSeconds))
+  const [defendSecondsInput, setDefendSecondsInput] = useState(String(initial.defendSeconds))
   const [countInput, setCountInput] = useState(String(names.length))
   const [settingsOpen, setSettingsOpen] = useState(false)
   // FIX #8: ตั้งค่าเป็น sidebar + เมนูหมวด — จำหมวดที่เลือกไว้
@@ -173,6 +174,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       ),
       shrinkingEnabled,
       defuseSeconds: clampInt(Number(defuseSecondsInput), 0, LIMITS.maxDefuseSeconds),
+      defendSeconds: clampInt(Number(defendSecondsInput), 0, LIMITS.maxDefendSeconds),
       sfxVolume: clampInt(Number(sfxVolumeInput), 0, 100),
     })
   }
@@ -656,6 +658,19 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                       suffix={Number(defuseSecondsInput) === 0 ? '(ไม่จับเวลา)' : undefined}
                       onBlurFix={() =>
                         fixInput(defuseSecondsInput, 0, LIMITS.maxDefuseSeconds, 0, setDefuseSecondsInput)
+                      }
+                    />
+                    <NumberField
+                      label="เวลาเลือกกันโจมตี"
+                      unit="วินาที"
+                      hint="เวลาตัดสินใจเลือกการ์ดที่จะ Block ตอนโดนโจมตี — หมดเวลา = ไม่กัน โดนทั้งหมด (ตั้ง 0 = ไม่จับเวลา)"
+                      value={defendSecondsInput}
+                      onChange={setDefendSecondsInput}
+                      min={0}
+                      max={LIMITS.maxDefendSeconds}
+                      suffix={Number(defendSecondsInput) === 0 ? '(ไม่จับเวลา)' : undefined}
+                      onBlurFix={() =>
+                        fixInput(defendSecondsInput, 0, LIMITS.maxDefendSeconds, 0, setDefendSecondsInput)
                       }
                     />
                   </div>

@@ -74,6 +74,7 @@ export interface GameHandle {
 function zeroStats(): TeamStats {
   return {
     opens: 0,
+    turnsSurvived: 0,
     defusesSucceeded: 0,
     cardsDiscarded: 0,
     cardsPlayed: {
@@ -111,7 +112,7 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     glitchTurnsLeft: 0,
     blockedTurnsLeft: 0,
     shieldCharges: 0,
-    blockCharges: 0,
+    pendingAttacks: [],
     pendingOpens: 1,
     eliminatedAt: null,
     stats: zeroStats(),
@@ -182,7 +183,10 @@ export function createGameFromState(
       hand: t.hand.slice(),
       // snapshot เก่าไม่มีสองค่านี้ — default 0 กัน undefined หลุดเข้าเกม
       shieldCharges: t.shieldCharges ?? 0,
-      blockCharges: t.blockCharges ?? 0,
+      // snapshot เก่าไม่มี pendingAttacks — default [] กัน undefined หลุดเข้าเกม
+      pendingAttacks: t.pendingAttacks ?? [],
+      // snapshot เก่าไม่มี turnsSurvived — default 0 กัน NaN ตอน += 1
+      stats: { ...t.stats, turnsSurvived: t.stats?.turnsSurvived ?? 0 },
     })),
     currentTeamIndex: state.currentTeamIndex,
     direction: state.direction,
@@ -281,7 +285,7 @@ function buildPublic(state: EngineState): PublicGameState {
       hand: t.hand.slice(),
       // snapshot เก่าไม่มีสองค่านี้ — default 0 กัน undefined หลุดเข้าเกม
       shieldCharges: t.shieldCharges ?? 0,
-      blockCharges: t.blockCharges ?? 0,
+      pendingAttacks: t.pendingAttacks ?? [],
     })),
     currentTeamIndex: state.currentTeamIndex,
     direction: state.direction,
@@ -342,6 +346,9 @@ function dispatchAction(state: EngineState, action: GameAction): void {
     case 'RESOLVE_BLOCK':
       resolveBlock(state, action.use)
       break
+    case 'RESOLVE_ATTACK_DEFENSE':
+      resolveAttackDefense(state, action.use)
+      break
     case 'UNDO_TURN':
       undoTurn(state)
       break
@@ -400,8 +407,9 @@ function eliminateTeam(state: EngineState, team: Team): void {
   team.alive = false
   state.eliminations += 1
   team.eliminatedAt = state.eliminations
-  // ทีมตายกลางคัน → ยกเลิก pendingOpens ที่เหลือ (§3.4.6)
+  // ทีมตายกลางคัน → ยกเลิก pendingOpens ที่เหลือ (§3.4.6) และโจมตีที่ค้างอยู่
   team.pendingOpens = 0
+  team.pendingAttacks = []
 }
 
 // เปิดช่องหนึ่งช่อง — ตรวจชนิด → resolve ตาม §4
@@ -417,14 +425,20 @@ function openCell(state: EngineState, cell: number): void {
   const bomb = state.bombs.get(cell)
   if (bomb === 'real') {
     // FIX #24: กาง Shield ไว้ → รอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่นต่อ
+    // ย้ายไม่ได้ (hidden ว่างหมด) → ระเบิดอยู่ที่เดิม ช่องไม่เขียว (ทีมถัดไปเจอต่อ)
     if (team.shieldCharges > 0) {
       team.shieldCharges -= 1
-      state.cells[cell] = 'defused'
-      relocateBomb(state, cell, 'real')
+      const moved = relocateBomb(state, cell, 'real')
+      if (moved) state.cells[cell] = 'defused'
       state.lastResult = { kind: 'shielded' }
-      pushLog(state, team.id, `${team.name} มี Shield — รอดจากระเบิด ระเบิดย้ายไปที่อื่น`, {
-        level: 'good',
-      })
+      pushLog(
+        state,
+        team.id,
+        moved
+          ? `${team.name} มี Shield — รอดจากระเบิด ระเบิดย้ายไปที่อื่น`
+          : `${team.name} มี Shield — รอดจากระเบิด แต่ไม่มีที่ว่างให้ย้าย ระเบิดยังอยู่ที่เดิม`,
+        { level: 'good' },
+      )
       endTurn(state)
       return
     }
@@ -439,10 +453,9 @@ function openCell(state: EngineState, cell: number): void {
   }
 
   if (bomb === 'glitch') {
-    state.cells[cell] = 'glitched'
-    // FIX #35: glitch ที่โดนเปิดต้องย้ายไปช่องอื่น ไม่ใช่หายไปเฉย ๆ
-    // (เดิม delete ทิ้ง → ระเบิดในกระดานลดลงเรื่อย ๆ ระหว่างเล่น)
-    relocateBomb(state, cell, 'glitch')
+    // ย้ายไม่ได้ (hidden ว่างหมด) → ระเบิดอยู่ที่เดิม ช่องไม่เขียว (ทีมถัดไปเจอต่อ)
+    const moved = relocateBomb(state, cell, 'glitch')
+    if (moved) state.cells[cell] = 'glitched'
     // FIX_LISTS #5: จำนวน turn ที่ล็อกการใช้ item ตั้งค่าได้แล้ว (เดิม hardcode 2)
     // settings เก่าใน snapshot ไม่มี field นี้ → fallback เป็น 2 ตามพฤติกรรมเดิม
     const lock = Math.max(state.settings.glitchLockTurns ?? DEFAULTS.glitchLockTurns, 0)
@@ -517,17 +530,19 @@ function ackDefuse(state: EngineState): void {
   state.defuseResult = null
 
   if (survived) {
-    state.cells[cell] = 'defused'
-    team.stats.defusesSucceeded += 1
-    // FIX #35: ย้ายระเบิดไปช่องที่ยังไม่เปิดจริง ๆ (ถ้าไม่มีที่ว่างจริงถึงจะหาย)
+    // ย้ายระเบิดไปช่องที่ยังไม่เปิดจริง ๆ — ย้ายไม่ได้ = ระเบิดอยู่ที่เดิม
+    // ช่องไม่ mark defused (ไม่เขียว) ทีมถัดไปต้องตัดสายต่อ ระเบิดไม่หายจากระบบ
+    // นับ "กู้สำเร็จ" ทุกครั้งที่ตัดสายรอด — รวมเคสสนามตัดสายที่ย้ายระเบิดไม่ได้
     const moved = relocateBomb(state, cell, 'real')
+    team.stats.defusesSucceeded += 1
+    if (moved) state.cells[cell] = 'defused'
     state.lastResult = { kind: 'real', survived: true }
     pushLog(
       state,
       team.id,
       moved
         ? `${team.name} กู้สำเร็จ! ระเบิดย้ายไปที่อื่น`
-        : `${team.name} กู้สำเร็จ! ระเบิดลูกสุดท้ายถูกทำลาย`,
+        : `${team.name} กู้สำเร็จ! แต่ไม่มีที่ว่างให้ย้ายระเบิด — ระเบิดยังอยู่ที่เดิม`,
       { level: 'good' },
     )
     // จบ turn ทันที ไม่ต้องเปิดต่อแม้ pendingOpens ยังเหลือ (§3.4.2)
@@ -543,6 +558,13 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
   const acting = currentTeam(state)
   const alive = aliveTeams(state)
 
+  // จบตาแบบยังรอด = "รอด 1 รอบ" — ต้องนับก่อนเช็คจบเกม
+  // ไม่งั้นผู้ชนะ (ที่จบเกมตอนตาของตัวเอง) จะไม่ถูกนับตาสุดท้าย
+  if (acting.alive) {
+    acting.pendingOpens = 1
+    acting.stats.turnsSurvived += 1
+  }
+
   if (alive.length === 0) {
     state.phase = 'gameover'
     pushLog(state, null, 'ทุกทีมตกรอบ — ไม่มีผู้ชนะ')
@@ -550,30 +572,23 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
   }
   if (alive.length === 1) {
     state.phase = 'gameover'
+    // นับเฉพาะรอบที่ทีมเล่นจบตาจริง (ข้างบน) — ไม่มีเครดิต +1 รอบจบเกม
+    // กู้ 2 ครั้ง = รอด 2 รอบ พอดี
     pushLog(state, alive[0].id, `${alive[0].name} ชนะ!`, { level: 'good' })
     return
   }
-  // FIX_LISTS ชุดใหม่ #1: ช่องหมดแต่ยังเหลือ >1 ทีม → ไม่ใช่เสมออีกต่อไป
-  // เกมต้องเหลือผู้ชนะทีมเดียวเท่านั้น จึงเปิดกระดานรอบใหม่ให้ "แข่งกันตัดสาย"
-  // ต่อจนกว่าจะเหลือทีมเดียว (ดู reopenForWireCut)
-  let reopened = false
+  // ระเบิดทุกลูกอยู่บนช่อง hidden เสมอ (ย้ายไม่ได้ = คืนที่เดิม ไม่หายจากระบบ)
+  // ช่อง hidden จึงไม่หมดก่อนเหลือ 1 ทีม — กันไว้เฉย ๆ เผื่อมีบั๊กไม่คาดฝัน
   if (hiddenCells(state).length === 0) {
-    reopened = reopenForWireCut(state, alive.length)
-    if (!reopened) {
-      // เปิดใหม่ไม่ได้จริง ๆ (ไม่มีช่องในช่วงเลยสักช่อง) → จบแบบเสมอตามเดิม
-      state.phase = 'gameover'
-      pushLog(state, null, 'ช่องหมด — ทุกทีมที่รอดเสมอกัน')
-      return
-    }
+    state.phase = 'gameover'
+    pushLog(state, null, 'ช่องหมด — ทุกทีมที่รอดเสมอกัน')
+    return
   }
   // FIX #40: ระเบิดจริงต้อง = ทีมที่ยังรอด − 1 เสมอ
   // ไม่งั้นจะเกิดเคส "ระเบิดหมด ช่องหมด แต่ทีมยังเหลือหลายทีม"
   // glitch ไม่นับรวมในโควตานี้ และระเบิดปกติไม่ mutate เป็น glitch
-  // FIX_LISTS ชุดใหม่ #1: ข้ามตอนเพิ่งเปิดสนามตัดสาย — สนามนั้นตั้งใจให้ระเบิดเต็มทุกช่อง
-  // ถ้าปล่อยให้บังคับโควตา (ทีมรอด − 1) จะมีช่องปลอดภัยโผล่มา แล้วเกมวนกลับไปไม่จบอีก
-  if (!reopened) enforceRealBombQuota(state, alive.length)
+  enforceRealBombQuota(state, alive.length)
 
-  if (acting.alive) acting.pendingOpens = 1
   // จั่วการ์ดเมื่อรอดจบ turn และไม่ติด glitch (§7.1)
   // maxHandSize 0 = ไม่จำกัด (W5.1)
   if (
@@ -600,6 +615,61 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
     }
   }
   advanceToNext(state)
+  beginTeamTurn(state)
+}
+
+// เริ่มตาของทีมถัดไป — ถ้ามีโจมตีค้างอยู่ ต้องแก้ด้วย Block ก่อน (phase 'defending')
+// ถ้าไม่มี Block (หรือติด glitch/block ใช้การ์ดไม่ได้) → โดนโจมตีไปโดยปริยาย
+function beginTeamTurn(state: EngineState): void {
+  const team = currentTeam(state)
+  const canUseCards =
+    state.settings.cardsEnabled && !state.currentGlitched && !state.currentBlocked
+  if (team.pendingAttacks.length > 0) {
+    if (canUseCards && team.hand.includes('block')) {
+      state.phase = 'defending'
+      return
+    }
+    applyPendingAttacks(state)
+  }
+  state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
+}
+
+// โจมตีที่ค้างอยู่โดนไปโดยปริยาย (ไม่มี Block / ติด glitch / ตอบไม่กัน) — เปิดเพิ่มทันที
+function applyPendingAttacks(state: EngineState): void {
+  const team = currentTeam(state)
+  if (team.pendingAttacks.length === 0) return
+  const total = team.pendingAttacks.reduce((s, a) => s + a.opens, 0)
+  team.pendingAttacks = []
+  team.pendingOpens += total
+  pushLog(state, team.id, `โดนโจมตี — ต้องเปิดเพิ่ม ${total} ป้าย`, { level: 'warn' })
+}
+
+// ตอบใน phase 'defending' — use = จำนวนการ์ดโจมตีที่จะกันด้วย Block (0 = ไม่กันเลย)
+// เลือกได้ว่าจะกันกี่ใบ (เผื่ออยากเก็บ Block ไว้กัน Reverse/Shuffle ภายหลัง)
+// กัน n ใบแรกของคิว — คิวที่เหลือโดนไปโดยปริยาย แล้วเข้า phase ใช้ item ตามปกติ
+function resolveAttackDefense(state: EngineState, use: number): void {
+  if (state.phase !== 'defending') return
+  if (!Number.isInteger(use) || use < 0) return
+  const team = currentTeam(state)
+  if (team.pendingAttacks.length === 0) {
+    team.pendingAttacks = []
+    state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
+    return
+  }
+  const n = Math.min(
+    use,
+    team.pendingAttacks.length,
+    team.hand.filter((c) => c === 'block').length,
+  )
+  for (let i = 0; i < n; i++) {
+    const bi = team.hand.indexOf('block')
+    if (bi < 0) break
+    team.hand.splice(bi, 1)
+    team.stats.cardsPlayed.block += 1
+    team.pendingAttacks.shift()
+    pushLog(state, team.id, `${team.name} ใช้ Block กันโจมตี 1 ครั้ง`)
+  }
+  if (team.pendingAttacks.length > 0) applyPendingAttacks(state)
   state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
 }
 
@@ -661,6 +731,10 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
 
   // ตรวจ target ก่อนหักการ์ด (ถ้า invalid = ไม่ใช้การ์ด)
   switch (action.card) {
+    case 'block':
+      // Block ใช้เล่นตรง ๆ ไม่ได้ — ต้องมีทีมอื่นใช้ Attack/Reverse/Shuffle ก่อน
+      // ถึงจะถูกถาม (phase blocking) ว่าจะใช้กันไหม การ์ดจึงต้องอยู่มือเสมอ
+      return
     case 'scan':
       if (
         action.targetCell === undefined ||
@@ -701,12 +775,6 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       state.lastCardResult = { card: 'shield' }
       pushLog(state, team.id, `${team.name} กาง Shield — กันระเบิดได้ 1 ครั้ง`)
       break
-    case 'block':
-      // FIX #25: เก็บไว้กัน effect ที่ทีมอื่นจะใช้ใส่เรา (ไม่ได้เล่นใส่ใครทันที)
-      team.blockCharges += 1
-      state.lastCardResult = { card: 'block' }
-      pushLog(state, team.id, `${team.name} เตรียม Block — กัน effect จากทีมอื่นได้ 1 ครั้ง`)
-      break
     case 'reverse':
       // FIX_LISTS #10: Reverse สลับลำดับของทั้งวง — ทีมอื่นเอา Block มากันได้
       // เป้าหมายของการถามคือทีมถัดไป (คนที่เสียสิทธิ์เล่นเพราะทิศเปลี่ยน)
@@ -721,10 +789,8 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       }
       break
     case 'attack':
-      // FIX #25: ถ้ามีทีมถือ Block ให้ถามก่อนว่าจะกันไหม
-      if (!offerBlock(state, action.targetTeamId!, 'attack')) {
-        playAttack(state, action.targetTeamId!)
-      }
+      // โจมตีถูกคิวไว้ที่เป้าหมาย — โดนจริงตอนเริ่มตาของเป้าหมาย (กันด้วย Block ได้)
+      playAttack(state, action.targetTeamId!)
       break
   }
 }
@@ -752,13 +818,14 @@ function offerBlock(state: EngineState, targetId: string, card: CardType): boole
 }
 
 // FIX_LISTS #10: ลำดับการถาม — ทีมที่โดน effect ได้สิทธิ์ตอบก่อน แล้วค่อยทีมอื่น
-// ตามลำดับที่นั่ง (เสถียร ไม่สุ่ม) เฉพาะทีมที่ยังรอดและยังถือ Block อยู่จริง
+// ตามลำดับที่นั่ง (เสถียร ไม่สุ่ม) เฉพาะทีมที่ยังรอดและยังถือการ์ด Block อยู่จริงในมือ
+// (Block ไม่ได้กางล่วงหน้า — ต้องถืออยู่ในมือ ถึงจะถูกถามให้ใช้ตอนมี effect)
 export function blockAskQueue(
   state: { teams: Team[] },
   targetId: string,
   sourceId: string,
 ): string[] {
-  const eligible = (t: Team) => t.alive && t.blockCharges > 0 && t.id !== sourceId
+  const eligible = (t: Team) => t.alive && t.hand.includes('block') && t.id !== sourceId
   const queue: string[] = []
   const target = state.teams.find((t) => t.id === targetId)
   if (target && eligible(target)) queue.push(target.id)
@@ -779,8 +846,9 @@ function resolveBlock(state: EngineState, use: boolean): void {
   const responderId = pending.askQueue[0]
   const responder = state.teams.find((t) => t.id === responderId)
 
-  if (use && responder && responder.alive && responder.blockCharges > 0) {
-    responder.blockCharges -= 1
+  if (use && responder && responder.alive && responder.hand.includes('block')) {
+    const bi = responder.hand.indexOf('block')
+    responder.hand.splice(bi, 1)
     state.pendingBlock = null
     state.phase = 'cards'
     pushLog(
@@ -793,10 +861,10 @@ function resolveBlock(state: EngineState, use: boolean): void {
     return
   }
 
-  // ทีมนี้ไม่กัน → ถามทีมถัดไปในคิวที่ยังรอดและยังถือ Block อยู่
+  // ทีมนี้ไม่กัน → ถามทีมถัดไปในคิวที่ยังรอดและยังถือ Block อยู่จริง
   const rest = pending.askQueue.slice(1).filter((id) => {
     const t = state.teams.find((x) => x.id === id)
-    return t?.alive && t.blockCharges > 0
+    return t?.alive && t.hand.includes('block')
   })
   if (rest.length > 0) {
     state.pendingBlock = { ...pending, askQueue: rest }
@@ -880,14 +948,19 @@ function playShuffle(state: EngineState): void {
   pushLog(state, team.id, `${team.name} ใช้ Shuffle — ระเบิดย้ายตำแหน่งใหม่`)
 }
 
-// Attack: เป้าหมายรับกองทั้งหมด + ใบใหม่ แล้วกลับเป็นปกติ จบ turn ทันที (§7.3)
+// Attack: เป้าหมายโดนคิวโจมตี (โอนกองของผู้โจมตี + ใบใหม่) — จะโดนจริงตอนเริ่มตา
+// ของเป้าหมาย (phase 'defending') ถ้าไม่กันด้วย Block (§7.3) จบ turn ทันที
 function playAttack(state: EngineState, targetId: string): void {
   const team = currentTeam(state)
   const target = state.teams.find((t) => t.id === targetId)
   if (!target) return
-  target.pendingOpens += team.pendingOpens
+  target.pendingAttacks.push({ opens: team.pendingOpens })
   state.lastCardResult = { card: 'attack', targetTeamId: targetId }
-  pushLog(state, team.id, `${team.name} โจมตี ${target.name} — ต้องเปิดเพิ่ม`)
+  pushLog(
+    state,
+    team.id,
+    `${team.name} โจมตี ${target.name} — ${target.name} ต้องเปิดเพิ่ม (กันด้วย Block ได้ก่อนถึงตา)`,
+  )
   endTurn(state, { draw: false })
 }
 
@@ -940,47 +1013,19 @@ function endGameNow(state: EngineState): void {
 }
 
 // FIX #35: ย้ายระเบิดจากช่องที่เพิ่งเปิด ไปช่องที่ "ยังไม่เปิดจริง ๆ" และยังไม่มีระเบิด
-// คืน true ถ้าย้ายสำเร็จ, false ถ้าไม่มีช่องว่างเหลือ (ระเบิดหายจากระบบ)
-// เดิมมีหลายจุดที่ delete ระเบิดทิ้งเฉย ๆ ทำให้ระเบิดในกระดานลดลงเรื่อย ๆ ระหว่างเล่น
+// ย้ายไม่ได้ (ช่อง hidden ว่างหมด) → คืนระเบิดกลับช่องเดิม ระเบิดไม่หายจากระบบ
+// คืน true ถ้าย้ายสำเร็จ, false ถ้าไม่มีที่ว่าง (ระเบิดยังอยู่ที่ fromCell)
+// หมายเหตุ: ต้องเรียกก่อน mark ช่อง (defused/glitched) เสมอ — fromCell ต้องยังเป็น hidden
+// ไม่งั้นระเบิดที่คืนกลับจะไปค้างบนช่องที่เปิดแล้ว (ระเบิดผี)
 function relocateBomb(state: EngineState, fromCell: number, kind: BombKind): boolean {
   state.bombs.delete(fromCell)
   const candidates = hiddenCells(state).filter((c) => c !== fromCell && !state.bombs.has(c))
-  if (candidates.length === 0) return false
+  if (candidates.length === 0) {
+    state.bombs.set(fromCell, kind)
+    return false
+  }
   const target = pickRandom(state.rng, candidates)
   state.bombs.set(target, kind)
-  return true
-}
-
-// FIX_LISTS ชุดใหม่ #1: เกมต้องเหลือผู้ชนะทีมเดียว — ห้ามจบแบบ "เสมอ" เพราะช่องหมด
-// ช่องบนกระดานหมดแต่ยังเหลือหลายทีม → เปิดกระดานรอบใหม่เป็นสนามตัดสายล้วน:
-//   คืนช่องที่เคยเปิดไปแล้วให้กลับเป็น hidden เท่ากับจำนวนทีมที่ยังรอด
-//   แล้ววางระเบิดจริงเต็มทุกช่อง (โควตา = ทีมรอด − 1 จะถูกบังคับให้ครบทีหลัง)
-// ทุกทีมจึงต้องเปิดเจอระเบิดและตัดสายวนไปจนตกรอบเหลือทีมเดียว
-// คืน false เมื่อไม่มีช่องในช่วงให้คืนเลย (กระดานว่างจริง ๆ) → ผู้เรียกค่อยจบเกม
-function reopenForWireCut(state: EngineState, aliveCount: number): boolean {
-  // ช่องที่เคยเปิดแล้วทั้งหมดในช่วงปัจจุบัน — เอากลับมาใช้เป็นสนามรอบใหม่
-  const reusable: number[] = []
-  for (let n = state.rangeMin; n <= state.rangeMax; n++) {
-    if (n in state.cells) reusable.push(n)
-  }
-  if (reusable.length === 0) return false
-
-  // เปิดคืนเท่าจำนวนทีมที่รอด (อย่างน้อย 2 ช่อง) — พอให้ทุกทีมมีช่องให้เปิดคนละช่อง
-  const want = Math.min(Math.max(aliveCount, 2), reusable.length)
-  const picked = shuffle(state.rng, reusable).slice(0, want)
-  for (const cell of picked) {
-    delete state.cells[cell]
-    // ช่องนี้เคยแจกการ์ดไปแล้ว — ล้าง mark ไม่ให้ค้างเป็นช่องการ์ดในรอบใหม่
-    delete state.cardCells[cell]
-    // ทุกช่องในสนามรอบใหม่เป็นระเบิดจริงหมด — เปิดช่องไหนก็ต้องตัดสาย
-    state.bombs.set(cell, 'real')
-  }
-  pushLog(
-    state,
-    null,
-    `ช่องหมดแต่ยังเหลือ ${aliveCount} ทีม — เปิดสนามตัดสายรอบใหม่ ${picked.length} ช่อง (ระเบิดทุกช่อง)`,
-    { level: 'warn' },
-  )
   return true
 }
 

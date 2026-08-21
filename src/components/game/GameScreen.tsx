@@ -4,6 +4,7 @@ import { Board } from '@/components/board/Board'
 import { TimerCircle } from '@/components/board/TimerCircle'
 import { Hand } from '@/components/cards/Hand'
 import { BlockPrompt } from '@/components/defuse/BlockPrompt'
+import { AttackPrompt } from '@/components/defuse/AttackPrompt'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
@@ -200,6 +201,7 @@ export function GameScreen({ onExit }: Props) {
       </div>
       {state.phase === 'defusing' && <DefuseModal />}
       {state.phase === 'blocking' && <BlockPrompt />}
+      {state.phase === 'defending' && <AttackPrompt />}
       {state.phase === 'gameover' && <GameOverScreen onExit={onExit} />}
       <Hand locked={!cardMode} />
       {/* FIX_LISTS ชุดใหม่ #8: ปุ่มปิดเสียงเคยเป็น fixed top-4 right-4 ของตัวเอง
@@ -453,14 +455,6 @@ function TeamList() {
               title="กาง Shield — กันระเบิดได้"
             >
               🛡{t.shieldCharges}
-            </span>
-          )}
-          {t.blockCharges > 0 && (
-            <span
-              className="rounded-full bg-slate-500 px-2 py-0.5 text-xs font-bold text-white"
-              title="มี Block — กัน effect จากทีมอื่นได้"
-            >
-              🚫{t.blockCharges}
             </span>
           )}
           {t.pendingOpens > 1 && (

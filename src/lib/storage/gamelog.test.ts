@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test'
-import { appendGameLog, clearGameLogs, loadGameLogs, type GameLogRecord } from './gamelog'
+import {
+  appendGameLog,
+  clearGameLogs,
+  loadGameLogs,
+  orderedTeamNames,
+  type GameLogRecord,
+} from './gamelog'
 
 function mockStorage(): Storage {
   const map = new Map<string, string>()
@@ -86,5 +92,34 @@ describe('gamelog storage (FIX #36)', () => {
     clearGameLogs()
     expect(loadGameLogs()).toEqual([])
     expect(globalThis.localStorage.getItem('mn.leaderboard')).toBe('[{"id":"keep"}]')
+  })
+})
+
+describe('orderedTeamNames', () => {
+  it('เรียงชื่อทีมตามอันดับ ที่ 1 → ท้าย', () => {
+    const r = rec(1)
+    r.rankings = [
+      { teamName: 'ทีม 4', rank: 3 },
+      { teamName: 'ทีม 2', rank: 2 },
+      { teamName: 'ทีม 1', rank: 1 },
+    ]
+    expect(orderedTeamNames(r)).toEqual(['ทีม 1', 'ทีม 2', 'ทีม 4'])
+  })
+
+  it('record เก่าไม่มี rankings → คืนลำดับเดิม (ไม่พัง)', () => {
+    expect(orderedTeamNames(rec(1))).toEqual(['A', 'B'])
+  })
+
+  it('roundtrip เก็บ rankings ครบ', () => {
+    const r = rec(2)
+    r.rankings = [
+      { teamName: 'X', rank: 2 },
+      { teamName: 'Y', rank: 1 },
+    ]
+    appendGameLog(r)
+    expect(loadGameLogs()[0].rankings).toEqual([
+      { teamName: 'X', rank: 2 },
+      { teamName: 'Y', rank: 1 },
+    ])
   })
 })

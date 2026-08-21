@@ -20,6 +20,7 @@ function cardSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     scanRadius: 3,
     shrinkingEnabled: false,
   defuseSeconds: 15,
+    defendSeconds: 30,
     sfxVolume: 80,
     ...overrides,
   }
@@ -236,47 +237,45 @@ describe('Shield / Block (FIX #24, #25)', () => {
     expect(st.bombsRemaining).toBe(before)
   })
 
-  it('Block → เก็บเป็น charge ไว้กัน effect ทีมอื่น (ไม่ได้เล่นใส่ใครทันที)', () => {
+  it('Block ใช้เล่นตรง ๆ ไม่ได้ — ต้องมี effect ของทีมอื่นก่อน (การ์ดต้องอยู่มือ)', () => {
     const settings = cardSettings()
     const seed = findSeed(settings, (h) => h.getState().teams[0].hand.includes('block'))
     const h = createGame(settings, seed)
+    const before = h.getState().teams[0].hand.length
 
     const st = h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    expect(st.teams[0].blockCharges).toBe(1)
-    // ไม่มีทีมไหนโดนแบนการ์ด
+    expect(st.teams[0].hand.length).toBe(before) // การ์ดไม่หาย
+    expect(st.phase).not.toBe('blocking') // ไม่เปิด phase ถาม
     expect(st.teams.every((t) => t.blockedTurnsLeft === 0)).toBe(true)
   })
 
-  it('โดน Attack ตอนมี Block → เข้า phase blocking, ตอบ use=true แล้วกันได้', () => {
+  it('โดน Attack ตอนถือ Block → เข้า phase defending ตอนถึงตา กัน 1 ใบ (use:1) แล้วกันได้ (การ์ดหายจากมือ)', () => {
     const settings = cardSettings({ teamNames: ['A', 'B'] })
-    // A ต้องมี attack, B ต้องมี block
+    // A ต้องมี attack, B ต้องมี block (ถือในมือ — ไม่ต้องกางล่วงหน้า)
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
       return st.teams[0].hand.includes('attack') && st.teams[1].hand.includes('block')
     })
     const h = createGame(settings, seed)
 
-    // B กาง Block ไว้ก่อน (ข้ามไปตา B แล้วกลับมา)
-    endCurrentTurn(h)
-    expect(h.getState().currentTeamIndex).toBe(1)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    expect(h.getState().teams[1].blockCharges).toBe(1)
-    endCurrentTurn(h)
-    expect(h.getState().currentTeamIndex).toBe(0)
-
-    const pendingBefore = h.getState().teams[1].pendingOpens
+    // A โจมตี B — โดนคิวไว้ก่อน ยังไม่โดนจริง ไม่มี popup ตอนนี้
     const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
-    expect(st.phase).toBe('blocking')
-    expect(st.pendingBlock?.targetTeamId).toBe('1')
+    expect(st.phase).not.toBe('blocking')
+    expect(st.teams[1].pendingAttacks).toHaveLength(1)
+    expect(st.teams[1].pendingOpens).toBe(1) // ยังไม่โดน
+    expect(st.currentTeamIndex).toBe(1) // ถึงตา B
+    // B ถือ Block → เข้า phase defending (ใช้ได้เฉพาะ Block ก่อนใช้ item อื่น)
+    expect(st.phase).toBe('defending')
 
-    const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
-    expect(after.phase).not.toBe('blocking')
-    expect(after.teams[1].blockCharges).toBe(0)
+    const after = h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: 1 })
+    expect(after.phase).toBe('cards') // เข้า phase ใช้ item ตามปกติ
+    expect(after.teams[1].hand).not.toContain('block') // ใช้แล้วหายจากมือ
+    expect(after.teams[1].pendingAttacks).toHaveLength(0)
     // กันได้ → B ไม่ต้องเปิดเพิ่ม
-    expect(after.teams[1].pendingOpens).toBe(pendingBefore)
+    expect(after.teams[1].pendingOpens).toBe(1)
   })
 
-  it('โดน Attack ตอนมี Block แต่ตอบ use=false → effect ทำงานปกติ', () => {
+  it('โดน Attack ตอนถือ Block แต่เลือกไม่กัน (use:0) → โดนโจมตี การ์ดยังอยู่มือ', () => {
     const settings = cardSettings({ teamNames: ['A', 'B'] })
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
@@ -284,16 +283,99 @@ describe('Shield / Block (FIX #24, #25)', () => {
     })
     const h = createGame(settings, seed)
 
-    endCurrentTurn(h)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    endCurrentTurn(h)
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().phase).toBe('defending')
+    const after = h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: 0 })
+    expect(after.phase).toBe('cards')
+    // ไม่ได้ใช้ → การ์ดยังอยู่มือ และ B ต้องเปิดเพิ่ม 1
+    expect(after.teams[1].hand).toContain('block')
+    expect(after.teams[1].pendingOpens).toBe(2)
+  })
+
+  it('โดน Attack 2 ใบ มี Block 2 ใบ → กันทั้งหมด (use:2) เสร็จแล้วค่อยเข้า phase ใช้ item', () => {
+    const settings = cardSettings({ teamNames: ['A', 'C', 'B'], startingHand: 3 })
+    // A และ C ต้องมี attack, B ต้องมี block 2 ใบ
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return (
+        st.teams[0].hand.includes('attack') &&
+        st.teams[1].hand.includes('attack') &&
+        st.teams[2].hand.filter((c) => c === 'block').length >= 2
+      )
+    })
+    const h = createGame(settings, seed)
+
+    // A โจมตี B → ไปตา C
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
+    expect(h.getState().currentTeamIndex).toBe(1)
+    // C โจมตี B → ถึงตา B → defending (โจมตีค้าง 2 ใบ)
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
+    expect(st.currentTeamIndex).toBe(2)
+    expect(st.teams[2].pendingAttacks).toHaveLength(2)
+    expect(st.phase).toBe('defending')
+
+    // กันทั้ง 2 ใบในครั้งเดียว → จบ เข้า phase ใช้ item ปกติ ไม่ต้องเปิดเพิ่ม
+    const after = h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: 2 })
+    expect(after.phase).toBe('cards')
+    expect(after.teams[2].pendingAttacks).toHaveLength(0)
+    expect(after.teams[2].hand).not.toContain('block')
+    expect(after.teams[2].pendingOpens).toBe(1)
+  })
+
+  it('โดน Attack 2 ใบ มี Block 2 ใบ → กันแค่ 1 (use:1) เพื่อเก็บ Block ไว้ → โดนไป 1', () => {
+    const settings = cardSettings({ teamNames: ['A', 'C', 'B'], startingHand: 3 })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return (
+        st.teams[0].hand.includes('attack') &&
+        st.teams[1].hand.includes('attack') &&
+        st.teams[2].hand.filter((c) => c === 'block').length >= 2
+      )
+    })
+    const h = createGame(settings, seed)
+
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
+    expect(h.getState().phase).toBe('defending')
+
+    // กันแค่ 1 ใบ → อีก 1 โดนไปโดยปริยาย (เก็บ Block ไว้ 1)
+    const after = h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: 1 })
+    expect(after.phase).toBe('cards')
+    expect(after.teams[2].pendingAttacks).toHaveLength(0)
+    expect(after.teams[2].hand.filter((c) => c === 'block')).toHaveLength(1)
+    expect(after.teams[2].pendingOpens).toBe(2) // โดนไป 1 ครั้ง → ต้องเปิดเพิ่ม 1
+  })
+
+  it('ส่ง use เกินจำนวนโจมตี/Block → กันได้เท่าที่มี (clamp)', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'] })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return st.teams[0].hand.includes('attack') && st.teams[1].hand.includes('block')
+    })
+    const h = createGame(settings, seed)
 
     h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
-    const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
-    expect(after.phase).not.toBe('blocking')
-    // ไม่ได้ใช้ → charge ยังอยู่ และ B ต้องเปิดเพิ่ม
-    expect(after.teams[1].blockCharges).toBe(1)
-    expect(after.teams[1].pendingOpens).toBeGreaterThan(1)
+    expect(h.getState().phase).toBe('defending')
+    const after = h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: 99 })
+    expect(after.phase).toBe('cards')
+    expect(after.teams[1].pendingAttacks).toHaveLength(0)
+    expect(after.teams[1].hand).not.toContain('block')
+    expect(after.teams[1].pendingOpens).toBe(1)
+  })
+
+  it('โดน Attack แต่ไม่มี Block → โดนโจมตีไปโดยปริยายตอนถึงตา (ไม่เข้า defending)', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'] })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return st.teams[0].hand.includes('attack') && !st.teams[1].hand.includes('block')
+    })
+    const h = createGame(settings, seed)
+
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(st.currentTeamIndex).toBe(1)
+    expect(st.phase).toBe('cards') // ไม่มี phase แก้โจมตี
+    expect(st.teams[1].pendingAttacks).toHaveLength(0)
+    expect(st.teams[1].pendingOpens).toBe(2) // โดนไปแล้ว ต้องเปิดเพิ่ม 1
   })
 
   it('FIX #23: Attack ใส่ทีมตัวเองไม่ได้ (การ์ดไม่หาย)', () => {
@@ -413,27 +495,37 @@ describe('Shuffle', () => {
 describe('Attack (7.3 transfer)', () => {
   it('A→B 2 ใบ แล้ว B ถ่ายโอน → C=4, B=1, turn จบทันที', () => {
     // ลำดับทีม A, C, B, D — ให้ B โดนโจมตี 2 ครั้งก่อนถึงตาตัวเอง
+    // D ต้องไม่มี Block ด้วย ไม่งั้นถึงตาจะเข้า defending แทน
     const settings = cardSettings({ teamNames: ['A', 'C', 'B', 'D'] })
     const seed = findSeed(settings, (h) => {
       const hands = h.getState().teams.map((t) => t.hand)
-      return hands[0].includes('attack') && hands[1].includes('attack') && hands[2].includes('attack')
+      return (
+        hands[0].includes('attack') &&
+        hands[1].includes('attack') &&
+        hands[2].includes('attack') &&
+        !hands[3].includes('block')
+      )
     })
     const h = createGame(settings, seed)
 
-    // A(0) โจมตี B(2)
+    // A(0) โจมตี B(2) — โดนคิวไว้ ยังไม่โดนจริง
     h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
-    expect(h.getState().teams[2].pendingOpens).toBe(2)
+    expect(h.getState().teams[2].pendingAttacks).toHaveLength(1)
+    expect(h.getState().teams[2].pendingOpens).toBe(1)
     expect(h.getState().currentTeamIndex).toBe(1) // ไป C
 
-    // C(1) โจมตี B(2)
-    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
-    expect(h.getState().teams[2].pendingOpens).toBe(3)
-    expect(h.getState().currentTeamIndex).toBe(2) // ไป B
+    // C(1) โจมตี B(2) → ถึงตา B ทันที — B ไม่มี Block (มือ 1 ใบ = attack) → โดนโดยปริยาย
+    const st2 = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '2' })
+    expect(st2.currentTeamIndex).toBe(2) // ไป B
+    expect(st2.phase).toBe('cards')
+    expect(st2.teams[2].pendingAttacks).toHaveLength(0)
+    expect(st2.teams[2].pendingOpens).toBe(3) // 1 + 2
 
     // B(2) ถ่ายโอนกองทั้งหมดใส่ D(3)
     h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '3' })
     const s = h.getState()
-    expect(s.teams[3].pendingOpens).toBe(4) // 1 + 2 + 1
+    // D โดนคิวโจมตี (โอนกอง 3) แต่ D ไม่มี Block → โดนไปเลยตอนถึงตา
+    expect(s.teams[3].pendingOpens).toBe(4) // 1 + 3
     expect(s.teams[2].pendingOpens).toBe(1) // กลับเป็นปกติ
     expect(s.currentTeamIndex).toBe(3) // turn จบทันที ไป D
     expect(s.phase).toBe('cards')
@@ -454,11 +546,22 @@ describe('smoke', () => {
       } else if (s.phase === 'blocking') {
         // FIX #25: ถูกถามว่าจะใช้ Block กันไหม — ต้องตอบ ไม่งั้นเกมค้างที่ phase นี้
         h.dispatch({ type: 'RESOLVE_BLOCK', use: Math.random() < 0.5 })
+      } else if (s.phase === 'defending') {
+        // โดนโจมตีค้างอยู่ถึงตา — เลือกสุ่มว่าจะกันกี่ใบ (0..จำนวนที่กันได้)
+        const cur = s.teams[s.currentTeamIndex]
+        const max = Math.min(
+          cur.pendingAttacks.length,
+          cur.hand.filter((c) => c === 'block').length,
+        )
+        h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: Math.floor(Math.random() * (max + 1)) })
       } else if (s.phase === 'cards') {
         const cur = s.teams[s.currentTeamIndex]
         if (cur.hand.length > 0 && !s.currentGlitched && !s.currentBlocked) {
           const card = cur.hand[0]
-          if (card === 'attack') {
+          if (card === 'block') {
+            // Block ใช้เล่นตรง ๆ ไม่ได้ — ต้องรอ effect จากทีมอื่น เปิดป้ายแทน
+            h.dispatch({ type: 'OPEN_CELL', cell: randomHidden(h) })
+          } else if (card === 'attack') {
             const targets = s.teams.filter((t) => t.alive && t.id !== cur.id)
             h.dispatch({ type: 'PLAY_CARD', card, targetTeamId: targets[0]?.id })
           } else if (card === 'scan') {
@@ -485,89 +588,75 @@ function randomHidden(h: GameHandle): number {
   }
   return hidden[Math.floor(Math.random() * hidden.length)] ?? s.rangeMin
 }
-// FIX_LISTS #10: Block ใช้ได้เมื่อมีทีมใดทีมหนึ่งใช้ item — ถามไล่ทีละทีมจนหมดคนที่ถือ Block
-// FIX_LISTS #15: Block ไม่ stack — กันได้ = จบเลย และกัน Block ด้วย Block ไม่ได้
-describe('FIX_LISTS #10/#15: คิวถาม Block', () => {
-  // A ใช้ attack ใส่ B, C ถือ Block ไว้ (ทีมที่สาม)
+// FIX_LISTS #10: Reverse/Shuffle กระทบทั้งวง → ถามไล่ทีละทีมจนหมดคนที่ถือ Block
+// (Attack ไม่เข้าคิวนี้แล้ว — โดนคิวไว้แล้วแก้ตอนเริ่มตาตัวเองผ่าน phase 'defending')
+// FIX_LISTS #15: Block ไม่ stack — กันได้ = จบเลย และใช้เล่นตรง ๆ ไม่ได้
+describe('FIX_LISTS #10/#15: คิวถาม Block (Reverse/Shuffle)', () => {
+  // A ใช้ shuffle, B และ C ถือการ์ด Block อยู่ในมือ
   function setupThreeTeams() {
     const settings = cardSettings({ teamNames: ['A', 'B', 'C'] })
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
-      return st.teams[0].hand.includes('attack') && st.teams[2].hand.includes('block')
+      return st.teams[0].hand.includes('shuffle') && st.teams[2].hand.includes('block')
     })
-    const h = createGame(settings, seed)
-    // ไปตา C แล้วกาง Block ไว้
-    endCurrentTurn(h) // A → B
-    endCurrentTurn(h) // B → C
-    expect(h.getState().currentTeamIndex).toBe(2)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    expect(h.getState().teams[2].blockCharges).toBe(1)
-    endCurrentTurn(h) // C → A
-    expect(h.getState().currentTeamIndex).toBe(0)
-    return h
+    return createGame(settings, seed)
   }
 
-  it('ทีมที่ 3 กัน Attack แทนทีมที่โดนได้ (ไม่ใช่แค่ทีมเป้าหมาย)', () => {
+  it('ทีมที่ 3 กัน Shuffle แทนทีมที่โดนได้ (ไม่ใช่แค่ทีมเป้าหมาย)', () => {
     const h = setupThreeTeams()
-    const pendingBefore = h.getState().teams[1].pendingOpens
+    const bombsBefore = secretMap(h)
 
-    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
     expect(st.phase).toBe('blocking')
     // B ไม่มี Block → คิวมีแต่ C
     expect(st.pendingBlock?.askQueue).toEqual(['2'])
 
     const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
     expect(after.phase).not.toBe('blocking')
-    expect(after.teams[2].blockCharges).toBe(0)
-    // กันได้ → B ไม่ต้องเปิดเพิ่ม
-    expect(after.teams[1].pendingOpens).toBe(pendingBefore)
+    expect(after.teams[2].hand).not.toContain('block') // C ใช้ Block ไปแล้ว
+    // กันได้ → ระเบิดไม่ย้าย
+    expect(secretMap(h)).toEqual(bombsBefore)
   })
 
-  it('ทีมในคิวตอบไม่กัน → effect ทำงาน และ charge ยังอยู่', () => {
+  it('ทีมในคิวตอบไม่กัน → effect ทำงาน และการ์ดยังอยู่มือ', () => {
     const h = setupThreeTeams()
-    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const bombsBefore = secretMap(h)
+    h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
     const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
     expect(after.phase).not.toBe('blocking')
-    expect(after.teams[2].blockCharges).toBe(1)
-    expect(after.teams[1].pendingOpens).toBeGreaterThan(1)
+    expect(after.teams[2].hand).toContain('block')
+    // กันไม่สำเร็จ → ระเบิดย้ายจริง
+    expect(secretMap(h)).not.toEqual(bombsBefore)
   })
 
   it('ทีมที่ใช้การ์ดเอง กัน effect ของตัวเองไม่ได้ (ไม่เข้าคิว)', () => {
-    // startingHand 3 เพราะต้องให้ A ถือ 2 ใบพร้อมกัน (attack + block)
+    // startingHand 3 เพราะต้องให้ A ถือ 2 ใบพร้อมกัน (shuffle + block)
     const settings = cardSettings({ teamNames: ['A', 'B'], startingHand: 3 })
-    // A ถือทั้ง attack และ block → A ต้องไม่ถูกถามให้กันการ์ดตัวเอง
+    // A ถือทั้ง shuffle และ block → A ต้องไม่ถูกถามให้กันการ์ดตัวเอง
     const seed = findSeed(settings, (h) => {
       const hand = h.getState().teams[0].hand
-      return hand.includes('attack') && hand.includes('block')
+      return hand.includes('shuffle') && hand.includes('block')
     })
     const h = createGame(settings, seed)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    expect(h.getState().teams[0].blockCharges).toBe(1)
 
-    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
     // B ไม่มี Block และ A กันตัวเองไม่ได้ → ไม่เข้า phase blocking เลย
     expect(st.phase).not.toBe('blocking')
-    expect(st.teams[1].pendingOpens).toBeGreaterThan(1)
   })
 
-  it('FIX_LISTS #15: ใช้การ์ด Block ไม่เปิด phase ถาม (กัน Block ซ้อน Block ไม่ได้)', () => {
+  it('FIX_LISTS #15: Block ใช้เล่นตรง ๆ ไม่ได้ (กัน Block ด้วย Block ไม่ได้)', () => {
     const settings = cardSettings({ teamNames: ['A', 'B'] })
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
       return st.teams[0].hand.includes('block') && st.teams[1].hand.includes('block')
     })
     const h = createGame(settings, seed)
-    // B กาง Block ไว้ก่อน
-    endCurrentTurn(h)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    expect(h.getState().teams[1].blockCharges).toBe(1)
-    endCurrentTurn(h)
 
-    // A ใช้ Block ของตัวเอง — B มี Block อยู่ แต่ต้องกันไม่ได้
+    // A พยายามใช้ Block ตรง ๆ — ใช้ไม่ได้ การ์ดไม่หาย และไม่เปิด phase ถาม
     const st = h.dispatch({ type: 'PLAY_CARD', card: 'block' })
     expect(st.phase).not.toBe('blocking')
-    expect(st.teams[0].blockCharges).toBe(1)
-    expect(st.teams[1].blockCharges).toBe(1)
+    expect(st.teams[0].hand).toContain('block')
+    expect(st.teams[1].hand).toContain('block')
   })
 })
 
@@ -599,40 +688,32 @@ describe('FIX_LISTS #16: realBombsRemaining ไม่รวม glitch', () => {
 describe('FIX_LISTS #10: ถามไล่ทีละทีมจนหมดคิว', () => {
   it('สองทีมถือ Block → ทีมแรกไม่กัน ต้องเด้งไปถามทีมที่สอง แล้วค่อย resolve', () => {
     const settings = cardSettings({ teamNames: ['A', 'B', 'C'], startingHand: 3 })
-    // A ต้องมี attack, B และ C ต้องมี block คนละใบ
+    // A ต้องมี shuffle, B และ C ต้องมี block คนละใบ
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
       return (
-        st.teams[0].hand.includes('attack') &&
+        st.teams[0].hand.includes('shuffle') &&
         st.teams[1].hand.includes('block') &&
         st.teams[2].hand.includes('block')
       )
     })
     const h = createGame(settings, seed)
 
-    endCurrentTurn(h) // A → B
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    endCurrentTurn(h) // B → C
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    endCurrentTurn(h) // C → A
-    expect(h.getState().currentTeamIndex).toBe(0)
-
-    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
     expect(st.phase).toBe('blocking')
-    // ทีมที่โดน effect (B) ได้ตอบก่อน แล้วต่อด้วย C
+    // ทีมที่โดน effect (B = ทีมถัดไป) ได้ตอบก่อน แล้วต่อด้วย C
     expect(st.pendingBlock?.askQueue).toEqual(['1', '2'])
 
     // B ไม่กัน → ยังอยู่ใน phase blocking แต่หัวคิวเลื่อนเป็น C
     const mid = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
     expect(mid.phase).toBe('blocking')
     expect(mid.pendingBlock?.askQueue).toEqual(['2'])
-    expect(mid.teams[1].blockCharges).toBe(1) // B ยังไม่เสียการ์ด
+    expect(mid.teams[1].hand).toContain('block') // B ยังไม่เสียการ์ด
 
     // C กันแทน → จบคิว effect ไม่ทำงาน
     const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
     expect(after.phase).not.toBe('blocking')
-    expect(after.teams[2].blockCharges).toBe(0)
-    expect(after.teams[1].pendingOpens).toBe(1) // B ไม่ต้องเปิดเพิ่ม
+    expect(after.teams[2].hand).not.toContain('block') // C ใช้ Block ไปแล้ว
   })
 
   it('ทุกทีมตอบไม่กัน → effect ทำงาน และไม่มีใครเสียการ์ด', () => {
@@ -640,27 +721,23 @@ describe('FIX_LISTS #10: ถามไล่ทีละทีมจนหมด�
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
       return (
-        st.teams[0].hand.includes('attack') &&
+        st.teams[0].hand.includes('shuffle') &&
         st.teams[1].hand.includes('block') &&
         st.teams[2].hand.includes('block')
       )
     })
     const h = createGame(settings, seed)
 
-    endCurrentTurn(h)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    endCurrentTurn(h)
-    h.dispatch({ type: 'PLAY_CARD', card: 'block' })
-    endCurrentTurn(h)
-
-    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const bombsBefore = secretMap(h)
+    h.dispatch({ type: 'PLAY_CARD', card: 'shuffle' })
     h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
     const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
 
     expect(after.phase).not.toBe('blocking')
     expect(after.pendingBlock).toBeNull()
-    expect(after.teams[1].blockCharges).toBe(1)
-    expect(after.teams[2].blockCharges).toBe(1)
-    expect(after.teams[1].pendingOpens).toBeGreaterThan(1) // effect ทำงานจริง
+    expect(after.teams[1].hand).toContain('block')
+    expect(after.teams[2].hand).toContain('block')
+    // กันไม่สำเร็จ → ระเบิดย้ายจริง
+    expect(secretMap(h)).not.toEqual(bombsBefore)
   })
 })
