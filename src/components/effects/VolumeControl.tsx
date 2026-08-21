@@ -62,7 +62,7 @@ export function VolumeControl() {
               apply(volume + (e.deltaY < 0 ? 5 : -5))
             }}
             aria-label="ระดับเสียง Effect"
-            className="h-2 min-w-0 flex-1 accent-[var(--primary)]"
+            className="h-2 min-w-0 flex-1 accent-primary"
           />
           <span className="w-12 shrink-0 text-right font-mono text-sm font-bold">{volume}%</span>
         </div>
