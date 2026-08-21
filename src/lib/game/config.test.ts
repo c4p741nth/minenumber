@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'bun:test'
-import { LIMITS, defaultTeamNames, maxScanRadiusFor, suggestedScanRadius } from './config'
+import {
+  LIMITS,
+  autoCellsFor,
+  bombQuota,
+  defaultTeamNames,
+  maxScanRadiusFor,
+  minCellsFor,
+  suggestedScanRadius,
+} from './config'
 
 describe('defaultTeamNames', () => {
   it('ชื่อทีม default เป็นตัวเลข ทีม 1, ทีม 2, …', () => {
@@ -32,5 +40,37 @@ describe('scan radius adapt (W6.2)', () => {
     for (const cells of [10, 60, 200]) {
       expect(suggestedScanRadius(cells)).toBeLessThanOrEqual(maxScanRadiusFor(cells))
     }
+  })
+})
+// ── FIX_LISTS #1/#2/#15: จำนวนช่องอัตโนมัติ + ช่องขั้นต่ำ ────────────────────
+describe('FIX_LISTS #1: autoCellsFor', () => {
+  it('8 ทีม (ระเบิดจริง 7) + glitch 1 + การ์ด 10 → 18 ช่อง', () => {
+    expect(bombQuota(8)).toBe(7)
+    expect(autoCellsFor(7, 1, 10)).toBe(18)
+  })
+
+  it('ไม่มี glitch/ไม่เปิดการ์ด → เท่าจำนวนระเบิดจริง', () => {
+    expect(autoCellsFor(7, 0, 0)).toBe(7)
+  })
+
+  it('อย่างน้อย 1 ช่องเสมอ (2 ทีมแต่ปิดทุกอย่าง)', () => {
+    expect(autoCellsFor(0, 0, 0)).toBe(1)
+  })
+})
+
+describe('FIX_LISTS #2/#15: ตั้งช่องให้เท่ากับจำนวนระเบิดได้', () => {
+  it('ช่องขั้นต่ำ = จำนวนระเบิดจริง ไม่ใช่จำนวนทีม', () => {
+    // 8 ทีม → ระเบิดจริง 7 → ตั้ง 7 ช่องได้ (เดิมบังคับ 8)
+    expect(minCellsFor(8)).toBe(7)
+    expect(minCellsFor(2)).toBe(1)
+  })
+
+  it('ช่อง = ระเบิดจริง → โอกาสโดนระเบิด 100% (บังคับเข้า cut wire)', () => {
+    const teams = 8
+    const bombs = bombQuota(teams)
+    const cells = minCellsFor(teams)
+    expect(cells).toBe(bombs)
+    // ทุกช่องเป็นระเบิด → เปิดช่องไหนก็เจอ
+    expect(bombs / cells).toBe(1)
   })
 })

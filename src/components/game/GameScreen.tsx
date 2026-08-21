@@ -7,7 +7,6 @@ import { BlockPrompt } from '@/components/defuse/BlockPrompt'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
-import { MusicPlayer } from '@/components/effects/MusicPlayer'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
 import { hitChance } from '@/lib/game/balance'
@@ -16,9 +15,9 @@ import { BombMark } from '@/components/setup/SetupScreen'
 import { useGame } from './GameProvider'
 
 interface Props {
-  onRestart: () => void
+  // FIX_LISTS #8: จบเกมเหลือปุ่ม "กลับไปหน้าหลัก" ปุ่มเดียว → ไม่ต้องมี
+  // onRestart/onLeaderboard อีกแล้ว
   onExit: () => void
-  onLeaderboard: () => void
 }
 
 interface ScanInfo {
@@ -27,7 +26,7 @@ interface ScanInfo {
   found: boolean
 }
 
-export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
+export function GameScreen({ onExit }: Props) {
   const { state, dispatch } = useGame()
   const current = state.teams[state.currentTeamIndex]
   const [typed, setTyped] = useState('')
@@ -107,7 +106,7 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
   // FIX #26: ใช้ layout ความกว้างคงที่ ไม่ place-content-center
   // (เดิมจอ "ดิ้น" เพราะ content จัดกลางแล้วขนาดเปลี่ยนทุกครั้งที่เปลี่ยนทีม/เปิดช่อง)
   return (
-    <div className="min-h-screen w-full p-4">
+    <div className="min-h-screen w-full p-2 sm:p-4">
       <GameHeader onExit={endGame} />
       <div className="mx-auto grid w-full max-w-375 items-start gap-4 pb-44 lg:grid-cols-[240px_1fr_300px]">
         <TeamList />
@@ -162,12 +161,9 @@ export function GameScreen({ onRestart, onExit, onLeaderboard }: Props) {
       </div>
       {state.phase === 'defusing' && <DefuseModal />}
       {state.phase === 'blocking' && <BlockPrompt />}
-      {state.phase === 'gameover' && (
-        <GameOverScreen onRestart={onRestart} onExit={onExit} onLeaderboard={onLeaderboard} />
-      )}
+      {state.phase === 'gameover' && <GameOverScreen onExit={onExit} />}
       <Hand locked={!cardMode} />
       <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
-        <MusicPlayer />
         <MuteButton />
       </div>
       {/* FIX #16: พิมพ์เลขแล้วต้องกด Enter ยืนยัน — ไม่เปิดให้อัตโนมัติ กันลั่นกดผิดช่อง */}
@@ -204,7 +200,7 @@ function GameHeader({ onExit }: { onExit: () => void }) {
         title="จบเกมนี้ / ออกจากห้อง"
         aria-label="จบเกมนี้ / ออกจากห้อง"
         className={
-          'ml-auto mr-28 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 ' +
+          'ml-auto mr-24 flex shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 sm:mr-28 ' +
           'text-sm font-bold text-destructive shadow transition hover:border-destructive'
         }
       >

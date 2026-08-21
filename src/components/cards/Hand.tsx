@@ -99,7 +99,8 @@ export function Hand({ locked = false }: HandProps) {
       {/* ใบที่เปิดอยู่ — เลือกใช้/ทิ้ง หรือเลือกเป้า */}
       {revealedCard && (
         <div
-          className={`flex flex-wrap items-center gap-3 rounded-xl border-2 p-3 shadow-2xl ${CARD_COLORS[revealedCard]}`}
+          // FIX_LISTS #10: จอแคบ — การ์ดที่เปิดอยู่ต้องไม่ล้นขอบจอ
+          className={`mx-2 flex max-w-[calc(100vw-1rem)] flex-wrap items-center gap-3 rounded-xl border-2 p-3 shadow-2xl ${CARD_COLORS[revealedCard]}`}
         >
           <span className="text-3xl leading-none">{CARD_META[revealedCard].emoji}</span>
           <div className="min-w-0">

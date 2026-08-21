@@ -20,15 +20,14 @@ export const LIMITS = {
   maxHandSizeCap: 7,
   maxStartingHand: 5,
   maxGlitchCount: 999,
-  // ช่องขั้นต่ำ = จำนวนทีม (FIX #4) — น้อยกว่าจำนวนทีมคือเล่นไม่ได้จริง ๆ
-  // (เดิม × 4 ไม่มีที่มา) ใช้เป็นทั้งตัวบล็อกปุ่มเริ่มเกมและค่าขั้นต่ำของช่อง
-  minCellsPerTeam: 1,
 } as const
 
-// ช่องขั้นต่ำที่เล่นได้ = จำนวนทีม (FIX #3, #4)
-// ต่ำกว่านี้เริ่มเกมไม่ได้ — เพิ่มได้ไม่จำกัด
+// ช่องขั้นต่ำที่เล่นได้ = จำนวนระเบิดจริง (FIX_LISTS #2/#15)
+// เดิมบังคับ ≥ จำนวนทีม ทำให้ตั้งช่อง = จำนวนระเบิดไม่ได้ ทั้งที่เป็นกรณีที่ต้องการจริง:
+// ช่อง = ระเบิดจริง → โอกาสโดน 100% → บังคับเข้า cut wire ตั้งแต่ตาแรก
+// ต่ำกว่านี้คือมีระเบิดมากกว่าช่อง วางไม่ลงจริง ๆ
 export function minCellsFor(teamCount: number): number {
-  return teamCount * LIMITS.minCellsPerTeam
+  return Math.max(bombQuota(teamCount), LIMITS.minRange)
 }
 
 export const DEFAULTS = {
@@ -46,8 +45,7 @@ export const DEFAULTS = {
   scanRadius: 3,
   shrinkingEnabled: false,
   defuseSeconds: 15,
-  musicUrl: '',
-  musicVolume: 30,
+  sfxVolume: 80, // FIX_LISTS #9
 } as const
 
 // น้ำหนักสุ่มการ์ด — น้ำหนักรวม 100
@@ -116,7 +114,13 @@ export function defaultSettings(): GameSettings {
     scanRadius: DEFAULTS.scanRadius,
     shrinkingEnabled: DEFAULTS.shrinkingEnabled,
     defuseSeconds: DEFAULTS.defuseSeconds,
-    musicUrl: DEFAULTS.musicUrl,
-    musicVolume: DEFAULTS.musicVolume,
+    sfxVolume: DEFAULTS.sfxVolume,
   }
+}
+
+// FIX_LISTS #1: ช่องเริ่มต้นอัตโนมัติ = ระเบิดจริง + glitch bomb + การ์ดในสำรับ
+// เช่น 8 ทีม (ระเบิดจริง 7) + glitch 1 + การ์ด 10 ใบ → 18 ช่อง
+// ⚠️ ตัวเลขนี้เป็นแค่ "ค่าเริ่มต้น" — ผู้ใช้ลดลงเหลือเท่าจำนวนระเบิดจริงได้ (#2/#15)
+export function autoCellsFor(realBombs: number, glitchBombs: number, deckSize: number): number {
+  return Math.max(realBombs + glitchBombs + deckSize, 1)
 }

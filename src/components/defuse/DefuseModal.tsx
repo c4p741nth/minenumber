@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
 
-type Stage = 'choosing' | 'cutting' | 'result'
+// FIX_LISTS #3: 'exploded' = ตัดไม่ทันเวลา → ระเบิดทันที (ข้าม stage 'cutting')
+type Stage = 'choosing' | 'cutting' | 'result' | 'exploded'
 type Wire = 'red' | 'blue'
 
 const SUSPENSE_MS = 2500
@@ -18,6 +19,8 @@ export function DefuseModal() {
 
   const current = state.teams[state.currentTeamIndex]
   const survived = state.lastResult?.kind === 'real' ? state.lastResult.survived : false
+  // FIX_LISTS #3: จอแดง/สั่น ทั้งตอนตัดพลาดและตอนตัดไม่ทันเวลา
+  const boom = stage === 'exploded' || (stage === 'result' && !survived)
 
   // FIX #27: นับถอยหลังตอนเลือกสาย (ตั้งค่าได้ 0 = ไม่จับเวลา)
   const limit = state.settings.defuseSeconds
@@ -31,10 +34,10 @@ export function DefuseModal() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  // เสียง tick วนตอนช่วงลุ้น (ตัดสาย)
+  // FIX_LISTS #5: เสียง bomb timer ดังทุก 1 วินาทีตอนช่วงลุ้น (ตัดสาย)
   useEffect(() => {
     if (stage !== 'cutting') return
-    const t = window.setInterval(() => sfx.tick(), 1000)
+    const t = window.setInterval(() => sfx.bombTimer(), 1000)
     return () => window.clearInterval(t)
   }, [stage])
 
@@ -46,33 +49,46 @@ export function DefuseModal() {
     if (survived) sfx.defuseSuccess()
   }, [stage, survived])
 
+  // FIX_LISTS #3/#4: หมดเวลา = ระเบิดทันที และเสียงระเบิดต้องมาตอนตัวนับเวลาหมด
+  // (ไม่รอ GameEffects ที่ยิงตอน state ทีมตกรอบ ซึ่งช้ากว่าเพราะรอ dispatch)
+  useEffect(() => {
+    if (stage !== 'exploded') return
+    sfx.explosion()
+  }, [stage])
+
   function choose(color: Wire) {
     if (stage !== 'choosing') return
     setChosen(color)
+    sfx.wireCut() // FIX_LISTS #6
     setStage('cutting')
     window.setTimeout(() => setStage('result'), SUSPENSE_MS)
   }
 
-  // FIX #27: นับถอยหลัง + เสียง tick ทุกวินาทีระหว่างเลือกสาย
-  // หมดเวลา → ถือว่าตัดสายที่ระบบสุ่มให้ (ผลถูกตัดสินไว้แล้วตั้งแต่ OPEN_CELL อยู่ดี)
+  // FIX #27 + FIX_LISTS #3/#5: นับถอยหลัง + เสียง bomb timer ทุกวินาทีระหว่างเลือกสาย
+  // หมดเวลา → ระเบิดทันที (เดิมตัดสายให้อัตโนมัติ ทำให้ยังมีโอกาสรอด 50%)
   useEffect(() => {
     if (stage !== 'choosing' || limit <= 0) return
     if (left <= 0) {
-      choose('red')
+      setStage('exploded')
       return
     }
-    sfx.tick()
+    sfx.bombTimer()
     const t = window.setTimeout(() => setLeft((n) => n - 1), 1000)
     return () => window.clearTimeout(t)
   }, [stage, left, limit])
 
   function acknowledge() {
+    // FIX_LISTS #3: ตัดไม่ทัน → ระเบิดทันที ไม่ใช่ผลที่สุ่มไว้ตอน OPEN_CELL
+    if (stage === 'exploded') {
+      dispatch({ type: 'DEFUSE_TIMEOUT' })
+      return
+    }
     dispatch({ type: 'CHOOSE_WIRE', wire: chosen ?? 'red' })
   }
 
   // Space ยืนยันตอนเฉลยผล
   useEffect(() => {
-    if (stage !== 'result') return
+    if (stage !== 'result' && stage !== 'exploded') return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         e.preventDefault()
@@ -85,24 +101,24 @@ export function DefuseModal() {
 
   return (
     <div
-      className={`defuse-vignette ${stage === 'result' && !survived ? 'defuse-shake' : ''}`}
+      className={`defuse-vignette ${boom ? 'defuse-shake' : ''}`}
       role="dialog"
       aria-modal="true"
     >
-      {stage === 'result' && !survived && <div className="defuse-flash pointer-events-none fixed inset-0 bg-red-700" />}
+      {boom && <div className="defuse-flash pointer-events-none fixed inset-0 bg-red-700" />}
 
-      <div className="relative flex w-full max-w-3xl flex-col items-center gap-6 text-center text-white">
+      <div className="relative flex w-full max-w-3xl flex-col items-center gap-4 px-4 text-center text-white sm:gap-6">
         {stage === 'result' && survived && <Confetti disabled={reducedMotion} />}
 
         {stage === 'choosing' && (
           <>
             <p className="section-label text-red-300">ระเบิดจริง!</p>
-            <h2 className="font-serif text-6xl font-bold">ตัดสาย</h2>
-            <p className="text-xl text-white/70">{current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด</p>
+            <h2 className="font-serif text-4xl font-bold sm:text-6xl">ตัดสาย</h2>
+            <p className="text-base text-white/70 sm:text-xl">{current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด</p>
             {/* FIX #27: นับถอยหลัง */}
             {limit > 0 && (
               <p
-                className={`font-mono text-6xl font-black ${
+                className={`font-mono text-5xl font-black sm:text-6xl ${
                   left <= 5 ? 'text-red-400 timer-urgent' : 'text-white'
                 }`}
                 aria-live="polite"
@@ -115,28 +131,36 @@ export function DefuseModal() {
 
         {stage === 'cutting' && (
           <>
-            <h2 className="font-serif text-6xl font-bold">กำลังตัดสาย…</h2>
-            <p className="text-xl text-white/70">ลุ้นเลย</p>
+            <h2 className="font-serif text-4xl font-bold sm:text-6xl">กำลังตัดสาย…</h2>
+            <p className="text-base text-white/70 sm:text-xl">ลุ้นเลย</p>
           </>
         )}
 
         {stage === 'result' && survived && (
           <>
-            <h2 className="font-serif text-6xl font-bold text-emerald-300">กู้สำเร็จ!</h2>
-            <p className="text-2xl">ระเบิดย้ายไปที่อื่นแล้ว</p>
+            <h2 className="font-serif text-4xl font-bold text-emerald-300 sm:text-6xl">กู้สำเร็จ!</h2>
+            <p className="text-lg sm:text-2xl">ระเบิดย้ายไปที่อื่นแล้ว</p>
           </>
         )}
 
         {stage === 'result' && !survived && (
           <>
-            <h2 className="font-serif text-6xl font-bold text-red-400">ระเบิด!</h2>
-            <p className="text-2xl">{current.name} ตกรอบ</p>
+            <h2 className="font-serif text-4xl font-bold text-red-400 sm:text-6xl">ระเบิด!</h2>
+            <p className="text-lg sm:text-2xl">{current.name} ตกรอบ</p>
+          </>
+        )}
+
+        {/* FIX_LISTS #3: ตัดสายไม่ทันเวลา */}
+        {stage === 'exploded' && (
+          <>
+            <h2 className="font-serif text-4xl font-bold text-red-400 sm:text-6xl">หมดเวลา — ระเบิด!</h2>
+            <p className="text-lg sm:text-2xl">{current.name} ตัดสายไม่ทัน ตกรอบ</p>
           </>
         )}
 
         <Wires chosen={chosen} stage={stage} onChoose={choose} />
 
-        {stage === 'result' && (
+        {(stage === 'result' || stage === 'exploded') && (
           <button onClick={acknowledge} className="primary-button mt-2 text-2xl">
             รับทราบ
           </button>
@@ -167,7 +191,7 @@ function Wires({
         } ${disabled && !picked ? 'opacity-60' : ''}`}
         aria-label={`ตัดสาย${color === 'red' ? 'แดง' : 'น้ำเงิน'}`}
       >
-        <svg viewBox="0 0 120 220" className="h-56 w-28">
+        <svg viewBox="0 0 120 220" className="h-36 w-20 sm:h-56 sm:w-28">
           <path d={d} stroke={stroke} strokeWidth="10" fill="none" strokeLinecap="round" />
           {picked && stage === 'cutting' && (
             <text x="60" y="120" textAnchor="middle" className="text-3xl">
@@ -176,7 +200,7 @@ function Wires({
           )}
         </svg>
         <span
-          className={`mt-2 grid h-16 w-16 place-items-center rounded-full text-3xl ${
+          className={`mt-2 grid h-12 w-12 place-items-center rounded-full text-2xl sm:h-16 sm:w-16 sm:text-3xl ${
             color === 'red' ? 'bg-red-600' : 'bg-blue-600'
           }`}
         >
@@ -187,7 +211,7 @@ function Wires({
   }
 
   return (
-    <div className="flex items-end justify-center gap-16">
+    <div className="flex items-end justify-center gap-8 sm:gap-16">
       {wire('red', 'M 30 10 C 30 90, 60 140, 60 200', '#dc2626')}
       {wire('blue', 'M 90 10 C 90 90, 60 140, 60 200', '#2563eb')}
     </div>

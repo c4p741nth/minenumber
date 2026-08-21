@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import {
   LIMITS,
+  autoCellsFor,
   bombQuota,
   defaultTeamNames,
   glitchCountFor,
@@ -14,7 +15,6 @@ import { createRng, randomSeed, shuffle } from '@/lib/game/rng'
 import type { GameSettings } from '@/lib/game/types'
 import { RulesPanel } from './RulesPanel'
 import { confirmDialog } from '@/components/ui/alert'
-import { parseYouTubeId } from '@/lib/audio/music'
 import { CARD_DECK_SIZE } from '@/lib/game/cards'
 
 interface Props {
@@ -43,6 +43,9 @@ function fixInput(
 export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [names, setNames] = useState<string[]>(initial.teamNames)
   const [cellsInput, setCellsInput] = useState(String(initial.rangeMax))
+  // FIX_LISTS #1: ช่องเดินตามสูตรอัตโนมัติ (ระเบิดจริง + glitch + การ์ด) จนกว่าผู้ใช้จะพิมพ์เอง
+  // พอแก้เองแล้วหยุดตาม — ไม่งั้นค่าที่ตั้งใจ (เช่น ช่อง = ระเบิด #2/#15) จะโดนเขียนทับ
+  const [cellsTouched, setCellsTouched] = useState(false)
   const [turnInput, setTurnInput] = useState(String(initial.turnSeconds))
   const [glitchEnabled, setGlitchEnabled] = useState(initial.glitchEnabled)
   const [glitchMode, setGlitchMode] = useState<'auto' | 'manual'>(initial.glitchMode)
@@ -54,8 +57,8 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [startingHandInput, setStartingHandInput] = useState(String(initial.startingHand))
   const [scanRadiusInput, setScanRadiusInput] = useState(String(initial.scanRadius))
   const [shrinkingEnabled, setShrinkingEnabled] = useState(initial.shrinkingEnabled)
-  const [musicUrlInput, setMusicUrlInput] = useState(initial.musicUrl)
-  const [musicVolumeInput, setMusicVolumeInput] = useState(String(initial.musicVolume))
+  // FIX_LISTS #9: เอา YouTube link ออก — เหลือระดับเสียง effect อย่างเดียว
+  const [sfxVolumeInput, setSfxVolumeInput] = useState(String(initial.sfxVolume))
   const [defuseSecondsInput, setDefuseSecondsInput] = useState(String(initial.defuseSeconds))
   const [countInput, setCountInput] = useState(String(names.length))
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -64,10 +67,24 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
 
   // ค่าที่เอาไปใช้จริง — ว่าง = ใช้ค่าต่ำสุด (แต่ไม่ดีดค่าใน input ระหว่างพิมพ์)
   const teams = names.length
-  const cells = clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange)
-  const scanR = clampInt(Number(scanRadiusInput), LIMITS.minScanRadius, maxScanRadiusFor(cells))
   const quota = bombQuota(teams)
   const glitchRatio = clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio)
+  const deckSize = cardsEnabled ? CARD_DECK_SIZE : 0
+  // FIX_LISTS #1: ขนาดกระดานอัตโนมัติ — clamp glitch กับกระดานอัตโนมัติเอง
+  // (ถ้า clamp กับ `cells` จะวนเป็นงูกินหาง เพราะ cells ก็มาจาก glitch)
+  const autoGlitch = glitchEnabled
+    ? glitchCountFor(quota, quota + LIMITS.maxGlitchCount, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
+    : 0
+  const autoCells = clampInt(
+    autoCellsFor(quota, autoGlitch, deckSize),
+    minCellsFor(teams),
+    LIMITS.maxRange,
+  )
+  const cells = cellsTouched
+    ? clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange)
+    : autoCells
+  const scanR = clampInt(Number(scanRadiusInput), LIMITS.minScanRadius, maxScanRadiusFor(cells))
+  // glitch ที่ลงกระดานจริง — clamp กับจำนวนช่องที่ใช้จริง
   const glitchCount = glitchEnabled
     ? glitchCountFor(quota, cells, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
     : 0
@@ -77,7 +94,6 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const suggestion = suggestRange(teams)
   const minCells = minCellsFor(teams)
   const canStart = cells >= minCells
-  const musicId = musicUrlInput.trim() === '' ? null : parseYouTubeId(musicUrlInput)
 
   function isDefaultName(name: string, index: number): boolean {
     return name.trim() === `ทีม ${index + 1}`
@@ -130,7 +146,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
     onStart({
       teamNames: names.map((n, i) => n.trim() || `ทีม ${i + 1}`),
       rangeMin: 1, // W1.1: เลขเริ่มต้นคือ 1 เสมอ → ล็อกตายตัว
-      rangeMax: clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange),
+      rangeMax: cells, // FIX_LISTS #1: ค่าอัตโนมัติ หรือค่าที่ผู้ใช้ตั้งเอง
       turnSeconds: clampInt(Number(turnInput), 0, LIMITS.maxTurnSeconds),
       glitchEnabled,
       glitchMode,
@@ -148,8 +164,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       ),
       shrinkingEnabled,
       defuseSeconds: clampInt(Number(defuseSecondsInput), 0, LIMITS.maxDefuseSeconds),
-      musicUrl: musicUrlInput.trim(),
-      musicVolume: clampInt(Number(musicVolumeInput), 0, 100),
+      sfxVolume: clampInt(Number(sfxVolumeInput), 0, 100),
     })
   }
 
@@ -169,7 +184,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   )
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-6 py-8">
+    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6 sm:py-8">
       <header className="flex items-center gap-3 pb-6">
         <BombMark />
         <div>
@@ -263,26 +278,39 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                 ช่อง
                 <input
                   type="number"
-                  value={cellsInput}
-                  min={LIMITS.minRange}
+                  value={cellsTouched ? cellsInput : String(autoCells)}
+                  min={minCells}
                   max={LIMITS.maxRange}
-                  onChange={(e) => setCellsInput(e.target.value)}
+                  onChange={(e) => {
+                    setCellsTouched(true)
+                    setCellsInput(e.target.value)
+                  }}
                   onBlur={() =>
-                    fixInput(cellsInput, LIMITS.minRange, LIMITS.maxRange, LIMITS.minRange, setCellsInput)
+                    cellsTouched &&
+                    fixInput(cellsInput, minCells, LIMITS.maxRange, autoCells, setCellsInput)
                   }
                   className="control w-24 text-lg font-bold"
                 />
               </label>
               <span className="text-sm font-normal text-muted-foreground">
-                ขั้นต่ำ {minCells} ({teams} ทีม)
+                ขั้นต่ำ {minCells} (= ระเบิดจริง)
               </span>
+              {/* FIX_LISTS #1: กลับไปใช้ค่าอัตโนมัติ (ระเบิดจริง + glitch + การ์ด) */}
+              {cellsTouched && cells !== autoCells && (
+                <button
+                  onClick={() => setCellsTouched(false)}
+                  className="rounded-lg border border-border px-3 py-1 text-sm font-bold"
+                >
+                  auto ({autoCells})
+                </button>
+              )}
             </div>
           </div>
 
           <div className="rounded-xl border border-border bg-background p-4">
             <h3 className="mb-3 text-lg font-bold">รายละเอียดห้อง</h3>
             {/* FIX #11: แทนคำอธิบายยาว ๆ ด้วยตัวเลขจริง 3 ตัว (เดิมอยู่แถบล่าง) */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
               <RoomStat label="ระเบิดจริง" value={quota} valueClass="text-destructive" />
               <RoomStat
                 label="Glitch bomb"
@@ -297,7 +325,10 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
               </span>
               {/* FIX #1: ปุ่มแนะนำโชว์เฉพาะเลขช่อง ไม่ต้องมี "1–" */}
               <button
-                onClick={() => setCellsInput(String(suggestion.max))}
+                onClick={() => {
+                  setCellsTouched(true)
+                  setCellsInput(String(suggestion.max))
+                }}
                 className="rounded-lg border border-primary px-3 py-1 text-sm font-bold text-primary"
               >
                 ใช้ค่าแนะนำ {suggestion.max}
@@ -347,7 +378,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
             </div>
             {!canStart && (
               <p className="mt-2 text-center text-sm font-semibold text-destructive">
-                ช่องน้อยไป: ต้องมีอย่างน้อยเท่ากับจำนวนทีม = {minCells} ช่อง (ตอนนี้ {cells})
+                ช่องน้อยไป: ต้องมีอย่างน้อยเท่ากับจำนวนระเบิดจริง = {minCells} ช่อง (ตอนนี้ {cells})
               </p>
             )}
           </div>
@@ -362,16 +393,17 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/70" />
-          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 flex h-[min(85vh,640px)] w-[min(100%,880px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+          {/* FIX_LISTS #10: มือถือ — เรียงบนล่าง (เมนูเป็นแถบเลื่อนแนวนอน), จอใหญ่ค่อยเป็น sidebar */}
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 flex h-[min(90vh,640px)] w-[min(100%-1.5rem,880px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:flex-row">
             {/* Sidebar เมนูหมวด */}
-            <nav className="flex w-44 shrink-0 flex-col gap-1 border-r border-border bg-background p-3">
-              <p className="section-label mb-2 px-2">ตั้งค่าเพิ่มเติม</p>
+            <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-background p-3 sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-r sm:border-b-0">
+              <p className="section-label mb-2 hidden px-2 sm:block">ตั้งค่าเพิ่มเติม</p>
               {SETTINGS_TABS.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setSettingsTab(t.id)}
                   className={
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-left text-base font-bold transition ' +
+                    'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-base font-bold transition ' +
                     (settingsTab === t.id
                       ? 'bg-primary text-primary-foreground'
                       : 'hover:bg-secondary')
@@ -397,7 +429,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                 ✕
               </Dialog.Close>
 
-              <div className="min-h-0 flex-1 overflow-y-auto p-6 pr-14">
+              <div className="min-h-0 flex-1 overflow-y-auto p-4 pr-14 sm:p-6 sm:pr-14">
                 <Dialog.Title className="font-serif text-2xl font-bold">
                   {SETTINGS_TABS.find((t) => t.id === settingsTab)?.label}
                 </Dialog.Title>
@@ -582,7 +614,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                     />
                     <NumberField
                       label="เวลาตัดสายระเบิด"
-                      hint="เวลานับถอยหลังตอนตัดสาย มีเสียง tick ทุกวินาที (ตั้ง 0 = ไม่จับเวลา)"
+                      hint="เวลานับถอยหลังตอนตัดสาย มีเสียงนับทุกวินาที — ตัดไม่ทันคือระเบิดทันที (ตั้ง 0 = ไม่จับเวลา)"
                       value={defuseSecondsInput}
                       onChange={setDefuseSecondsInput}
                       min={0}
@@ -601,11 +633,8 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
 
                 {settingsTab === 'music' && (
                   <MusicSettings
-                    musicUrlInput={musicUrlInput}
-                    setMusicUrlInput={setMusicUrlInput}
-                    musicVolumeInput={musicVolumeInput}
-                    setMusicVolumeInput={setMusicVolumeInput}
-                    musicId={musicId}
+                    sfxVolumeInput={sfxVolumeInput}
+                    setSfxVolumeInput={setSfxVolumeInput}
                   />
                 )}
               </div>
@@ -702,7 +731,7 @@ const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: strin
   { id: 'bomb', label: 'ระเบิด', icon: '💣' },
   { id: 'cards', label: 'การ์ด', icon: '🃏' },
   { id: 'play', label: 'การเล่น', icon: '🎮' },
-  { id: 'music', label: 'เสียง & เพลง', icon: '🎵' },
+  { id: 'music', label: 'เสียง', icon: '🎵' },
 ]
 
 // FIX #14: โลโก้เกม — ระเบิด + ชุดตัวเลข
@@ -733,48 +762,22 @@ function RoomStat({
   )
 }
 
-// FIX #7: ตั้งค่าเพลง/เสียง — ใช้ซ้ำได้ทั้งหน้าตั้งค่าและตอนเล่นเกม
+// FIX #7 + FIX_LISTS #9: ตั้งค่าเสียง — YouTube link ถูกถอดออกแล้ว
+// เหลือระดับเสียง effect ของเกมอย่างเดียว
 export function MusicSettings({
-  musicUrlInput,
-  setMusicUrlInput,
-  musicVolumeInput,
-  setMusicVolumeInput,
-  musicId,
+  sfxVolumeInput,
+  setSfxVolumeInput,
 }: {
-  musicUrlInput: string
-  setMusicUrlInput: (v: string) => void
-  musicVolumeInput: string
-  setMusicVolumeInput: (v: string) => void
-  musicId: string | null
+  sfxVolumeInput: string
+  setSfxVolumeInput: (v: string) => void
 }) {
   return (
     <div className="flex flex-col gap-5">
-      <label className="block">
-        <span className="mb-1 block text-base font-semibold">URL เพลง (ไม่บังคับ)</span>
-        <input
-          type="url"
-          value={musicUrlInput}
-          onChange={(e) => setMusicUrlInput(e.target.value)}
-          placeholder="https://www.youtube.com/watch?v=…"
-          className="control w-full font-mono text-base"
-        />
-        <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-          ว่าง = ไม่เปิดเพลง รองรับ watch?v= / youtu.be / playlist?list= / shorts / ID 11 ตัว
-          {musicUrlInput.trim() !== '' &&
-            (musicId ? (
-              <span className="ml-2 font-bold text-emerald-600 dark:text-emerald-400">
-                ✓ ใช้ได้{musicId.length > 11 ? ' (เพลย์ลิสต์)' : ''}
-              </span>
-            ) : (
-              <span className="ml-2 font-bold text-destructive">✗ URL ใช้ไม่ได้</span>
-            ))}
-        </span>
-      </label>
       <VolumeField
-        label="ระดับเสียงเพลง"
-        hint="เสียงเพลงพื้นหลัง แยกจากเสียง effect ของเกม — ลากแถบ หมุนลูกกลิ้งเมาส์ หรือกรอกตัวเลข 0–100"
-        value={musicVolumeInput}
-        onChange={setMusicVolumeInput}
+        label="ระดับเสียง effect"
+        hint="เสียงระเบิด ตัดสาย จั่วการ์ด ฯลฯ — ลากแถบ หมุนลูกกลิ้งเมาส์ หรือกรอกตัวเลข 0–100"
+        value={sfxVolumeInput}
+        onChange={setSfxVolumeInput}
       />
     </div>
   )

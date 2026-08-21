@@ -5,19 +5,28 @@ import { CARD_LABELS } from '@/lib/game/cards'
 import { computeRankings, MEDAL_EMOJI, type RankedTeam } from '@/lib/game/ranking'
 import { appendGameLog } from '@/lib/storage/gamelog'
 import { appendMatch, totalCardsPlayed } from '@/lib/storage/leaderboard'
+import { sfx } from '@/lib/audio/sfx'
+import { USER_ENDED_LOG } from '@/lib/game/engine'
 import type { CardType, Team } from '@/lib/game/types'
 
 interface Props {
-  onRestart: () => void
+  // FIX_LISTS #8: จบเกมแล้วเหลือปุ่มเดียว — ไม่ต้องมี onRestart/onLeaderboard อีก
   onExit: () => void
-  onLeaderboard: () => void
 }
 
-export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
+export function GameOverScreen({ onExit }: Props) {
   const { state } = useGame()
   const { rankings, isDraw, noWinner } = computeRankings(state.teams)
   const winner = rankings.find((r) => r.rank === 1)
   const savedRef = useRef(false)
+
+  // FIX_LISTS #7: เสียงตอนขึ้น Leaderboard ตอนจบเกม — ครั้งเดียวตอน mount
+  // FIX #44 ยังใช้อยู่: กรรมการสั่งยุติเกมเองไม่ใช่ชัยชนะ จึงไม่ต้องมีเสียงฉลอง
+  useEffect(() => {
+    const userEnded = state.log.some((l) => l.message === USER_ENDED_LOG)
+    if (!userEnded) sfx.finished()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // บันทึกผลเข้าบอร์ดครั้งเดียวตอน mount — guard กัน React StrictMode double-mount
   useEffect(() => {
@@ -58,10 +67,10 @@ export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
   }, [rankings])
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/70 p-6">
-      <div className="w-full max-w-3xl rounded-2xl border border-border bg-card p-8">
+    <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/70 p-3 sm:p-6">
+      <div className="w-full max-w-3xl rounded-2xl border border-border bg-card p-4 sm:p-8">
         <p className="section-label text-center">จบเกม</p>
-        <h2 className="mt-1 text-center font-serif text-5xl font-bold">
+        <h2 className="mt-1 text-center font-serif text-3xl font-bold sm:text-5xl">
           {noWinner ? 'ไม่มีผู้ชนะ' : isDraw ? 'เสมอกัน!' : `ชนะเลิศ — ${winner?.team.name}`}
         </h2>
         {isDraw && <p className="mt-2 text-center text-muted-foreground">ช่องหมด — ทุกทีมที่รอดเสมอกัน</p>}
@@ -73,7 +82,7 @@ export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
           {rankings.map((r) => (
             <li
               key={r.team.id}
-              className="flex items-center gap-3 rounded-lg bg-background px-4 py-2"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-background px-3 py-2 sm:flex-nowrap sm:px-4"
             >
               <span className="w-8 text-center font-mono text-lg font-black text-primary">
                 {r.rank}
@@ -87,21 +96,10 @@ export function GameOverScreen({ onRestart, onExit, onLeaderboard }: Props) {
           ))}
         </ol>
 
-        <div className="mt-8 flex flex-wrap justify-center gap-4">
-          <button onClick={onRestart} className="primary-button text-xl">
-            เล่นอีกรอบ
-          </button>
-          <button
-            onClick={onLeaderboard}
-            className="rounded-lg border border-primary px-5 py-3 text-xl font-bold text-primary"
-          >
-            🏆 ดู leaderboard
-          </button>
-          <button
-            onClick={onExit}
-            className="rounded-lg border border-border bg-background px-5 py-3 text-xl font-bold"
-          >
-            กลับหน้าตั้งค่า
+        {/* FIX_LISTS #8: จบเกมแล้วเหลือปุ่มเดียว — กลับไปหน้าหลัก */}
+        <div className="mt-8 flex justify-center">
+          <button onClick={onExit} className="primary-button text-xl">
+            กลับไปหน้าหลัก
           </button>
         </div>
       </div>
@@ -117,7 +115,7 @@ function Podium({ rankings }: { rankings: RankedTeam[] }) {
   ]
   const heights = ['h-40', 'h-28', 'h-20']
   return (
-    <div className="mt-8 flex items-end justify-center gap-4">
+    <div className="mt-6 flex items-end justify-center gap-2 sm:mt-8 sm:gap-4">
       {top.map((r, i) =>
         r ? (
           <div key={r.team.id} className="flex flex-col items-center gap-1">
@@ -125,7 +123,7 @@ function Podium({ rankings }: { rankings: RankedTeam[] }) {
             <span className="max-w-28 truncate text-base font-bold">{r.team.name}</span>
             <div
               className={
-                `grid w-24 place-items-center rounded-t-xl border border-b-0 ` +
+                `grid w-20 place-items-center rounded-t-xl border border-b-0 sm:w-24 ` +
                 `border-border bg-primary/10 ${heights[i]}`
               }
             >
@@ -145,7 +143,7 @@ function StatsRow({ team }: { team: Team }) {
     null,
   )
   return (
-    <span className="flex shrink-0 items-center gap-3 text-sm text-muted-foreground">
+    <span className="flex w-full shrink-0 flex-wrap items-center gap-x-3 pl-11 text-sm text-muted-foreground sm:w-auto sm:pl-0">
       <span title="ป้ายที่เปิด">🔎 {team.stats.opens}</span>
       <span title="กู้สำเร็จ">🧨 {team.stats.defusesSucceeded}</span>
       <span title="การ์ดที่ทิ้ง">🗑 {team.stats.cardsDiscarded}</span>

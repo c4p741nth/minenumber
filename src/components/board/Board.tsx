@@ -68,7 +68,7 @@ export function Board({
     <div className="flex flex-col gap-3">
       <div
         // scroll ในกรอบตัวเองเมื่อกระดานสูงเกินจอ — ไม่ดันหน้าให้ยาวจนต้องเลื่อนทั้งหน้า
-        className="grid max-h-[calc(100vh-20rem)] gap-2 overflow-y-auto pr-1"
+        className="grid max-h-[calc(100vh-16rem)] gap-1.5 overflow-y-auto pr-1 sm:max-h-[calc(100vh-20rem)] sm:gap-2"
         style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${size}px, 1fr))` }}
       >
         {numbers.map((n) => {

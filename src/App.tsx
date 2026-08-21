@@ -9,7 +9,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
 import { randomSeed } from '@/lib/game/rng'
-import { unlockAudio } from '@/lib/audio/sfx'
+import { setSfxVolume, unlockAudio } from '@/lib/audio/sfx'
 import { clearSnapshot, loadSettings, loadSnapshot, saveSettings } from '@/lib/storage/session'
 import type { GameSettings } from '@/lib/game/types'
 
@@ -31,6 +31,7 @@ export default function Page() {
 
   function startGame(s: GameSettings) {
     unlockAudio() // ปลดล็อก autoplay ด้วย user gesture แรก
+    setSfxVolume(s.sfxVolume / 100) // FIX_LISTS #9: ระดับเสียง effect จากหน้าตั้งค่า
     void clearSnapshot() // เกมใหม่ → ล้าง snapshot เก่า
     saveSettings(s)
     setSettings(s)
@@ -43,6 +44,7 @@ export default function Page() {
     const snap = await loadSnapshot()
     if (snap) {
       unlockAudio()
+      setSfxVolume((snap.state.settings.sfxVolume ?? 80) / 100)
       setSettings(snap.state.settings)
       setGame(createGameFromState(snap.state, snap.secret, randomSeed()))
       setScreen('game')
@@ -54,11 +56,6 @@ export default function Page() {
     setHasSnapshot(false)
     setGame(null)
     setScreen('menu')
-  }
-
-  function viewLeaderboard() {
-    setGame(null)
-    setScreen('leaderboard')
   }
 
   // FIX #41: ปุ่มสลับธีมต้องอยู่ทุกหน้า — switch ด้านล่าง return ตรงจากทุก branch
@@ -98,11 +95,8 @@ export default function Page() {
       return game ? (
         <GameProvider handle={game}>
           <Autosave />
-          <GameScreen
-            onRestart={() => startGame(settings)}
-            onExit={exitGame}
-            onLeaderboard={viewLeaderboard}
-          />
+          {/* FIX_LISTS #8: จบเกมแล้วกลับไปหน้าหลักทางเดียว */}
+          <GameScreen onExit={exitGame} />
         </GameProvider>
       ) : (
         <div className="grid min-h-screen place-items-center">กำลังโหลด…</div>

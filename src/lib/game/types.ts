@@ -44,8 +44,8 @@ export interface GameSettings {
   scanRadius: number // 1–5
   shrinkingEnabled: boolean // "Shrinking Mode" — default false
   defuseSeconds: number // เวลานับถอยหลังตอนตัดสายระเบิด (0 = ไม่จับเวลา) (FIX #27)
-  musicUrl: string // URL YouTube สำหรับเพลง background ('' = ไม่เปิดเพลง) (W8)
-  musicVolume: number // 0–100 (W8)
+  // FIX_LISTS #9: เอา YouTube link ออกแล้ว — เหลือแค่ระดับเสียง effect ของเกม
+  sfxVolume: number // 0–100
 }
 
 // FIX #31/#32: ระดับความสำคัญของ log → ใช้เลือกสีข้อความ
@@ -86,6 +86,8 @@ export type CardResult =
 export type GameAction =
   | { type: 'OPEN_CELL'; cell: number }
   | { type: 'CHOOSE_WIRE'; wire: 'red' | 'blue' }
+  // FIX_LISTS #3: ตัดสายไม่ทันเวลา → ระเบิดทันที (ไม่สนผลที่สุ่มไว้ตอน OPEN_CELL)
+  | { type: 'DEFUSE_TIMEOUT' }
   | { type: 'TIMEOUT' }
   | { type: 'END_TURN' }
   | { type: 'PLAY_CARD'; card: CardType; index?: number; targetTeamId?: string; targetCell?: number }

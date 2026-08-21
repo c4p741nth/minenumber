@@ -57,7 +57,7 @@ describe('settings', () => {
     expect(loadSettings()).toBeNull()
   })
 
-  it('settings เก่า (ไม่มี musicUrl/musicVolume) → เติม default ให้ (W8.2 backward-compat)', () => {
+  it('settings เก่า (ไม่มี sfxVolume) → เติม default ให้ (backward-compat)', () => {
     const old = {
       teamNames: ['A', 'B'],
       rangeMin: 1,
@@ -76,8 +76,7 @@ describe('settings', () => {
     globalThis.localStorage.setItem('mn.prefs', JSON.stringify(old))
     const loaded = loadSettings()
     expect(loaded).not.toBeNull()
-    expect(loaded?.musicUrl).toBe('')
-    expect(loaded?.musicVolume).toBe(30)
+    expect(loaded?.sfxVolume).toBe(80)
     // field เดิมยังครบ
     expect(loaded?.teamNames).toEqual(['A', 'B'])
     expect(loaded?.rangeMax).toBe(20)

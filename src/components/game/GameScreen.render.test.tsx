@@ -20,7 +20,7 @@ function renderGame(overrides: Partial<GameSettings> = {}) {
   const handle = createGame(settings, 42)
   return render(
     <GameProvider handle={handle}>
-      <GameScreen onRestart={() => {}} onExit={() => {}} onLeaderboard={() => {}} />
+      <GameScreen onExit={() => {}} />
     </GameProvider>,
   )
 }
@@ -105,7 +105,7 @@ test('FIX #38: bronze medal shows mid-game for the team that placed 3rd', () => 
   expect(() =>
     render(
       <GameProvider handle={handle}>
-        <GameScreen onRestart={() => {}} onExit={() => {}} onLeaderboard={() => {}} />
+        <GameScreen onExit={() => {}} />
       </GameProvider>,
     ),
   ).not.toThrow()

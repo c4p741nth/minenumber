@@ -19,8 +19,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     scanRadius: 3,
     shrinkingEnabled: false,
   defuseSeconds: 15,
-    musicUrl: '',
-    musicVolume: 30,
+    sfxVolume: 80,
     ...overrides,
   }
 }

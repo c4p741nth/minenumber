@@ -22,6 +22,8 @@ export function RulesContent() {
             <ul className="list-disc pl-5">
               <li>กู้สำเร็จ → ระเบิดย้ายไปที่อื่น</li>
               <li>กู้ไม่สำเร็จ → ทีมตกรอบ</li>
+              {/* FIX_LISTS #3 */}
+              <li>ตัดไม่ทันเวลา → ระเบิดทันที ทีมตกรอบ</li>
             </ul>
           </li>
           <li>

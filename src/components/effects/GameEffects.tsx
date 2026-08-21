@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
-import { USER_ENDED_LOG } from '@/lib/game/engine'
+import { DEFUSE_TIMEOUT_LOG } from '@/lib/game/engine'
 import type { CardType } from '@/lib/game/types'
 
 type FxOverlay = 'glitch' | 'redflash' | null
@@ -16,8 +16,9 @@ export function GameEffects() {
   const lastCardSig = useRef<string | null>(null)
   const lastDrawLogId = useRef(0)
   const deadSig = useRef('')
+  // FIX_LISTS #4: log id ของ timeout ล่าสุดที่ปิดเสียงระเบิดซ้ำไปแล้ว
+  const lastTimeoutLogId = useRef(-1)
   const rangeSig = useRef('')
-  const phaseRef = useRef(state.phase)
   const overlayTimer = useRef<number | null>(null)
   const drawTimer = useRef<number | null>(null)
 
@@ -45,16 +46,9 @@ export function GameEffects() {
     lastCardSig.current = sig
   }, [state.lastCardResult])
 
-  // FIX #44: การยุติเกมเองไม่ใช่ชัยชนะ — ไม่ต้องเป่าแตร
-  useEffect(() => {
-    const prev = phaseRef.current
-    phaseRef.current = state.phase
-    if (state.phase !== 'gameover' || prev === 'gameover') return
-    const userEnded = state.log.some((l) => l.message === USER_ENDED_LOG)
-    if (!userEnded) sfx.fanfare()
-  }, [state.phase, state.log])
-
-  // ทีมตกรอบ (W7) — ระเบิดจริง + หน้าจอกระพริบแดง (bomb-hit ตามหลัง defuse-failed จาก DefuseModal)
+  // FIX_LISTS #7: เสียงจบเกมย้ายไปอยู่ที่ GameOverScreen (finished.mp3) แล้ว
+  // เป่าแตรตรงนี้ด้วยจะดังทับกัน — ปล่อยให้หน้า Leaderboard เล่นที่เดียว
+  // ทีมตกรอบ (W7) — เสียงระเบิด (defuse-failed) + หน้าจอกระพริบแดง
   useEffect(() => {
     const sig = state.teams
       .filter((t) => t.eliminatedAt !== null)
@@ -62,11 +56,19 @@ export function GameEffects() {
       .sort()
       .join(',')
     if (sig && sig !== deadSig.current) {
-      sfx.explosion()
+      // FIX_LISTS #4: ตัดสายไม่ทันเวลา — DefuseModal เล่นเสียงระเบิดไปแล้ว
+      // ตอนตัวนับเวลาหมด ตรงนี้เล่นซ้ำจะได้ยิน 2 ครั้ง
+      // นับเฉพาะ log timeout "อันใหม่" ที่ยังไม่เคยเห็น — endTurn ต่อท้าย log
+      // ได้อีกหลายบรรทัด (ชนะ/เสมอ/จั่วการ์ด) จึงดูแค่บรรทัดสุดท้ายไม่ได้
+      const timeoutLog = state.log.find(
+        (l) => l.id > lastTimeoutLogId.current && l.message.endsWith(DEFUSE_TIMEOUT_LOG),
+      )
+      if (timeoutLog) lastTimeoutLogId.current = timeoutLog.id
+      else sfx.explosion()
       showOverlay('redflash', 600)
     }
     deadSig.current = sig
-  }, [state.teams])
+  }, [state.teams, state.log])
 
   // Shrinking Mode (W7) — ช่วงหดแล้ว (secure-block / shrink)
   useEffect(() => {

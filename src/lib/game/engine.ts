@@ -251,6 +251,9 @@ function dispatchAction(state: EngineState, action: GameAction): void {
     case 'CHOOSE_WIRE':
       chooseWire(state, action.wire)
       break
+    case 'DEFUSE_TIMEOUT':
+      defuseTimeout(state)
+      break
     case 'TIMEOUT':
       timeout(state)
       break
@@ -378,6 +381,30 @@ function openCell(state: EngineState, cell: number): void {
   if (team.pendingOpens <= 0) endTurn(state)
 }
 
+// FIX_LISTS #4: DefuseModal เล่นเสียงระเบิดไปแล้วตอนตัวนับเวลาหมด
+// GameEffects อ่าน log นี้เพื่อ "ไม่" เล่นซ้ำตอนทีมตกรอบ
+export const DEFUSE_TIMEOUT_LOG = 'ตัดสายไม่ทันเวลา ระเบิดตูม ถูกคัดออก'
+
+// FIX_LISTS #3: ตัดสายไม่ทันเวลา → ระเบิดทันที
+// ผลที่สุ่มไว้ตอน OPEN_CELL ถูกทิ้ง เพราะ "ไม่ตัด" ไม่ใช่ "ตัดแล้วเดาถูก"
+function defuseTimeout(state: EngineState): void {
+  if (state.phase !== 'defusing' || !state.pendingDefuse) return
+  const cell = state.pendingDefuse.cell
+  const team = currentTeam(state)
+  state.pendingDefuse = null
+  detonate(state, team, cell, `${team.name} ${DEFUSE_TIMEOUT_LOG}`)
+}
+
+// ระเบิดตูม → ทีมตกรอบ (ใช้ร่วมกันระหว่างตัดสายพลาดกับตัดไม่ทันเวลา)
+function detonate(state: EngineState, team: Team, cell: number, message: string): void {
+  state.cells[cell] = 'detonated'
+  state.bombs.delete(cell)
+  state.lastResult = { kind: 'real', survived: false }
+  eliminateTeam(state, team)
+  pushLog(state, team.id, message, { level: 'danger' })
+  endTurn(state)
+}
+
 function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
   if (state.phase !== 'defusing' || !state.pendingDefuse) return
   const cell = state.pendingDefuse.cell
@@ -402,12 +429,7 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
     // จบ turn ทันที ไม่ต้องเปิดต่อแม้ pendingOpens ยังเหลือ (§3.4.2)
     endTurn(state)
   } else {
-    state.cells[cell] = 'detonated'
-    state.bombs.delete(cell)
-    state.lastResult = { kind: 'real', survived: false }
-    eliminateTeam(state, team)
-    pushLog(state, team.id, `${team.name} กู้ระเบิดพลาด ถูกคัดออก`, { level: 'danger' })
-    endTurn(state)
+    detonate(state, team, cell, `${team.name} กู้ระเบิดพลาด ถูกคัดออก`)
   }
 }
 

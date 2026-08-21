@@ -3,7 +3,14 @@ import { createGame, createGameFromState, type GameHandle } from './engine'
 import { createRng } from './rng'
 import { refillBombs } from './setup'
 import { defaultSettings } from './config'
-import type { BombKind, CardType, CellState, GameAction, GameSettings } from './types'
+import type {
+  BombKind,
+  CardType,
+  CellState,
+  GameAction,
+  GameSettings,
+  PublicGameState,
+} from './types'
 
 function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
   return {
@@ -21,8 +28,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     scanRadius: 3,
     shrinkingEnabled: false,
   defuseSeconds: 15,
-    musicUrl: '',
-    musicVolume: 30,
+    sfxVolume: 80,
     ...overrides,
   }
 }
@@ -755,7 +761,14 @@ describe('determinism / resume', () => {
       h1.dispatch(a)
       h2.dispatch(a)
     }
-    expect(h1.getState()).toEqual(h2.getState())
+    // log.at คือ Date.now() ตอน dispatch — สอง engine ที่รันคนละ ms ย่อมต่างกัน
+    // เทสนี้ตรวจ "determinism ของเกม" ไม่ใช่นาฬิกา จึงตัด at ออกก่อนเทียบ
+    // (เดิมเทียบทั้งก้อน ทำให้เทสแดงแบบสุ่ม ~50% เวลา dispatch คร่อม ms)
+    const stripClock = (st: PublicGameState) => ({
+      ...st,
+      log: st.log.map(({ at: _at, ...rest }) => rest),
+    })
+    expect(stripClock(h1.getState())).toEqual(stripClock(h2.getState()))
   })
 
   it('getState() ไม่มี field ไหนบอกตำแหน่งระเบิดได้', () => {
@@ -966,5 +979,45 @@ describe('startedAt (FIX #36)', () => {
     expect(at).toBeGreaterThanOrEqual(before)
     // เล่นต่อได้ปกติ
     expect(restored.getState().phase).toBe(state.phase)
+  })
+})
+
+// ── FIX_LISTS #3: ตัดสายไม่ทันเวลา → ระเบิดทันที ──────────────────────────────
+describe('FIX_LISTS #3: DEFUSE_TIMEOUT', () => {
+  // หา seed ที่ "สุ่มว่ารอด" ให้ได้ เพื่อพิสูจน์ว่า timeout ชนะผลที่สุ่มไว้
+  function gameWhereDefuseWouldSurvive(): { h: GameHandle; cell: number } | null {
+    for (let seed = 1; seed < 200; seed++) {
+      const h = createGame(baseSettings(), seed)
+      const cell = bombCellOf(h, 'real')
+      const st = h.dispatch({ type: 'OPEN_CELL', cell })
+      if (st.phase === 'defusing' && st.lastResult?.kind === 'real' && st.lastResult.survived) {
+        return { h, cell }
+      }
+    }
+    return null
+  }
+
+  it('หมดเวลา → ทีมตกรอบ แม้ผลที่สุ่มไว้คือ "รอด"', () => {
+    const found = gameWhereDefuseWouldSurvive()
+    // ยืนยันว่าหา setup ที่ต้องการเจอจริง ไม่ใช่เทสผ่านแบบว่างเปล่า
+    expect(found).not.toBeNull()
+    const { h, cell } = found!
+    const before = h.getState()
+    const actingId = before.teams[before.currentTeamIndex].id
+
+    const after = h.dispatch({ type: 'DEFUSE_TIMEOUT' })
+
+    expect(after.teams.find((t) => t.id === actingId)?.alive).toBe(false)
+    expect(after.cells[cell]).toBe('detonated')
+    expect(after.pendingDefuse).toBeNull()
+    expect(after.phase).not.toBe('defusing')
+  })
+
+  it('ไม่ได้อยู่ใน phase defusing → DEFUSE_TIMEOUT ไม่มีผล', () => {
+    const h = createGame(baseSettings(), 42)
+    const before = h.getState()
+    const after = h.dispatch({ type: 'DEFUSE_TIMEOUT' })
+    expect(after.teams.every((t) => t.alive)).toBe(true)
+    expect(after.phase).toBe(before.phase)
   })
 })

@@ -4,7 +4,9 @@
 
 // map ชื่อเหตุการณ์ → ไฟล์เสียง (ดูตารางใน docs/TASKS-V3.md §W7.2)
 const SOUND_FILES: Record<string, string> = {
-  'bomb-hit': '/sounds/bomb-hit.mp3',
+  'bomb-timer': '/sounds/bomb-timer.mp3',
+  finished: '/sounds/finished.mp3',
+  'wire-cut': '/sounds/wire-cut.mp3',
   'defuse-failed': '/sounds/defuse-failed.mp3',
   'defuse-success': '/sounds/defuse-success.mp3',
   'glitch-bomb-hit': '/sounds/glitch-bomb-hit.mp3',
@@ -247,7 +249,7 @@ function fanfareSfx(): void {
 export const sfx = {
   // เหตุการณ์ที่ map กับไฟล์ใน public/sounds/ (W7.2)
   click: () => playFx('select-block', selectFallback), // เปิดช่อง safe
-  explosion: () => playFx('bomb-hit', explosionFallback), // ตัดสายพลาด / ระเบิด
+  explosion: () => playFx('defuse-failed', explosionFallback), // ตัดสายไม่ทัน / เฉลยว่าโดนระเบิด
   defuseSuccess: () => playFx('defuse-success', defuseSuccessFallback), // กู้สำเร็จ
   defuseFailed: () => playFx('defuse-failed', defuseFailedFallback), // จังหวะเฉลยว่าพลาด
   glitch: () => playFx('glitch-bomb-hit', glitchFallback), // เจอ glitch bomb
@@ -256,6 +258,12 @@ export const sfx = {
   selectItem: () => playFx('select-item', selectFallback), // เปิดหน้าไพ่
   itemUnavailable: () => playFx('item-unavailable', selectFallback), // กดการ์ดตอน glitch/block
   secureBlock: () => playFx('secure-block', selectFallback), // ช่องปลอดภัยยืนยันแล้ว / shrink
+  // FIX_LISTS #5: เสียงนับถอยหลังตอนตัดสาย — ดังทุก 1 วินาที
+  bombTimer: () => playFx('bomb-timer', tickSfx),
+  // FIX_LISTS #6: เสียงตอนตัดสายจริง
+  wireCut: () => playFx('wire-cut', cardPlayFallback),
+  // FIX_LISTS #7: เสียงตอนขึ้น Leaderboard ตอนจบเกม
+  finished: () => playFx('finished', fanfareSfx),
   // ยังไม่มีไฟล์ — WebAudio ล้วน
   tick: tickSfx,
   timeout: timeoutSfx,
