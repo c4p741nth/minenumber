@@ -56,6 +56,9 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [glitchCountInput, setGlitchCountInput] = useState(String(initial.glitchCount))
   // FIX_LISTS ชุดใหม่ #5: จำนวน turn ที่โดน glitch แล้วใช้ item ไม่ได้ — ตั้งค่าได้แล้ว
   const [glitchLockInput, setGlitchLockInput] = useState(String(initial.glitchLockTurns))
+  // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบ glitch ซ้ำตอนยังติดอยู่ — สะสม หรือรีเซ็ตเป็นค่าที่ตั้งไว้
+  //   snapshot เก่าไม่มี field นี้ → ?? false = พฤติกรรมเดิม (รีเซ็ต)
+  const [glitchStack, setGlitchStack] = useState(initial.glitchStack ?? false)
   const [cardsEnabled, setCardsEnabled] = useState(initial.cardsEnabled)
   const [handLimited, setHandLimited] = useState(initial.maxHandSize > 0)
   const [maxHandInput, setMaxHandInput] = useState(String(initial.maxHandSize || LIMITS.minHandSize))
@@ -164,6 +167,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       glitchRatio: clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio),
       glitchCount: clampInt(Number(glitchCountInput), 0, LIMITS.maxGlitchCount),
       glitchLockTurns: glitchLock,
+      glitchStack,
       cardsEnabled,
       maxHandSize: handLimited
         ? clampInt(Number(maxHandInput), LIMITS.minHandSize, LIMITS.maxHandSizeCap)
@@ -212,7 +216,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
     //   max-h-dvh แทน h-dvh = สูงได้ไม่เกินจอ แต่ถ้าเนื้อหาสั้นกว่าก็หดตาม
     //   เนื้อหาพอดีจอ → ไม่ล้น → ไม่มีแถบเลื่อน; เนื้อหายาว (ทีมเยอะ/โหมด TV) →
     //   ชนเพดาน dvh แล้วเลื่อนได้เหมือนเดิม
-    <div className="mx-auto flex max-h-dvh w-full max-w-5xl flex-col overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+    <div className="no-scrollbar mx-auto flex max-h-dvh w-full max-w-5xl flex-col overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
       {/* FIX_LISTS ชุดที่สิบเอ็ด #3: หัวเว็บหน้าตั้งค่าใช้ pattern เดียวกับหน้าเล่นเกม
           (GameHeader) — โลโก้ซ้าย, ปุ่มหลักดันไปขวาด้วย ml-auto, แล้วต่อด้วยปุ่ม
           ธีม/โหมดจอ ในแถวเดียวกัน
@@ -438,7 +442,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
           {/* FIX_LISTS #10: มือถือ — เรียงบนล่าง (เมนูเป็นแถบเลื่อนแนวนอน), จอใหญ่ค่อยเป็น sidebar */}
           <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 flex h-[min(90vh,640px)] w-[min(100%-1.5rem,880px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:flex-row">
             {/* Sidebar เมนูหมวด */}
-            <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-background p-3 sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-r sm:border-b-0">
+            <nav className="no-scrollbar flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-background p-3 sm:w-44 sm:flex-col sm:overflow-x-visible sm:border-r sm:border-b-0">
               <p className="section-label mb-2 hidden px-2 sm:block">ตั้งค่าเพิ่มเติม</p>
               {SETTINGS_TABS.map((t) => (
                 <button
@@ -471,7 +475,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                 ✕
               </Dialog.Close>
 
-              <div className="min-h-0 flex-1 overflow-y-auto p-4 pr-14 sm:p-6 sm:pr-14">
+              <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-4 pr-14 sm:p-6 sm:pr-14">
                 <Dialog.Title className="font-serif text-2xl font-bold">
                   {SETTINGS_TABS.find((t) => t.id === settingsTab)?.label}
                 </Dialog.Title>
@@ -577,6 +581,17 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                             )
                           }
                         />
+                        {/* FIX_LISTS ชุดที่สิบสี่ #3: เหยียบ glitch ซ้ำตอนที่ยังติดอยู่ จะคิดยังไง
+                            เดิมทับด้วยค่าใหม่เสมอ ซึ่งกลายเป็นโทษที่ "เบาลง" ถ้าของเก่าเหลือ
+                            มากกว่าค่าที่ตั้งไว้ (เหลือ 5 turn เหยียบอีกทีเป็น 2) — เลือกได้แล้ว
+                            ซ่อนตอนตั้ง 0 turn เพราะไม่มีอะไรให้สะสม/รีเซ็ต */}
+                        {glitchLock > 0 &&
+                          toggle(
+                            'เหยียบ Glitch ซ้ำแล้วสะสม turn',
+                            `เปิด = ติดกลิตช์อยู่แล้วเหยียบอีก จะบวกทับของเดิม (เหลือ 1 + ${glitchLock} = ${glitchLock + 1} turn) · ปิด = รีเซ็ตเป็น ${glitchLock} turn ทุกครั้ง`,
+                            glitchStack,
+                            setGlitchStack,
+                          )}
                       </div>
                     )}
                   </div>

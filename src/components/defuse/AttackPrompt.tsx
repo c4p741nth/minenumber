@@ -79,7 +79,7 @@ export function AttackPrompt() {
     // (กระดานยังกดอะไรไม่ได้อยู่แล้วระหว่าง phase 'defending')
     // overflow-y-auto + m-auto: กล่องสูงเกินจอก็ยังเลื่อนอ่านได้ ไม่โดนตัดหัว/ท้าย
     <div
-      className="fixed inset-0 z-50 flex overflow-y-auto bg-black/80 p-6"
+      className="fixed inset-0 z-30 flex overflow-y-auto bg-black/80 p-6"
       role="dialog"
       aria-modal="true"
       aria-label="เลือกการ์ดโจมตีที่จะบล็อก"

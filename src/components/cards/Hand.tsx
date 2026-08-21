@@ -110,6 +110,16 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
   const [picking, setPicking] = useState(false)
 
   const current = state.teams[state.currentTeamIndex]
+  // FIX_LISTS ชุดที่สิบสี่ #6: ห้ามเลือก/หยิบการ์ดในมือระหว่างจังหวะที่มี modal คุมอยู่
+  //   - 'defusing'  = กำลังตัดสาย (ต้องเลือกสายแดง/น้ำเงิน ไม่ใช่มาพลิกการ์ด)
+  //   - 'blocking'  = กำลังถูกถามว่าจะใช้ Block กันไหม (ตอบผ่านปุ่มใน BlockPrompt เท่านั้น)
+  //   - 'defending' = กำลังเลือกการ์ดที่จะกันการโจมตี (ตอบผ่าน AttackPrompt)
+  //   phase เหล่านี้เล่นการ์ดไม่ได้อยู่แล้ว (canPlay ผูกกับ 'cards') แต่ "การ์ดยังกดพลิกได้"
+  //   ซึ่งทำให้แผงการ์ดเด้งมาทับ modal และผู้เล่นเข้าใจผิดว่ายังใช้การ์ดได้อยู่
+  //   ยกเว้น Skip ตอน 'defending' ที่กติกาอนุญาต (engine: FIX_LISTS ชุดที่สิบสาม #2) —
+  //   ทางนั้นมีปุ่มของตัวเองใน AttackPrompt อยู่แล้ว ไม่ต้องพลิกการ์ดจากมือ
+  const modalPhase =
+    state.phase === 'defusing' || state.phase === 'blocking' || state.phase === 'defending'
   const canPlay = state.phase === 'cards' && !locked && !state.currentGlitched && !state.currentBlocked
   const maxHand = state.settings.maxHandSize
   const handLimited = maxHand > 0
@@ -122,6 +132,17 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
     setHovering(false)
     setPicking(false)
   }, [state.turnNumber, state.currentTeamIndex])
+
+  // FIX_LISTS ชุดที่สิบสี่ #6: เข้าจังหวะที่มี modal (ตัดสาย/กัน Block/กันโจมตี) →
+  //   พับการ์ดที่เปิดค้างไว้ทิ้ง ตัว effect ด้านบน depend แค่ตา/ทีม ซึ่ง "ไม่เปลี่ยน"
+  //   ตอน phase ขยับจาก 'cards' ไป 'defusing' ในตาเดียวกัน — การ์ดที่พลิกไว้ก่อนกดช่อง
+  //   จึงค้างเปิดอยู่แล้วลอยทับ modal ตัดสาย
+  useEffect(() => {
+    if (!modalPhase) return
+    setRevealed(null)
+    setHovering(false)
+    setPicking(false)
+  }, [modalPhase])
 
   if (!state.settings.cardsEnabled || state.phase === 'gameover') return null
 
@@ -144,6 +165,12 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
   }
 
   function onCardClick(i: number) {
+    // FIX_LISTS ชุดที่สิบสี่ #6: ระหว่างตัดสาย/เลือกการ์ดกัน — กดไม่ติดเลย (ไม่พลิกการ์ด)
+    //   เสียง itemUnavailable ยังดังให้รู้ว่า "ตอนนี้ยังไม่ใช่จังหวะ" ไม่ใช่กดไม่โดน
+    if (modalPhase) {
+      sfx.itemUnavailable()
+      return
+    }
     if (!canPlay) {
       sfx.itemUnavailable()
       return
@@ -188,7 +215,8 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
   return (
     <>
       {/* FIX_LISTS ชุดที่สาม #5: ใบที่เปิดอยู่ — แผงมุมขวา ทับ panel ขวา
-          z-40 เท่ากับ AttackPrompt: อยู่เหนือ panel ขวา แต่ต่ำกว่า modal เต็มจอ (z-50) */}
+          z-20: อยู่เหนือ panel ขวา แต่ต่ำกว่า modal เต็มจอ (ตอนนี้ z-30) และต่ำกว่า
+          หัวเว็บ (.game-nav z-60) ที่ต้องกดได้ตลอดแม้มี modal เปิด */}
       {revealedCard && (
         <div
           className={
@@ -214,7 +242,7 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
             //   ยังล้นออกนอกความกว้างนั้นอีก จึงกินเข้ามาทับช่องริมขวา
             //   หด 0.75 เท่าของคอลัมน์ขวา แล้วชิดขวาเท่าเดิม → เหลือช่องว่างระหว่าง
             //   การ์ดกับกระดานเสมอ ไม่ว่าจะโหมด Laptop หรือ TV
-            'fixed right-3 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-3 overflow-visible ' +
+            'fixed right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-3 overflow-visible ' +
             'w-[min(calc(var(--mn-card-col,18.75rem)*0.75),calc(100vw-1.5rem),calc((100vh-12.5rem)/1.435))]'
           }
           role="dialog"
@@ -392,7 +420,9 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
             - โปร่งใส: ไม่มีพื้นหลัง/เงา/เส้นขอบบนเต็มความกว้างจออีกแล้ว (.hand-dock)
             - ไม่กว้างเต็มจอ: w-fit + max-w-full → กว้างเท่าการ์ดที่มีจริง
               (มือว่าง/ใบเดียวก็ไม่ลากเส้นพาดทั้งจอ) แล้วค่อยตันที่ขอบจอเมื่อใบเยอะ */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex flex-col items-center gap-2">
+      {/* z-20 (เดิม z-30): เท่ากับ modal เต็มจอพอดี = ใครทับใครขึ้นอยู่กับลำดับใน DOM
+          ซึ่งเปราะเกินไป — กดให้ต่ำกว่าชั้น modal ชัด ๆ แถบการ์ดจึงถูกทับตอนมี modal เปิด */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2">
         <div
           ref={dockRef}
           className="hand-dock pointer-events-auto relative w-fit max-w-full rounded-t-2xl px-3 pt-2 pb-1"
@@ -498,6 +528,17 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
               : state.currentBlocked
                 ? 'โดน Block — ใช้การ์ดไม่ได้ตานี้'
                 : 'เข้าช่วงเปิดป้ายแล้ว'}
+          </p>
+        )}
+
+        {/* FIX_LISTS ชุดที่สิบสี่ #6: บอกให้ชัดว่าทำไมกดการ์ดไม่ได้ตอนนี้ ไม่ใช่ปล่อยให้
+            กดแล้วเงียบ (การ์ดหรี่ + เสียง itemUnavailable อย่างเดียวอ่านเหมือนปุ่มเสีย)
+            ต้องตอบผ่านปุ่มใน modal ที่เด้งอยู่ตรงหน้าแทน */}
+        {modalPhase && (
+          <p className="rounded-full bg-secondary px-3 py-1 text-sm font-semibold text-muted-foreground">
+            {state.phase === 'defusing'
+              ? 'กำลังตัดสาย — เลือกการ์ดไม่ได้'
+              : 'กำลังตัดสินใจกันการโจมตี — เลือกการ์ดไม่ได้'}
           </p>
         )}
       </div>

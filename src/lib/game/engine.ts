@@ -478,19 +478,36 @@ function openCell(state: EngineState, cell: number): void {
   }
 
   if (bomb === 'glitch') {
-    // ย้ายไม่ได้ (hidden ว่างหมด) → ระเบิดอยู่ที่เดิม ช่องไม่เขียว (ทีมถัดไปเจอต่อ)
+    // FIX_LISTS ชุดที่สิบสี่ #3: ช่องที่เพิ่งเปิดต้อง "จบแล้ว" เสมอ ไม่ว่าย้ายระเบิดได้หรือไม่
+    //   เดิมเป็น `if (moved) state.cells[cell] = 'glitched'` → ย้ายไม่ได้แล้วช่องค้างเป็น
+    //   hidden = "กดแล้วช่องไม่หายไป" ตามที่ผู้เล่นเจอ และช่องนั้นยังคาระเบิด glitch ลูกเดิมอยู่
+    //   ทีมถัดไปกดซ้ำก็ติดกลิตช์อีก วนไม่จบ — เกิดง่ายมากตอนตั้งค่าแบบไม่มีช่อง Safe เปล่า
+    //   (ระเบิด 5 + glitch 10 + การ์ด 7 = 22 ช่องพอดี) เพราะ candidates ของ relocateBomb
+    //   คือช่อง hidden ที่ "ยังไม่มีระเบิด" ซึ่งหมดเร็ว → ย้ายไม่สำเร็จเป็นเรื่องปกติ ไม่ใช่ขอบ
+    //   ตอนนี้ย้ายไม่ได้ = ระเบิดลูกนั้นถูกปลดออกจากกระดานไปเลย (ช่องเดียวเก็บได้ลูกเดียว
+    //   และช่องนี้ปิดตัวเองแล้ว) — glitch เป็นระเบิดส่วนเกินที่ไม่นับในโควตาระเบิดจริง
+    //   จึงหายไปได้โดยไม่กระทบเงื่อนไขจบเกม (ต่างจากระเบิดจริงที่ enforceRealBombQuota คุมอยู่)
     const moved = relocateBomb(state, cell, 'glitch')
-    if (moved) state.cells[cell] = 'glitched'
+    if (!moved) state.bombs.delete(cell)
+    state.cells[cell] = 'glitched'
     // FIX_LISTS #5: จำนวน turn ที่ล็อกการใช้ item ตั้งค่าได้แล้ว (เดิม hardcode 2)
     // settings เก่าใน snapshot ไม่มี field นี้ → fallback เป็น 2 ตามพฤติกรรมเดิม
     const lock = Math.max(state.settings.glitchLockTurns ?? DEFAULTS.glitchLockTurns, 0)
-    team.glitchTurnsLeft = lock
+    // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบซ้ำตอนยังติดกลิตช์ — stack หรือรีเซ็ต เลือกได้ในตั้งค่า
+    //   เดิมทับด้วยค่าใหม่ตรง ๆ เสมอ ("glitch ถูกรีเซ็ตเป็นค่า x") ซึ่งกลายเป็นโทษที่เบาลง
+    //   ถ้าเหยียบตอนเหลือ turn มากกว่าค่าที่ตั้งไว้ snapshot เก่าไม่มี field นี้ → false = เดิม
+    const prev = Math.max(team.glitchTurnsLeft, 0)
+    team.glitchTurnsLeft = state.settings.glitchStack === true ? prev + lock : lock
     state.lastResult = { kind: 'glitch' }
+    // ติดซ้ำตอนที่ยังค้างอยู่ ต้องบอกยอดรวมจริง ไม่ใช่ค่าที่เพิ่งบวกเข้าไป
+    const total = team.glitchTurnsLeft
     pushLog(
       state,
       team.id,
-      lock > 0
-        ? `${team.name} เจอ Glitch bomb — ติดกลิตช์ ${lock} turn`
+      total > 0
+        ? prev > 0
+          ? `${team.name} เจอ Glitch bomb ซ้ำ — ติดกลิตช์รวม ${total} turn`
+          : `${team.name} เจอ Glitch bomb — ติดกลิตช์ ${total} turn`
         : `${team.name} เจอ Glitch bomb — เสียตานี้ไป`,
       { level: 'warn' },
     )

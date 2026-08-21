@@ -39,16 +39,25 @@ export function DefuseModal() {
   // FIX_LISTS #11: ตอนพลาดต้องดัง "ตอนเฉลยผล" ที่นี่ ไม่ใช่รอ GameEffects
   // ซึ่งยิงตอน state ทีมตกรอบ = ตอนกด "รับทราบ" (ช้ากว่าภาพระเบิดหลายวินาที
   // จนฟังดูเหมือนเสียงลั่นตอนกดปุ่ม) — GameEffects กันเล่นซ้ำผ่าน DEFUSE_FAILED_LOG
+  // ต้องดังครั้งเดียวต่อการตัดสายหนึ่งครั้ง — กันด้วย ref ไม่ใช่ dependency
+  // เดิมได้ยิน "เสียงซ้อนกัน" ตอนกู้สำเร็จ เพราะ effect นี้รันซ้ำได้หลายรอบต่อผลเดียว:
+  //   - StrictMode (dev) mount/unmount effect สองรอบ → เสียงยิงสองครั้งทับกัน
+  //   - survived อ่านจาก state.defuseResult ที่ถูก clone ใหม่ทุก dispatch → identity เปลี่ยน
+  const resultSfxDone = useRef(false)
   useEffect(() => {
-    if (stage !== 'result') return
+    if (stage !== 'result' || resultSfxDone.current) return
+    resultSfxDone.current = true
     if (survived) sfx.defuseSuccess()
     else sfx.explosion()
   }, [stage, survived])
 
   // FIX_LISTS #3/#4: หมดเวลา = ระเบิดทันที และเสียงระเบิดต้องมาตอนตัวนับเวลาหมด
   // (ไม่รอ GameEffects ที่ยิงตอน state ทีมตกรอบ ซึ่งช้ากว่าเพราะรอ dispatch)
+  // กันซ้ำแบบเดียวกับ 'result' — StrictMode ยิง effect นี้สองรอบเหมือนกัน
+  const explodedSfxDone = useRef(false)
   useEffect(() => {
-    if (stage !== 'exploded') return
+    if (stage !== 'exploded' || explodedSfxDone.current) return
+    explodedSfxDone.current = true
     sfx.explosion()
   }, [stage])
 
@@ -109,46 +118,60 @@ export function DefuseModal() {
       <div className="relative flex w-full max-w-3xl flex-col items-center gap-4 px-4 text-center text-white sm:gap-6">
         {stage === 'result' && survived && <Confetti disabled={reducedMotion} />}
 
-        {stage === 'choosing' && (
-          <>
-            <p className="section-label text-red-300">ระเบิดจริง!</p>
-            <h2 className="font-serif text-4xl font-bold sm:text-6xl">ตัดสาย</h2>
-            <p className="text-base text-white/70 sm:text-xl">{current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด</p>
-            {/* FIX #27: นับถอยหลัง */}
-            {limit > 0 && (
-              <p
-                className={`font-mono text-5xl font-black sm:text-6xl ${
-                  left <= 5 ? 'text-red-400 timer-urgent' : 'text-white'
-                }`}
-                aria-live="polite"
-              >
-                {Math.max(left, 0)}
+        {/* ส่วนหัวล็อกความสูงไว้เท่ากันทุก stage — ต้นเหตุที่ "สายขยับขึ้นข้างบน" ตอนกดตัด
+            พอเปลี่ยนจาก 'choosing' เป็น 'result' หัวเรื่อง "ตัดสาย" + บรรทัดชื่อทีม +
+            ตัวเลขนับถอยหลัง (text-6xl) หายไปพร้อมกัน เหลือหัวเรื่องผลที่เตี้ยกว่าเยอะ
+            คอลัมน์นี้ถูกจัดกึ่งกลางแนวตั้ง (place-items: safe center ของ .defuse-vignette)
+            จึง re-center ทันที = ทั้งบล็อกสายเลื่อนขึ้น ทั้งที่ตัว SVG ไม่ได้ขยับเอง
+            จองที่ไว้เท่าความสูงของ stage ที่สูงสุด ('choosing') สายจึงอยู่นิ่งตลอด */}
+        <div className="defuse-head flex min-h-52 flex-col items-center justify-center gap-4 sm:gap-6">
+          {stage === 'choosing' && (
+            <>
+              <p className="section-label text-red-300">ระเบิดจริง!</p>
+              <h2 className="font-serif text-4xl font-bold sm:text-6xl">ตัดสาย</h2>
+              <p className="text-base text-white/70 sm:text-xl">
+                {current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด
               </p>
-            )}
-          </>
-        )}
+              {/* FIX #27: นับถอยหลัง */}
+              {limit > 0 && (
+                <p
+                  className={`font-mono text-5xl font-black sm:text-6xl ${
+                    left <= 5 ? 'text-red-400 timer-urgent' : 'text-white'
+                  }`}
+                  aria-live="polite"
+                >
+                  {Math.max(left, 0)}
+                </p>
+              )}
+            </>
+          )}
 
-        {stage === 'result' && survived && (
-          <>
-            <h2 className="font-serif text-4xl font-bold text-emerald-300 sm:text-6xl">กู้สำเร็จ!</h2>
-            <p className="text-lg sm:text-2xl">ระเบิดย้ายไปที่อื่นแล้ว</p>
-          </>
-        )}
+          {stage === 'result' && survived && (
+            <>
+              <h2 className="font-serif text-4xl font-bold text-emerald-300 sm:text-6xl">
+                กู้สำเร็จ!
+              </h2>
+              <p className="text-lg sm:text-2xl">ระเบิดย้ายไปที่อื่นแล้ว</p>
+            </>
+          )}
 
-        {stage === 'result' && !survived && (
-          <>
-            <h2 className="font-serif text-4xl font-bold text-red-400 sm:text-6xl">ระเบิด!</h2>
-            <p className="text-lg sm:text-2xl">{current.name} ตกรอบ</p>
-          </>
-        )}
+          {stage === 'result' && !survived && (
+            <>
+              <h2 className="font-serif text-4xl font-bold text-red-400 sm:text-6xl">ระเบิด!</h2>
+              <p className="text-lg sm:text-2xl">{current.name} ตกรอบ</p>
+            </>
+          )}
 
-        {/* FIX_LISTS #3: ตัดสายไม่ทันเวลา */}
-        {stage === 'exploded' && (
-          <>
-            <h2 className="font-serif text-4xl font-bold text-red-400 sm:text-6xl">หมดเวลา — ระเบิด!</h2>
-            <p className="text-lg sm:text-2xl">{current.name} ตัดสายไม่ทัน ตกรอบ</p>
-          </>
-        )}
+          {/* FIX_LISTS #3: ตัดสายไม่ทันเวลา */}
+          {stage === 'exploded' && (
+            <>
+              <h2 className="font-serif text-4xl font-bold text-red-400 sm:text-6xl">
+                หมดเวลา — ระเบิด!
+              </h2>
+              <p className="text-lg sm:text-2xl">{current.name} ตัดสายไม่ทัน ตกรอบ</p>
+            </>
+          )}
+        </div>
 
         <Wires chosen={chosen} stage={stage} onChoose={choose} />
 
@@ -183,7 +206,7 @@ function Wires({
         } ${disabled && !picked ? 'opacity-60' : ''}`}
         aria-label={`ตัดสาย${color === 'red' ? 'แดง' : 'น้ำเงิน'}`}
       >
-        <svg viewBox="0 0 120 220" className="h-36 w-20 sm:h-56 sm:w-28">
+        <svg viewBox="0 0 120 220" className="defuse-wire-svg h-36 w-20">
           <path d={d} stroke={stroke} strokeWidth="10" fill="none" strokeLinecap="round" />
           {/* FIX_LISTS ชุดที่สาม #15: กรรไกรค้างอยู่บนสายที่ตัด — เห็นว่าตัดสายไหนไปแล้ว
               (เดิมโชว์เฉพาะช่วง 'cutting' ที่ถูกตัดออกไปแล้ว) */}

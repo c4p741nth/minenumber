@@ -12,6 +12,8 @@ import { BombMark } from '@/components/setup/SetupScreen'
 import { logClass } from '@/components/game/GameScreen'
 import { medalClass, MEDAL_EMOJI } from '@/lib/game/ranking'
 import { downloadLog, LOG_FORMATS, type LogFormat } from '@/lib/export/logExport'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { DisplayModeToggle } from '@/components/ui/DisplayModeToggle'
 
 const PAGE_SIZE = 10
 
@@ -68,41 +70,77 @@ export function LeaderboardScreen({ onBack }: Props) {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-6 py-8">
-      <header className="flex flex-wrap items-center gap-3 pb-6">
+    // FIX_LISTS ชุดที่สิบห้า: เดิม min-h-screen + py-8 — โหมด TV (scale 1.5) ตัวอักษรโต
+    //   ขึ้น 1.5 เท่า เนื้อหาจึงสูงเกินจอทันที ทั้งหน้าเลื่อนตาม หัวเว็บ (ปุ่มกลับเมนู/
+    //   ธีม/โหมดจอ) หลุดออกนอกจอไปด้านบน แถม py-8 * 1.5 = ขอบขาวบนหนาเกินจำเป็น
+    //   เปลี่ยนเป็น pattern เดียวกับหน้าเล่นเกม: กรอบสูงเท่าจอเป๊ะ ไม่ scroll เลย
+    //   หัวเว็บอยู่กับที่ ส่วนเนื้อหาด้านล่างกินที่เหลือแล้ว scroll เอง (min-h-0 จำเป็น —
+    //   ไม่งั้น flex item ยืดตามเนื้อหาแทนที่จะยอมหดแล้วให้ลูก scroll)
+    //   padding เป็น rem จึงยังโตตามโหมดจอ แต่เริ่มจากค่าที่บางกว่าเดิม (py-8 → py-4)
+    <div className="mx-auto flex h-dvh w-full max-w-4xl flex-col overflow-hidden px-4 py-4 sm:px-6">
+      {/* หัวเว็บหน้า Leaderboard ใช้ pattern เดียวกับหน้าเล่นเกม (GameHeader) และ
+          หน้าตั้งค่า (SetupScreen) — โลโก้ซ้าย, ชื่อหน้า/คำอธิบาย, ปุ่มหลักดันไปขวา
+          ด้วย ml-auto แล้วต่อด้วยธีม/เต็มจอ/โหมดจอ ในแถวเดียวกัน
+          ปุ่มลอยมุมขวาบน (แถบ fixed ใน App) ไม่เรนเดอร์ในหน้านี้แล้ว — เดิมมันลอย
+          อยู่คนละระดับกับปุ่ม "กลับเมนู" ทำให้สามหน้าดูคนละแบบ */}
+      <header className="mb-3 flex w-full shrink-0 flex-wrap items-center gap-3">
         <BombMark />
-        <div>
-          <h1 className="font-serif text-3xl font-bold">🏆 Leaderboard</h1>
+        <div className="min-w-0">
+          {/* text-3xl * 1.5 ในโหมด TV = สูงเกินไปสำหรับหัวเว็บที่ต้องอยู่กับที่
+              ลดเป็น text-2xl — ยังใหญ่กว่าทุกอย่างในหน้าและอ่านจากท้ายห้องได้ */}
+          <h1 className="truncate font-serif text-2xl font-bold leading-tight">
+            🏆 Leaderboard
+          </h1>
           <p className="section-label">Minenumber — เลขระเบิด</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          {loaded && hasData && (
-            <button
-              onClick={() => void handleClear()}
-              className="rounded-lg border border-destructive/40 px-3 py-2 text-sm font-bold text-destructive"
-            >
-              🗑 ล้าง leaderboard
-            </button>
-          )}
+        {loaded && hasData && (
           <button
-            onClick={onBack}
-            className="rounded-lg border border-border px-4 py-2 text-base font-bold"
+            onClick={() => void handleClear()}
+            title="ล้างประวัติ leaderboard ทั้งหมด"
+            aria-label="ล้าง leaderboard"
+            className={
+              'ml-auto flex shrink-0 items-center gap-2 rounded-lg border border-destructive/40 ' +
+              'bg-card px-3 py-2 text-sm font-bold text-destructive shadow transition hover:border-destructive'
+            }
           >
-            ← กลับเมนู
+            <span aria-hidden="true">🗑</span>
+            <span className="hidden sm:inline">ล้าง leaderboard</span>
           </button>
-        </div>
+        )}
+        <button
+          onClick={onBack}
+          title="กลับไปหน้าเมนูหลัก"
+          aria-label="กลับไปหน้าเมนูหลัก"
+          className={
+            // ปุ่มล้างโผล่เฉพาะตอนมีข้อมูล — ml-auto จึงต้องมีที่ปุ่มนี้ด้วย
+            // ไม่งั้นตอนยังไม่มีผลเกม ปุ่มกลับเมนูจะไปกองชิดซ้ายติดชื่อหน้า
+            // (ml-auto สองตัวไม่ชนกัน — ตัวแรกดันกลุ่มไปขวา ตัวหลังไม่มีผลเพิ่ม)
+            (loaded && hasData ? '' : 'ml-auto ') +
+            'flex shrink-0 items-center gap-2 rounded-lg border border-border bg-card ' +
+            'px-3 py-2 text-sm font-bold shadow transition hover:border-primary'
+          }
+        >
+          <span aria-hidden="true">←</span>
+          <span className="hidden sm:inline">กลับเมนู</span>
+        </button>
+        <ThemeToggle />
+        <DisplayModeToggle />
       </header>
 
+      {/* FIX_LISTS ชุดที่สิบห้า: ทุกอย่างใต้หัวเว็บอยู่ในกล่องนี้ — กินที่ที่เหลือจากจอ
+          (flex-1 + min-h-0) แล้ว scroll ในตัวเอง จอนอกจึงไม่ต้องเลื่อนเลย
+          ซ่อนแถบ scroll (no-scrollbar) เพราะเวลาฉายขึ้นจอใหญ่ แถบเลื่อนจะเด่นเกินเนื้อหา */}
+      <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
       {!loaded && <p className="py-10 text-center text-muted-foreground">กำลังโหลด…</p>}
 
       {loaded && aggregates.length === 0 && logs.length === 0 && (
-        <p className="panel py-16 text-center text-muted-foreground">
+        <p className="panel shrink-0 py-16 text-center text-muted-foreground">
           ยังไม่มีผลเกม — เล่นเกมให้จบเพื่อบันทึกสถิติ
         </p>
       )}
 
       {loaded && aggregates.length > 0 && (
-        <section className="panel">
+        <section className="panel shrink-0">
           <h2 className="section-label mb-3">ตารางรวมรายทีม</h2>
           <table className="w-full text-left text-sm">
             <thead>
@@ -139,7 +177,7 @@ export function LeaderboardScreen({ onBack }: Props) {
 
       {/* FIX #36: ประวัติระดับ "เกม" — เวลาเริ่ม → เวลาจบ กางดู log เต็มของเกมนั้นได้ */}
       {loaded && recentGames.length > 0 && (
-        <section className="panel mt-4">
+        <section className="panel shrink-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="section-label">บันทึก {recentGames.length} เกมล่าสุด</h2>
             {/* กรองตามวันที่ — startedAt (หรือ endedAt ถ้าเกมเก่าไม่มี) */}
@@ -196,7 +234,7 @@ export function LeaderboardScreen({ onBack }: Props) {
                   </button>
                 </div>
                 {openLogId === g.id && (
-                  <div className="mt-2 flex max-h-96 flex-col gap-0.5 overflow-y-auto rounded-lg bg-background p-2">
+                  <div className="no-scrollbar mt-2 flex max-h-[40dvh] flex-col gap-0.5 overflow-y-auto rounded-lg bg-background p-2">
                     {/* ดาวน์โหลดบันทึกเกมนี้เป็นไฟล์ */}
                     <div className="flex flex-wrap items-center gap-2 border-b border-border py-2">
                       <span className="text-xs font-bold text-muted-foreground">⬇ ดาวน์โหลดบันทึก:</span>
@@ -256,6 +294,7 @@ export function LeaderboardScreen({ onBack }: Props) {
           )}
         </section>
       )}
+      </div>
     </div>
   )
 }

@@ -29,8 +29,15 @@ export function GameEffects() {
     overlayTimer.current = window.setTimeout(() => setOverlay(null), ms)
   }
 
+  // signature ต้องรวม "จำนวนช่องที่เปิดแล้ว" ด้วย — เดิมใช้ JSON ของ lastResult เพียว ๆ
+  // แต่ผลของช่องปลอดภัยเป็น { kind: 'safe' } เหมือนกันเป๊ะทุกครั้ง signature จึงไม่เปลี่ยน
+  // → เปิดป้ายปลอดภัยติดกันหลายช่อง มีเสียงแค่ช่องแรกช่องเดียว ที่เหลือเงียบหมด
+  // (kind อื่นมี field ต่างกันบ้าง จึงไม่เคยเจออาการนี้ชัดเท่า 'safe')
+  // ใช้จำนวนช่องที่เปิดแล้วเป็นตัวนับ เพราะ lastOpenedCell เป็นข้อมูลภายในเอนจิน
+  // ไม่ได้ถูกเปิดออกมาใน PublicGameState (ตั้งใจไม่รั่วตำแหน่งให้ UI)
+  const openedCount = Object.keys(state.cells).length
   useEffect(() => {
-    const sig = state.lastResult ? JSON.stringify(state.lastResult) : null
+    const sig = state.lastResult ? `${openedCount}:${JSON.stringify(state.lastResult)}` : null
     if (sig && sig !== lastResultSig.current) {
       if (state.lastResult?.kind === 'safe') sfx.click()
       if (state.lastResult?.kind === 'glitch') {
@@ -39,7 +46,7 @@ export function GameEffects() {
       }
     }
     lastResultSig.current = sig
-  }, [state.lastResult])
+  }, [state.lastResult, openedCount])
 
   useEffect(() => {
     const sig = state.lastCardResult ? JSON.stringify(state.lastCardResult) : null
@@ -98,11 +105,13 @@ export function GameEffects() {
       {overlay === 'glitch' && <div className="fx-glitch-overlay" />}
       {overlay === 'redflash' && <div className="fx-red-flash" />}
       {/* FIX #42: สีกรอบต้องเป็นกลาง — เดิมใช้ CARD_COLORS[drawToast] ทำให้คนที่เคย
-          เห็น UI เดาชนิดการ์ดออกจากสี (ฟ้า = scan, แดง = attack) ทั้งที่ข้อความปิดไว้แล้ว */}
+          เห็น UI เดาชนิดการ์ดออกจากสี (ฟ้า = scan, แดง = attack) ทั้งที่ข้อความปิดไว้แล้ว
+          z-20: toast เป็นแค่การแจ้งเตือนผ่าน ๆ ต้องอยู่ใต้ modal เต็มจอ (z-30)
+          และใต้หัวเว็บ (.game-nav z-60) ที่ต้องกดได้ตลอด — เดิม z-50 ลอยทับทุกอย่าง */}
       {drawToast && (
         <div
           className={
-            `fixed bottom-32 left-1/2 z-50 -translate-x-1/2 rounded-xl border-2 px-5 py-3 ` +
+            `fixed bottom-32 left-1/2 z-20 -translate-x-1/2 rounded-xl border-2 px-5 py-3 ` +
             `border-border bg-card text-lg font-black text-foreground shadow-2xl`
           }
         >

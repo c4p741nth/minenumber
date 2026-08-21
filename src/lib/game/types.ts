@@ -47,6 +47,11 @@ export interface GameSettings {
   glitchCount: number // จำนวน glitch (ใช้เมื่อ manual)
   // FIX_LISTS #5: โดน glitch bomb แล้วใช้ item ไม่ได้กี่ turn (0 = ไม่ล็อกเลย)
   glitchLockTurns: number
+  // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบ glitch ซ้ำตอนที่ยังติดกลิตช์อยู่ จะคิดยังไง
+  //   false (เดิม) = รีเซ็ตเป็น glitchLockTurns ใหม่ — เหยียบตอนเหลือ 1 turn ได้ 2 turn
+  //     (เท่ากับ "โดนใหม่ทั้งใบ" ทับของเก่า ไม่ว่าของเก่าเหลือเท่าไหร่)
+  //   true = สะสมทับของเดิม (เหลือ 1 + โดนอีก 2 = 3 turn) — โทษหนักขึ้นตามจำนวนครั้งที่เหยียบ
+  glitchStack: boolean
   cardsEnabled: boolean
   maxHandSize: number // 3–7 จำนวนการ์ดที่ถือได้สูงสุด
   startingHand: number // 0–3 การ์ดแจกตอนเริ่มเกม

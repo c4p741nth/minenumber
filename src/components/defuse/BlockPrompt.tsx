@@ -38,7 +38,7 @@ export function BlockPrompt() {
   // FIX_LISTS ชุดใหม่ #9: กลางจอแนวตั้งจริง และเลื่อนอ่านได้ถ้ากล่องสูงเกินจอ
   return (
     <div
-      className="fixed inset-0 z-50 flex overflow-y-auto bg-black/80 p-6"
+      className="fixed inset-0 z-30 flex overflow-y-auto bg-black/80 p-6"
       role="dialog"
       aria-modal="true"
     >

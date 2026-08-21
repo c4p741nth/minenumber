@@ -58,7 +58,7 @@ button { cursor: pointer; }
 .mode-card strong { font-size: calc(20px * var(--mn-scale)); }
 .mode-card span { margin-top: calc(8px * var(--mn-scale)); color: var(--muted-foreground); font-size: calc(15px * var(--mn-scale)); line-height: 1.6; }
 .mode-selected { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
-.popup-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(32 35 34 / 65%); padding: 20px; }
+.popup-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgb(32 35 34 / 65%); padding: 20px; }
 /* FIX #41: 65% จางเกินบนพื้นมืด — popup กับพื้นหลังกลืนกัน ต้องทึบขึ้น */
 .dark .popup-backdrop { background: rgb(1 4 9 / 82%); }
 .bomb-popup { width: min(100%, calc(440px * var(--mn-scale))); border: 2px solid var(--primary); border-radius: calc(18px * var(--mn-scale)); background: var(--card); padding: calc(34px * var(--mn-scale)); text-align: center; box-shadow: 0 20px 70px rgb(32 35 34 / 30%); }
@@ -92,15 +92,63 @@ button { cursor: pointer; }
 @media (max-width: 1023px) { .number-board { min-height: 240px; } }
 @media (max-width: 640px) { .wide-range span { font-size: 48px; } .item-button { font-size: 11px; } }
 
+/* ช่องที่กู้ระเบิดสำเร็จ: เขียวสดแวบหนึ่งให้เห็นว่าเพิ่งกู้ที่ช่องนี้ แล้วค่อยจางลง
+   ไปเป็นสีเทาเหมือนช่องที่เปิดแล้วช่องอื่น (เดิมเขียวค้างอยู่ตลอดเกม)
+   ใช้ background-color ทับ bg-secondary ของ utility ชั่วคราวแล้วปล่อยกลับ */
+.cell-defused-fade { animation: mn-defused-fade 2.4s ease-out forwards; }
+@keyframes mn-defused-fade {
+  0%, 25% { background-color: var(--color-emerald-500, #10b981); color: #fff; opacity: 1; }
+  100% { background-color: var(--secondary); opacity: .7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-defused-fade { animation-duration: 0.01s; }
+}
+
+/* FIX_LISTS ชุดที่สิบสี่ #4: ช่อง glitch จางเป็นเทาเหมือนช่องปลอดภัย — โชว์สีม่วงแค่แป๊บเดียว
+   คู่แฝดของ .cell-defused-fade (ต่างกันแค่สี) เพื่อให้ช่องที่ "จบแล้ว" ทุกแบบจางลงเหมือนกัน */
+.cell-glitched-fade { animation: mn-glitched-fade 2.4s ease-out forwards; }
+@keyframes mn-glitched-fade {
+  0%, 25% { background-color: var(--color-purple-600, #9333ea); color: #fff; opacity: 1; }
+  100% { background-color: var(--secondary); opacity: .7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-glitched-fade { animation-duration: 0.01s; }
+}
+
+/* หัวเว็บ (จับเวลา/เสียง/ธีม/ออกจากห้อง) ต้องกดได้เสมอ แม้มี modal เปิดอยู่
+   modal overlay ทุกตัวถูกลดเป็น z-index 30 แล้ว หัวเว็บจึงลอยอยู่เหนือสุด
+   isolation:isolate กัน stacking context ของลูกมาตีกับ z-index ของ overlay */
+.game-nav {
+  position: relative;
+  z-index: 60;
+  isolation: isolate;
+  /* FIX_LISTS ชุดที่สิบห้า: เดิม (ชุดที่สิบสี่ #7) ให้แถบนี้มีพื้น var(--background) ทั้งแถบ
+     เพื่อให้อ่านออกตอนลอยอยู่เหนือ modal — แต่ผลคือแท่งสีอ่อนเต็มความกว้างพาดกลางจอ
+     ดูเหมือน modal โดนตัดครึ่งบน เสียบรรยากาศช่วงตัดสายทั้งหมด
+     เอาออก — แถบโปร่งเหมือนเดิม ส่วนที่ต้องอ่านออกจริง ๆ (ปุ่มทุกตัว) มี bg-card
+     + border ของตัวเองอยู่แล้ว จึงยังอ่านออกบนพื้นดำ และยังกดได้เหมือนเดิม (z-index 60 คงเดิม)
+     เหลือแค่โลโก้/ชื่อเกมที่เป็นตัวหนังสือเปล่า — หรี่ลงด้วย .game-nav-brand ด้านล่าง */
+  padding: 0.5rem 0.75rem;
+}
+/* เฉพาะโลโก้+ชื่อเกมที่ไม่มีกล่องของตัวเอง — ตอนมี modal ดำอยู่หลังต้องจางลง
+   ไม่ใช่การซ่อนเพราะแถบจะกระตุก (สูงเท่าเดิม) — แค่หรี่ลงให้กลมกลืนไปกับ modal */
+.game-nav[data-overlay='on'] .game-nav-brand { opacity: 0.25; }
+
 /* ---- Defuse modal (Task 6) ---- */
 .defuse-vignette {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 30;
   /* FIX_LISTS ชุดใหม่ #9: safe center — เนื้อหาสูงเกินจอแล้วต้องไม่ถูกตัดหัว
      (place-items: center ล้วน จะดันส่วนบนทะลุขอบขึ้นไปจนอ่านไม่ครบ)
      ตัว overlay ยังเป็น overflow: hidden ตาม FIX #34 อยู่ — กันขอบขาวโผล่ตอนสั่น */
   display: grid; place-items: safe center;
   background: radial-gradient(ellipse, rgba(60, 10, 10, 0.55), rgba(10, 5, 5, 0.92) 70%);
-  padding: calc(24px * var(--mn-scale));
+  /* FIX_LISTS ชุดที่สิบสี่ #5: padding ล่างต้องมากกว่าบน — ไม่ใช่เพราะอยากเยื้อง แต่เพราะ
+     inset: -40px ด้านล่างข้างล่างนี้ดัน "กึ่งกลาง" ของ grid ให้ต่ำกว่ากึ่งกลางจอจริง 40px
+     (กล่องสูงกว่าจอ 80px แต่ center คิดจากกล่อง ไม่ใช่จอ) ปุ่ม "รับทราบ" กับสายจึงต่ำไป
+     ทั้งสองโหมด และเห็นชัดในโหมด TV เพราะเนื้อหาสูงขึ้นจนชนขอบล่างก่อน
+     ชดเชยด้วย padding-bottom ที่มากกว่าบน 80px = ดึงเนื้อหากลับขึ้นมากลางจอพอดี */
+  padding: calc(24px * var(--mn-scale)) calc(24px * var(--mn-scale))
+    calc(24px * var(--mn-scale) + 80px);
   animation: mn-vignette 0.9s ease-in-out infinite;
   /* FIX #34: ตอนสั่น (defuse-shake) element ถูก translate ออกไป ทำให้เห็นพื้นหลัง
      สีขาวโผล่ที่ขอบ — ขยาย element ให้ใหญ่กว่าจอทุกด้านเผื่อระยะสั่นไว้ */
@@ -110,6 +158,14 @@ button { cursor: pointer; }
 @keyframes mn-vignette {
   50% { background: radial-gradient(ellipse, rgba(90, 15, 15, 0.62), rgba(10, 5, 5, 0.92) 75%); }
 }
+/* FIX_LISTS ชุดที่สิบสี่ #5: ส่วนหัว/สาย/ปุ่มของ modal ตัดสาย ต้องย่อตามโหมดจอ
+   ค่า sm: ของ Tailwind เป็น px ตายตัว ไม่รู้จัก --mn-scale — โหมด TV (scale 1.5)
+   ขยายตัวหนังสือทุกบรรทัดแต่ความสูงที่จองไว้เท่าเดิม เนื้อหาจึงล้นลงล่างจนปุ่ม
+   "รับทราบ" ตกไปใต้ขอบจอ คุมเป็นสัดส่วนของความสูงจอแทน (dvh = ไม่นับแถบเบราว์เซอร์)
+   min() กับค่า px เดิม = จอเตี้ยก็ไม่โตเกินของเดิม (โหมด laptop คงพฤติกรรมเดิม) */
+.defuse-head { min-height: min(272px, 26dvh); }
+.defuse-wire-svg { height: min(224px, 24dvh); width: auto; aspect-ratio: 120 / 220; }
+
 .defuse-shake { animation: mn-shake 0.5s 3; }
 @keyframes mn-shake {
   0%, 100% { transform: translate(0, 0); }
@@ -129,7 +185,7 @@ button { cursor: pointer; }
 
 /* ---- Visual effects (Task 8) ---- */
 .fx-glitch-overlay {
-  position: fixed; inset: 0; z-index: 40; pointer-events: none;
+  position: fixed; inset: 0; z-index: 25; pointer-events: none;
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 0, 90, 0.28), transparent 60%),
     radial-gradient(circle at 70% 70%, rgba(0, 130, 255, 0.28), transparent 60%);
@@ -138,7 +194,7 @@ button { cursor: pointer; }
 }
 @keyframes mn-glitch-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
 .fx-red-flash {
-  position: fixed; inset: -40px; z-index: 41; pointer-events: none;
+  position: fixed; inset: -40px; z-index: 26; pointer-events: none;
   background: rgba(220, 38, 38, 0.45);
   animation: mn-flash 0.7s forwards;
 }
@@ -242,4 +298,51 @@ button { cursor: pointer; }
     ทำให้เทสมองไม่เห็น — ใน stylesheet เทสตรวจจาก class ได้ตรง ๆ) */
 .board-grid {
   margin-bottom: var(--mn-hand-h, 336px);
+}
+
+/* ---- ซ่อนแถบเลื่อนแต่ยังเลื่อนได้ ----
+   หน้าตั้งค่า (SetupScreen) เลื่อนด้วยล้อเมาส์/ลากนิ้ว/คีย์บอร์ดได้เหมือนเดิมทุกอย่าง
+   ซ่อนแค่ "ตัวแถบ" ที่โผล่มากินขอบขวาแล้วทำให้เลย์เอาต์ดูไม่สะอาด
+     - scrollbar-width: none      → Firefox
+     - -ms-overflow-style: none   → Edge/IE เก่า
+     - ::-webkit-scrollbar        → Chrome/Safari/Edge ใหม่ (ต้องมีทั้ง display กับ width
+       เพราะบางเวอร์ชันไม่สน display: none อย่างเดียว)
+   overflow ยังเป็น auto ที่ตัว element จึงไม่กระทบการเลื่อน — ต่างจาก overflow: hidden
+   ที่ตัดการเลื่อนทิ้งไปเลย */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* FIX_LISTS ชุดที่สิบสี่ #1: ตารางอันดับตอนจบเกม สูงได้แค่ 5 แถว ที่เหลือ scroll
+   1 แถว = padding 8px×2 + บรรทัด text-lg (line-height 28px) = 44px, gap 4px ระหว่างแถว
+   × var(--mn-scale) เพราะโหมด TV ขยายทุกอย่าง 1.5 เท่า (ถ้าคิดเป็น px คงที่ TV จะโชว์ ~3 แถว)
+   overscroll-behavior: contain — scroll ถึงท้ายแล้วต้องไม่ลาม scroll หน้าเบื้องหลังต่อ */
+.mn-rank-scroll {
+  max-height: calc((44px * 5 + 4px * 4) * var(--mn-scale, 1));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* FIX_LISTS ชุดที่สิบสี่ #2: บันทึกเหตุการณ์ สูงได้แค่ 10 บรรทัด ที่เหลือหมุนเมาส์อ่าน
+   1 บรรทัด = py-1.5 (6px×2) + leading-5 (20px) + เส้นคั่น 1px = 33px
+   เดิม panel ยืดลงไปเรื่อย ๆ เพราะตัวแม่ (คอลัมน์ขวา) scroll ได้ ความสูงที่ "เหลือ"
+   จึงไม่มีเพดานให้ flex-1 ยึด — ต้องตั้งเพดานเป็น px ที่นี่ (× scale ให้โหมด TV ได้ 10 แถวเท่ากัน) */
+.mn-log-scroll {
+  max-height: calc(33px * 10 * var(--mn-scale, 1));
+  overscroll-behavior: contain;
+}
+
+/* FIX_LISTS ชุดที่สิบสี่ #2: panel ทีม เกิน 10 ทีมแล้ว scroll เมาส์ ไม่ยืดทะลุจอ
+   1 แถว = py-2 (8px×2) + border-2 (2px×2) + text-base (24px) = 44px, gap 4px
+   + หัวข้อ "ทีม" (24px + mb-2 8px) + padding ของ .panel บน-ล่าง
+   max-h-full ใน markup ยังอยู่ — อันไหนเตี้ยกว่าชนะ (จอเตี้ยกว่า 10 แถวก็ยังไม่ล้นจอ) */
+.mn-team-scroll {
+  max-height: calc((44px * 10 + 4px * 9 + 32px) * var(--mn-scale, 1));
+  overscroll-behavior: contain;
 }

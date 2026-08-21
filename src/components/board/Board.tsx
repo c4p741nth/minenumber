@@ -35,8 +35,24 @@ interface Props {
 const OPENED_STYLES: Record<Exclude<CellState, 'hidden'>, { cls: string; label: string }> = {
   safe: { cls: 'bg-secondary text-muted-foreground opacity-70', label: '✓' },
   detonated: { cls: 'bg-red-600 text-white', label: '💥' },
-  defused: { cls: 'bg-emerald-500 text-white', label: '🔧' },
-  glitched: { cls: 'bg-purple-600 text-white', label: '⚡' },
+  // ช่องที่กู้ระเบิดสำเร็จเป็น "ช่องที่จบแล้ว" เหมือนช่องปลอดภัย — ไม่ควรเขียวสดค้างอยู่
+  // ตลอดเกม (เดิม bg-emerald-500 ไม่จางเลย ช่องเดียวสว่างแย่งสายตาไปจากช่องที่ยังไม่เปิด)
+  // จางเป็นสีเทาแบบเดียวกับช่องปลอดภัย แต่คงไอคอน 🔧 กับโทนเขียวจาง ๆ ไว้ให้ยังแยกออกว่า
+  // ช่องนี้เคยมีระเบิดแล้วกู้สำเร็จ ไม่ใช่ช่องที่เปิดมาปลอดภัยตั้งแต่แรก
+  // (แอนิเมชัน .cell-defused-fade เขียวสดตอนแรกแล้วค่อยจาง — เห็นจังหวะที่กู้สำเร็จทันตา)
+  defused: {
+    cls: 'cell-defused-fade bg-secondary text-emerald-700 opacity-70 dark:text-emerald-400',
+    label: '🔧',
+  },
+  // FIX_LISTS ชุดที่สิบสี่ #4: ช่อง glitch ก็เป็น "ช่องที่จบแล้ว" เหมือนช่องปลอดภัย
+  //   (ระเบิด glitch ย้ายไปช่องอื่นแล้ว ช่องนี้ไม่มีอะไรเหลือ) เดิมม่วงสดค้างตลอดเกม
+  //   ทำให้กระดานที่มี glitch หลายลูกกลายเป็นทุ่งม่วงแย่งสายตาจากช่องที่ยังไม่เปิด
+  //   จางเป็นเทาแบบช่องปลอดภัย แต่คงไอคอน ⚡ กับโทนม่วงจาง ๆ ให้ยังแยกออกว่าเคยเป็น glitch
+  //   (.cell-glitched-fade ม่วงสดแป๊บเดียวตอนเปิด แล้วค่อยจาง — เห็นจังหวะที่เจอ glitch ทันตา)
+  glitched: {
+    cls: 'cell-glitched-fade bg-secondary text-purple-700 opacity-70 dark:text-purple-400',
+    label: '⚡',
+  },
 }
 
 // B8: กระดานช่องเยอะ (เช่น 200 ช่อง) ในคอลัมน์กลางที่แคบ ได้แค่ ~7 คอลัมน์ → หน้ายาวมาก

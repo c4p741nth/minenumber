@@ -106,7 +106,13 @@ export function GameOverScreen({ onExit }: Props) {
             เหลือเฉพาะตารางคะแนนข้างล่าง */}
         {!userEnded && <Podium rankings={rankings} />}
 
-        <ol className="mt-6 flex flex-col gap-1">
+        {/* FIX_LISTS ชุดที่สิบสี่ #1: โชว์แค่ 5 ทีม ที่เหลือ scroll เอา
+            เกม 10-20 ทีม ตารางนี้ยาวจนดันปุ่ม "กลับไปหน้าหลัก" ตกจอ กรรมการต้อง scroll
+            ทั้งหน้าไปหา — ตอนนี้กล่องอันดับ scroll ในตัวเอง ปุ่มอยู่ที่เดิมเสมอ
+            คุมความสูงด้วย .mn-rank-scroll (คำนวณจากความสูงแถวจริง × 5) ไม่ใช่ max-h คงที่
+            เพราะแถวสูงไม่เท่ากันระหว่างจอ (แถวหักบรรทัดตอนจอแคบ) และโหมด TV ยังคูณ scale อีก
+            ≤5 ทีมไม่ต้องคุม — ปล่อยสูงตามเนื้อหา จะไม่มีขอบ scroll โผล่มาให้เกะกะ */}
+        <ol className={`mt-6 flex flex-col gap-1${rankings.length > 5 ? ' mn-rank-scroll' : ''}`}>
           {rankings.map((r) => (
             <li
               key={r.team.id}

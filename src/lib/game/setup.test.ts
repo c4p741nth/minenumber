@@ -14,6 +14,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     glitchRatio: 0.3,
     glitchCount: 5,
     glitchLockTurns: 2, // FIX_LISTS ชุดใหม่ #5: ค่าเดิมที่เคย hardcode ในเอนจิน
+    glitchStack: false, // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบซ้ำ = รีเซ็ต (พฤติกรรมเดิม)
     cardsEnabled: true,
     maxHandSize: 5,
     startingHand: 0,

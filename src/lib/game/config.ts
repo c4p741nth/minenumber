@@ -58,6 +58,9 @@ export const DEFAULTS = {
   glitchCount: 0,
   // FIX_LISTS #5: โดน glitch แล้วใช้ item ไม่ได้กี่ turn — เดิม hardcode 2 ในเอนจิน
   glitchLockTurns: 2,
+  // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบ glitch ซ้ำ = รีเซ็ตเป็นค่าที่ตั้งไว้ (พฤติกรรมเดิม)
+  //   เปิด glitchStack ในหน้าตั้งค่าถ้าต้องการให้สะสมทับกันแทน
+  glitchStack: false,
   cardsEnabled: true,
   maxHandSize: 0, // 0 = ไม่จำกัด (W5.1)
   startingHand: 3, // แจกขั้นต่ำ 3 ใบ/ทีม (W5.2)
@@ -130,6 +133,7 @@ export function defaultSettings(): GameSettings {
     glitchRatio: DEFAULTS.glitchRatio,
     glitchCount: DEFAULTS.glitchCount,
     glitchLockTurns: DEFAULTS.glitchLockTurns,
+    glitchStack: DEFAULTS.glitchStack,
     cardsEnabled: DEFAULTS.cardsEnabled,
     maxHandSize: DEFAULTS.maxHandSize,
     startingHand: DEFAULTS.startingHand,

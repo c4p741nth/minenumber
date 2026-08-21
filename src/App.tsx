@@ -69,11 +69,13 @@ export default function Page() {
   //
   // FIX_LISTS ชุดที่สิบเอ็ด #3: หน้าตั้งค่าก็มี top nav เป็นของตัวเองแล้ว (pattern
   //   เดียวกับหน้าเล่นเกม) จึงตัดออกจากแถบลอยด้วย ไม่งั้นปุ่มธีม/โหมดจอจะซ้ำสองชุด
-  //   เหลือแค่หน้าเมนูหลักกับหน้าอันดับที่ยังใช้แถบลอย
+  //
+  //   หน้า Leaderboard มี top nav แบบเดียวกันแล้วเช่นกัน — เหลือแค่หน้าเมนูหลัก
+  //   หน้าเดียวที่ยังใช้แถบลอย (หน้านั้นเป็นหน้าจัดกลาง ไม่มี header แถวบน)
   return (
     <>
       {renderScreen()}
-      {screen !== 'game' && screen !== 'setup' && (
+      {screen === 'menu' && (
         <div className="fixed right-3 top-3 z-50 flex items-center gap-2">
           <ThemeToggle />
           <DisplayModeToggle />

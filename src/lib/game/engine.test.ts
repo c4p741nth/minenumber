@@ -23,6 +23,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     glitchRatio: 0.3,
     glitchCount: 0,
     glitchLockTurns: 2, // FIX_LISTS ชุดใหม่ #5: ค่าเดิมที่เคย hardcode ในเอนจิน
+    glitchStack: false, // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบซ้ำ = รีเซ็ต (พฤติกรรมเดิม)
     cardsEnabled: false,
     maxHandSize: 5,
     startingHand: 0,
@@ -178,6 +179,70 @@ describe('opening cells', () => {
     expect(state.teams[openerId].glitchTurnsLeft).toBe(0)
     // ยังจบตาตามปกติ — ตาที่เปิดเจอ glitch ไม่ได้จั่วการ์ด
     expect(state.cells[cell]).toBe('glitched')
+  })
+
+  // FIX_LISTS ชุดที่สิบสี่ #3: "กดช่องที่ยังไม่เปิดแต่รู้ว่าเป็น glitch แล้วช่องไม่หายไป"
+  //   เกิดตอน relocateBomb ย้ายไม่ได้ (ช่อง hidden ที่ยังไม่มีระเบิดหมดแล้ว) ซึ่งเป็นเรื่องปกติ
+  //   ถ้าตั้งค่าแบบไม่มีช่อง Safe เปล่า ๆ (ระเบิด 5 + glitch 10 + การ์ด 7 = 22 ช่องพอดี)
+  //   เดิมช่องค้างเป็น hidden และยังคาระเบิดลูกเดิม → ทีมถัดไปกดซ้ำก็ติดกลิตช์อีก วนไม่จบ
+  it('glitch ที่ย้ายไม่ได้ (ไม่มีช่องว่างเหลือ) — ช่องต้องปิดตัวเอง ไม่ค้างเป็น hidden', () => {
+    const settings = baseSettings({ glitchEnabled: true, rangeMin: 1, rangeMax: 4 })
+    const h = createGame(settings, 5)
+    const base = h.getState()
+    // กระดาน 4 ช่อง: ทุกช่องมีระเบิด → ไม่มีช่องว่างให้ย้ายไปเลย
+    const secret: Record<number, BombKind> = { 1: 'glitch', 2: 'real', 3: 'real', 4: 'real' }
+    const g = createGameFromState({ ...base, cells: {} }, secret, 5)
+    const openerId = g.getState().currentTeamIndex
+    const state = g.dispatch({ type: 'OPEN_CELL', cell: 1 })
+    // ช่องต้อง "หายไป" (เปิดแล้ว) เสมอ ไม่ว่าจะย้ายระเบิดได้หรือไม่
+    expect(state.cells[1]).toBe('glitched')
+    expect(state.teams[openerId].alive).toBe(true)
+    // ระเบิด glitch ลูกนั้นถูกปลดออกจากกระดาน — ห้ามค้างบนช่องที่เปิดแล้ว (ระเบิดผี)
+    expect(g.serializeSecret()[1]).toBeUndefined()
+    // เปิดซ้ำช่องเดิมไม่ได้อีก และไม่ติดกลิตช์เพิ่ม (ช่องจบแล้วจริง)
+    expect(state.cells[1]).not.toBe('hidden')
+  })
+
+  // FIX_LISTS ชุดที่สิบสี่ #3: เหยียบซ้ำ — glitchStack เลือกได้ว่าจะสะสมหรือรีเซ็ต
+  //   ต้องยัด glitchTurnsLeft ผ่าน snapshot ที่ส่งเข้า createGameFromState เพราะ getState()
+  //   คืน clone — แก้ object ที่ได้มาไม่กระทบ state จริงในเอนจิน (เคยเขียนพลาดตรงนี้)
+  function stepGlitchWhileGlitched(settings: GameSettings, carry: number) {
+    const h = createGame(settings, 5)
+    const base = h.getState()
+    const idx = base.currentTeamIndex
+    const snapshot: PublicGameState = {
+      ...base,
+      cells: {},
+      teams: base.teams.map((t, i) => (i === idx ? { ...t, glitchTurnsLeft: carry } : t)),
+    }
+    const secret: Record<number, BombKind> = { 1: 'glitch', 2: 'glitch' }
+    const g = createGameFromState(snapshot, secret, 5)
+    return { state: g.dispatch({ type: 'OPEN_CELL', cell: 1 }), idx }
+  }
+
+  it('glitchStack = false (เดิม) → เหยียบซ้ำรีเซ็ตเป็นค่าที่ตั้งไว้', () => {
+    const settings = baseSettings({
+      glitchEnabled: true,
+      glitchLockTurns: 2,
+      glitchStack: false,
+      rangeMin: 1,
+      rangeMax: 8,
+    })
+    // ค้างอยู่ 5 turn แล้วเหยียบใหม่ → ถูกทับเป็น 2 (โทษเบาลง = พฤติกรรมเดิมที่ผู้เล่นทักมา)
+    const { state, idx } = stepGlitchWhileGlitched(settings, 5)
+    expect(state.teams[idx].glitchTurnsLeft).toBe(2)
+  })
+
+  it('glitchStack = true → เหยียบซ้ำสะสมทับของเดิม', () => {
+    const settings = baseSettings({
+      glitchEnabled: true,
+      glitchLockTurns: 2,
+      glitchStack: true,
+      rangeMin: 1,
+      rangeMax: 8,
+    })
+    const { state, idx } = stepGlitchWhileGlitched(settings, 3)
+    expect(state.teams[idx].glitchTurnsLeft).toBe(5) // 3 + 2
   })
 })
 

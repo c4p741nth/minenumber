@@ -16,8 +16,18 @@ import { hitChance, isForcedWireCut } from '@/lib/game/balance'
 import { computeRankings, medalClass, MEDAL_EMOJI, visibleMedal } from '@/lib/game/ranking'
 import { useDisplayMode } from '@/lib/useDisplayMode'
 import { BombMark } from '@/components/setup/SetupScreen'
-import type { CardType } from '@/lib/game/types'
+import type { CardType, Phase } from '@/lib/game/types'
 import { useGame } from './GameProvider'
+
+// FIX_LISTS ชุดที่สิบห้า: phase ที่มี overlay คลุมเต็มจอ (modal ตัดสาย/บล็อก/โจมตี/จบเกม)
+//   ใช้บอก GameHeader ให้หรี่โลโก้ลง — ตัว set เดียวกันกับเงื่อนไขเรนเดอร์ modal ด้านล่าง
+//   ประกาศไว้ที่นี่เพื่อไม่ให้สองที่หลุดออกจากกันตอนเพิ่ม phase ใหม่
+const OVERLAY_PHASES: ReadonlySet<Phase> = new Set<Phase>([
+  'defusing',
+  'blocking',
+  'defending',
+  'gameover',
+])
 
 interface Props {
   // FIX_LISTS #8: จบเกมเหลือปุ่ม "กลับไปหน้าหลัก" ปุ่มเดียว → ไม่ต้องมี
@@ -167,7 +177,7 @@ export function GameScreen({ onExit }: Props) {
     //   ตอนนี้เป็น flex column สูงเท่าจอ: หัวเว็บอยู่กับที่ ส่วน grid ด้านล่างกินที่เหลือ
     //   (min-h-0 จำเป็น — ไม่งั้น flex item ยืดตามเนื้อหาแทนที่จะยอมหดแล้วให้ลูก scroll)
     <div className="flex h-screen w-full flex-col overflow-hidden p-2 sm:p-4">
-      <GameHeader onExit={endGame} />
+      <GameHeader onExit={endGame} overlay={OVERLAY_PHASES.has(state.phase)} />
       {/* FIX_LISTS ชุดใหม่ #2: คอลัมน์ข้างเป็น rem (15rem/18.75rem = 240px/300px ตอน
           โหมด Laptop) เพื่อให้กว้างขึ้นตามตัวอักษรเมื่อสลับเป็นโหมด TV — ถ้าล็อกเป็น px
           ตัวหนังสือจะโตแต่คอลัมน์เท่าเดิม ชื่อทีม/บันทึกจะถูกบีบจนตัดคำ
@@ -222,8 +232,12 @@ export function GameScreen({ onExit }: Props) {
               อยู่ใต้กระดาน กรรมการต้องกวาดตาสองที่ และแถบล่างยังดันกระดานให้สั้นลง)
               แถบนี้จึงต้องโชว์ทั้ง phase 'cards' และ 'opening' — pendingOpens ค้าง
               ข้ามมาถึงช่วงเปิดป้ายด้วย ไม่ใช่แค่ช่วงใช้การ์ด */}
-          {(inCards || state.phase === 'opening') && (
+          {/* แถบนี้โชว์ตอน 'defusing' ด้วย — เดิม unmount ไปทั้งแถบตอน modal ตัดสายเด้ง
+              ทำให้ข้อความที่มองทะลุ modal ลงมายังเป็น "ทีม X กรุณาเลือกแผ่นป้าย…" ค้างอยู่
+              ทั้งที่จังหวะนั้นทีมกำลังตัดสายระเบิด ไม่ได้กำลังเลือกป้าย */}
+          {(inCards || state.phase === 'opening' || state.phase === 'defusing') && (
             <TurnPrompt
+              defusing={state.phase === 'defusing'}
               teamName={current.name}
               handCount={inCards ? current.hand.length : 0}
               // FIX_LISTS ชุดที่สิบเอ็ด #1: แถบนี้โชว์ตอน 'opening' ด้วยแล้ว — ช่วงนั้น
@@ -249,13 +263,10 @@ export function GameScreen({ onExit }: Props) {
               }
               role="status"
             >
-              💣 ช่องที่เหลือเป็นระเบิดทั้งหมด — เปิดช่องไหนก็ต้องตัดสาย
-              <span className="mt-1 block text-sm font-semibold opacity-80">
-                {/* FIX_LISTS ชุดใหม่ #2: ไม่มี item เกี่ยวกับ turn → เข้าโหมดตัดสายให้เลย */}
-                {autoWireCut
-                  ? 'ไม่ต้องเลือกช่อง — กำลังเริ่มตัดสาย…'
-                  : 'แข่งกันตัดสายสลับทีมไปจนกว่าจะเหลือทีมเดียว (ใช้การ์ดที่เปลี่ยนตาได้ก่อน)'}
-              </span>
+              {/* แถบนี้เหลือบรรทัดเดียว — คำอธิบายยาว 2 บรรทัดเดิม (เงื่อนไขการแข่งตัดสาย
+                  / "กำลังเริ่มตัดสาย…") กินที่บนจอทั้งที่กรรมการอ่านรอบเดียวก็รู้แล้ว
+                  ตัวสถานะจริงไปอยู่บน modal ตัดสายที่เด้งตามมาทันทีอยู่แล้ว */}
+              💣 ช่องที่เหลือเป็นระเบิดทั้งหมด - บังคับตัดสายระเบิด
             </div>
           )}
           {/* FIX_LISTS ชุดที่สี่ #6: ไม่มีแถบคำอธิบาย "เลือกช่อง / กด Enter" คั่นแล้ว —
@@ -331,6 +342,7 @@ export function TurnPrompt({
   onDismissScanResult,
   pendingOpens = 1,
   pickedCell = null,
+  defusing = false,
 }: {
   teamName: string
   handCount: number
@@ -345,8 +357,22 @@ export function TurnPrompt({
   pendingOpens?: number
   // FIX_LISTS ชุดที่สิบสอง #1: ช่องที่เลือกค้างอยู่รอกดย้ำเพื่อเปิด (null = ยังไม่เลือก)
   pickedCell?: number | null
+  // true = phase 'defusing' — modal ตัดสายเปิดทับอยู่ แถบนี้เป็นพื้นหลังที่มองทะลุลงมาเห็น
+  defusing?: boolean
 }) {
   const base = 'flex flex-wrap items-center gap-3 rounded-xl border-2 p-3'
+
+  // กำลังตัดสายระเบิด — มาก่อนทุก branch เพราะจังหวะนั้นไม่มีอย่างอื่นให้ทำแล้ว
+  // (ผลสแกน/ช่องที่เลือกค้าง เป็นเรื่องของช่วงก่อนหน้า ไม่ควรค้างให้อ่านทับกัน)
+  if (defusing) {
+    return (
+      <div className={base + ' border-red-600 bg-red-600/10'} role="status">
+        <span className="text-lg font-bold text-red-700 dark:text-red-300">
+          💣 {teamName} กำลังตัดสายระเบิด
+        </span>
+      </div>
+    )
+  }
 
   // ผลสแกนมาก่อน: เป็นข้อมูลที่เพิ่งได้มา ต้องอ่านให้จบก่อนสั่งสแกนใบถัดไป
   if (scanResult !== null) {
@@ -468,13 +494,24 @@ export function TurnPrompt({
 // FIX_LISTS ชุดที่แปด #2: ปุ่มธีม/เต็มจอ/โหมดจอ ไม่ลอยมุมขวาบนแล้ว — มาอยู่บนแถบนี้
 //   ระดับเดียวกับระดับเสียงและปุ่มออกห้อง จึงไม่ต้องเว้น pr-40/pr-52 ให้แถบลอยอีก
 //   flex-wrap เผื่อจอแคบ/โหมด TV ที่ตัวอักษรโต — ปุ่มตกบรรทัดได้ ไม่ล้นออกนอกจอ
-function GameHeader({ onExit }: { onExit: () => void }) {
+function GameHeader({ onExit, overlay }: { onExit: () => void; overlay: boolean }) {
   return (
-    <header className="mx-auto mb-4 flex w-full max-w-375 flex-wrap items-center gap-3">
-      <BombMark />
-      <div className="min-w-0">
-        <h1 className="truncate font-serif text-2xl font-bold leading-tight">Minenumber</h1>
-        <p className="section-label">เลขระเบิด</p>
+    // หัวเว็บต้องกดได้ตลอด แม้ modal (ตัดสาย/บล็อก/โจมตี) เปิดอยู่ —
+    // .game-nav ยก z-index เหนือ overlay ที่ถูกลดลงเป็น 30 แล้ว
+    //
+    // FIX_LISTS ชุดที่สิบห้า: data-overlay บอก CSS ว่ามี modal คลุมจออยู่ — ไม่ใช่เพื่อ
+    //   ซ่อนแถบ (ปุ่มต้องกดได้ตลอด) แต่เพื่อหรี่โลโก้/ชื่อเกมที่เป็นตัวหนังสือเปล่า
+    //   ให้กลมกลืนไปกับ modal ไม่ใช่ลอยเด่นอยู่บนพื้นดำ
+    <header
+      data-overlay={overlay ? 'on' : 'off'}
+      className="game-nav mx-auto mb-4 flex w-full max-w-375 flex-wrap items-center gap-3"
+    >
+      <div className="game-nav-brand flex min-w-0 items-center gap-3 transition-opacity">
+        <BombMark />
+        <div className="min-w-0">
+          <h1 className="truncate font-serif text-2xl font-bold leading-tight">Minenumber</h1>
+          <p className="section-label">เลขระเบิด</p>
+        </div>
       </div>
       <button
         onClick={onExit}
@@ -658,7 +695,10 @@ function TeamList() {
     //   grid ตัวนอกเป็น items-stretch → panel เคยถูกยืดเต็มความสูงคอลัมน์ เหลือพื้นเทา
     //   ยาวโล่งใต้ทีมสุดท้าย self-start = สูงเท่าเนื้อหาจริง
     //   max-h-full + overflow-y-auto = ถ้าทีมเยอะจนล้นค่อย scroll (ไม่ทะลุออกนอกจอ)
-    <aside className="panel flex max-h-full min-h-0 flex-col gap-1 self-start overflow-y-auto">
+    // FIX_LISTS ชุดที่สิบสี่ #2: max-h-full พึ่งความสูงของ grid row ซึ่ง items-stretch
+    //   ทำให้ row สูงตามคอลัมน์ที่สูงที่สุด → เกิน 10 ทีมแล้ว panel ยังยืดตามไปได้เรื่อย ๆ
+    //   .mn-team-scroll ตั้งเพดานเป็น 10 แถวจริง ๆ (× scale) เกินจากนั้น scroll เมาส์
+    <aside className="panel mn-team-scroll flex max-h-full min-h-0 flex-col gap-1 self-start overflow-y-auto">
       {/* FIX_LISTS ชุดที่สาม #12: ทิศทางการเดินเกมมาอยู่มุมขวาบนของ panel ทีม
           แสดงเป็นลูกศรขึ้น/ลง — ตรงกับทิศที่ตาจะไหลไปในรายชื่อด้านล่างจริง ๆ
           (ตามลำดับ = ไล่ลง ↓, ย้อนกลับ = ไล่ขึ้น ↑) */}
@@ -810,6 +850,10 @@ export function hiddenCellCount(state: {
   return hidden
 }
 
+// FIX_LISTS ชุดที่สิบสี่ #2: จำนวนบรรทัด log ที่เก็บไว้แสดงใน panel (ล่าสุดอยู่บนสุด)
+//   ตรงกับจำนวนแถวที่ .mn-log-scroll เปิดให้เห็นก่อนต้อง scroll
+export const LOG_VISIBLE = 10
+
 function LogPanel() {
   const { state } = useGame()
   // FIX_LISTS ชุดที่สาม #11: โหมด TV ไม่มีบันทึกใน panel ขวา — คนดูอ่านไม่ทันอยู่แล้ว
@@ -817,15 +861,22 @@ function LogPanel() {
   const tv = useDisplayMode() === 'tv'
   // engine push log ต่อท้าย (เก่า→ใหม่) — ต้องตัดท้ายแล้วกลับด้าน ไม่ใช่ slice(0,10)
   // ไม่งั้นพอเกิน 10 เหตุการณ์ panel จะค้างอยู่ที่ 10 อันแรกตลอดเกม
-  const latest = state.log.slice(-40).reverse()
+  // FIX_LISTS ชุดที่สิบสี่ #2: เดิมเก็บ 40 รายการ แล้วหวังให้ overflow ของกรอบตัดเอง
+  //   แต่ตัวแม่ (aside คอลัมน์ขวา) เป็น overflow-y-auto อยู่แล้ว → กรอบใน flex-1 ไม่เคย
+  //   ถูกจำกัดความสูงจริง panel จึงยืดลงเรื่อย ๆ แล้วไปดัน StatusPanel ให้เลื่อนหลุดจอ
+  //   ตัดที่ LOG_VISIBLE รายการล่าสุดพอ (เก่ากว่านั้นดูย้อนหลังได้ที่หน้า Leaderboard)
+  const latest = state.log.slice(-LOG_VISIBLE).reverse()
   if (tv) return null
   return (
     <div className="panel flex min-h-0 flex-col gap-1">
       <h3 className="section-label mb-1">บันทึก</h3>
       {latest.length === 0 && <p className="text-sm text-muted-foreground">ยังไม่มีเหตุการณ์</p>}
       {/* FIX_LISTS ชุดที่เก้า #1: เดิมล็อก max-h-96 (384px) ตายตัว — จอสูงก็ได้เท่านั้น
-          จอเตี้ยก็ยังล้น ตอนนี้ยืดตามที่ว่างจริงที่เหลือในคอลัมน์ขวา (flex-1 + min-h-0) */}
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+          จอเตี้ยก็ยังล้น ตอนนี้ยืดตามที่ว่างจริงที่เหลือในคอลัมน์ขวา (flex-1 + min-h-0)
+          FIX_LISTS ชุดที่สิบสี่ #2: flex-1 อย่างเดียวไม่พอ — ตัวแม่ scroll ได้ ความสูง
+          ที่ "เหลือ" จึงไม่มีเพดาน กรอบนี้ต้องคุมเพดานของตัวเองด้วย .mn-log-scroll
+          (สูงเท่า 10 บรรทัด × scale) เกินจากนั้นหมุนเมาส์อ่านในกรอบ ไม่ยืดลงไปเรื่อย ๆ */}
+      <div className="mn-log-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {latest.map((l) => (
           <p
             key={l.id}
