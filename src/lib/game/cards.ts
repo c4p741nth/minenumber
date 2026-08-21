@@ -57,7 +57,7 @@ export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   scan: 'เลือกเลข → ตรวจช่วงเลขซ้าย–ขวารอบเลขนั้น (±R) เช่น เลือก 20 รัศมี 3 = ตรวจ 17–23 รวม 7 ช่อง บอกแค่มี/ไม่มีระเบิด',
   skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด)',
   shield: 'กางโล่ให้ทีมตัวเอง — ถ้าเหยียบระเบิดจะรอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น (ใช้กับทีมตัวเองเท่านั้น กันได้เฉพาะระเบิด)',
-  block: 'เก็บไว้กัน effect ที่ทีมอื่นจะใช้ใส่เรา (Attack/Block) — เมื่อโดนจะมี popup ถามว่าจะกันไหม',
+  block: 'เก็บไว้กัน effect ของทีมอื่น (Attack / Reverse / Shuffle) — จะกันให้ทีมตัวเองหรือกันแทนทีมอื่นก็ได้ เมื่อมีคนใช้จะมี popup ถามทีละทีม ใช้ซ้อน Block ด้วยกันไม่ได้',
   reverse: 'สลับทิศทาง + จบ turn ทันที',
   shuffle: 'สุ่มย้ายตำแหน่งระเบิดทั้งหมดใหม่',
   attack: 'ทีมเป้าหมายต้องเปิดเพิ่ม +1 (โอนกองต่อได้)',
@@ -78,4 +78,13 @@ export function cardNeedsCellTarget(card: CardType): boolean {
 
 export function cardEndsTurn(card: CardType): boolean {
   return card === 'skip' || card === 'reverse' || card === 'attack'
+}
+
+// FIX_LISTS #10: การ์ดที่ "ส่งผลกับทีมอื่น" → ทีมอื่นมีสิทธิ์เอา Block มากันได้
+// Attack ใส่ทีมอื่นตรง ๆ, Reverse สลับลำดับของทั้งวง, Shuffle ย้ายระเบิดทั้งกระดาน
+// Shield/Block เป็นการ์ดตั้งรับของทีมตัวเอง ไม่กระทบใคร จึงกันไม่ได้
+// Skip แค่จบตาตัวเอง ไม่ได้บังคับใคร จึงกันไม่ได้เช่นกัน
+// FIX_LISTS #15: Block เองอยู่นอกรายการนี้ — กัน Block ซ้อน Block ไม่ได้ (ห้าม stack)
+export function cardIsBlockable(card: CardType): boolean {
+  return card === 'attack' || card === 'reverse' || card === 'shuffle'
 }

@@ -1,5 +1,5 @@
 // ความสมดุลของเกมสัมพันธ์กับช่วงตัวเลข — ใช้แนะนำผู้เล่นในหน้าตั้งค่า
-import { minCellsFor } from './config'
+import { minCellsFor, type MinCellsOptions } from './config'
 
 // ความหนาแน่นระเบิด = ระเบิดทั้งหมด / ช่องทั้งหมด
 export function bombDensity(totalBombs: number, totalCells: number): number {
@@ -42,8 +42,13 @@ export type ChanceDisplay =
   | { kind: 'certain'; text: string; percent: 100 }
   | { kind: 'normal'; percent: number; level: BalanceVerdict }
 
-export function chanceDisplay(bombs: number, cells: number, teams: number): ChanceDisplay {
-  if (cells < minCellsFor(teams)) {
+export function chanceDisplay(
+  bombs: number,
+  cells: number,
+  teams: number,
+  minOpts: MinCellsOptions = {},
+): ChanceDisplay {
+  if (cells < minCellsFor(teams, minOpts)) {
     return { kind: 'unplayable', text: 'เล่นยังไงก่อน (มันเล่นไม่ได้ ช่องน้อยไป๊)' }
   }
   if (bombs >= cells) {
@@ -51,4 +56,10 @@ export function chanceDisplay(bombs: number, cells: number, teams: number): Chan
   }
   const chance = hitChance(bombs, cells)
   return { kind: 'normal', percent: Math.round(chance * 100), level: verdictFor(chance) }
+}
+// FIX_LISTS #14: ช่องที่ยังไม่เปิดเหลือเท่ากับจำนวนระเบิดจริง → เปิดช่องไหนก็เจอระเบิด
+// (โอกาสโดน 100%) เกมเข้าโหมด "แข่งกันตัดสาย" สลับทีมไปมาจนกว่าจะจบ
+// นับเฉพาะระเบิดจริง — glitch เป็นระเบิดส่วนเกินที่ไม่ทำให้ตกรอบ (#16)
+export function isForcedWireCut(realBombs: number, hiddenCells: number): boolean {
+  return hiddenCells > 0 && realBombs >= hiddenCells
 }

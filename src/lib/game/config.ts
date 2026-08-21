@@ -20,14 +20,30 @@ export const LIMITS = {
   maxHandSizeCap: 7,
   maxStartingHand: 5,
   maxGlitchCount: 999,
+  // FIX_LISTS #5: ช่วง turn ที่ glitch bomb ล็อกการใช้ item ได้
+  // 0 = โดนแล้วไม่ล็อกเลย (เหลือแค่เสียเวลาเปิดช่อง)
+  minGlitchLockTurns: 0,
+  maxGlitchLockTurns: 10,
 } as const
 
-// ช่องขั้นต่ำที่เล่นได้ = จำนวนระเบิดจริง (FIX_LISTS #2/#15)
-// เดิมบังคับ ≥ จำนวนทีม ทำให้ตั้งช่อง = จำนวนระเบิดไม่ได้ ทั้งที่เป็นกรณีที่ต้องการจริง:
-// ช่อง = ระเบิดจริง → โอกาสโดน 100% → บังคับเข้า cut wire ตั้งแต่ตาแรก
-// ต่ำกว่านี้คือมีระเบิดมากกว่าช่อง วางไม่ลงจริง ๆ
-export function minCellsFor(teamCount: number): number {
-  return Math.max(bombQuota(teamCount), LIMITS.minRange)
+// ของที่ต้อง "มีที่ยืน" บนกระดาน — ใช้คิดช่องขั้นต่ำ (FIX_LISTS #3)
+export interface MinCellsOptions {
+  // glitch bomb ที่จะลงกระดานจริง — นับทั้งโหมด manual และ auto (FIX_LISTS ชุดใหม่ #4)
+  // เดิมนับเฉพาะ manual ทำให้โหมด auto ลดช่องต่ำกว่าที่ glitch ยืนได้ แล้วโดน clamp หายเงียบ ๆ
+  // เช่น ระเบิดจริง 5 + glitch(auto 30% → 1) + การ์ด 7 ต้องได้ขั้นต่ำ 13 ไม่ใช่ 12
+  glitchCount?: number
+  // การ์ดในสำรับ — เปิดระบบการ์ดแล้วต้องมีช่องให้การ์ดโผล่
+  deckSize?: number
+}
+
+// ช่องขั้นต่ำที่เล่นได้ = ระเบิดจริง + ของที่เปิดใช้งานอยู่ (FIX_LISTS #3)
+// เดิมคืนแค่ระเบิดจริงเสมอ พอผู้ใช้ลดช่องลงชนขั้นต่ำ glitch bomb ที่ตั้งไว้เลย
+// ถูก clamp หายไปเงียบ ๆ (glitchCountFor clamp กับ totalCells − realBombs = 0)
+// ตอนนี้ minimum ขยับตาม option ที่เปิด: มีแต่ระเบิดจริง → เท่าระเบิดจริง,
+// เปิด glitch แบบกำหนดเอง/เปิดการ์ดด้วย → บวกเพิ่มตามจำนวนที่กรอกไว้
+export function minCellsFor(teamCount: number, opts: MinCellsOptions = {}): number {
+  const extras = Math.max(opts.glitchCount ?? 0, 0) + Math.max(opts.deckSize ?? 0, 0)
+  return Math.max(bombQuota(teamCount) + extras, LIMITS.minRange)
 }
 
 export const DEFAULTS = {
@@ -39,6 +55,8 @@ export const DEFAULTS = {
   glitchMode: 'auto' as const,
   glitchRatio: 0.3,
   glitchCount: 0,
+  // FIX_LISTS #5: โดน glitch แล้วใช้ item ไม่ได้กี่ turn — เดิม hardcode 2 ในเอนจิน
+  glitchLockTurns: 2,
   cardsEnabled: true,
   maxHandSize: 0, // 0 = ไม่จำกัด (W5.1)
   startingHand: 3, // แจกขั้นต่ำ 3 ใบ/ทีม (W5.2)
@@ -108,6 +126,7 @@ export function defaultSettings(): GameSettings {
     glitchMode: DEFAULTS.glitchMode,
     glitchRatio: DEFAULTS.glitchRatio,
     glitchCount: DEFAULTS.glitchCount,
+    glitchLockTurns: DEFAULTS.glitchLockTurns,
     cardsEnabled: DEFAULTS.cardsEnabled,
     maxHandSize: DEFAULTS.maxHandSize,
     startingHand: DEFAULTS.startingHand,

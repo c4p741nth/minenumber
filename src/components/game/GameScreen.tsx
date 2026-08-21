@@ -9,7 +9,7 @@ import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
-import { hitChance } from '@/lib/game/balance'
+import { hitChance, isForcedWireCut } from '@/lib/game/balance'
 import { computeRankings, medalClass, MEDAL_EMOJI, visibleMedal } from '@/lib/game/ranking'
 import { BombMark } from '@/components/setup/SetupScreen'
 import { useGame } from './GameProvider'
@@ -43,6 +43,12 @@ export function GameScreen({ onExit }: Props) {
   }, [state.phase, state.turnNumber, state.currentTeamIndex])
 
   const inCards = state.phase === 'cards'
+  // FIX_LISTS #14: ช่องที่เหลือ = ระเบิดจริง → เปิดช่องไหนก็เจอ (โอกาส 100%)
+  // เกมกลายเป็น "แข่งกันตัดสาย" สลับทีมไปมาจนจบ — การ์ดที่เกี่ยวกับ turn ยังใช้ได้ก่อน
+  const forcedWireCut = isForcedWireCut(
+    state.realBombsRemaining ?? state.bombsRemaining,
+    hiddenCellCount(state),
+  )
 
   // พิมพ์ตัวเลขตรง ๆ เพื่อเลือกช่อง (MC พิมพ์เร็วกว่าคลิก) + Esc ยกเลิก
   useEffect(() => {
@@ -95,10 +101,12 @@ export function GameScreen({ onExit }: Props) {
       setScanning(null)
       const lo = Math.max(state.rangeMin, info.center - info.radius)
       const hi = Math.min(state.rangeMax, info.center + info.radius)
+      // FIX_LISTS #13: ปลอดภัย = info สีฟ้า, ไม่ปลอดภัย = warning สามเหลี่ยมเหลือง
+      // (เดิมใช้ error กากบาทแดง ซึ่งสื่อว่า "สแกนล้มเหลว" มากกว่า "เจอระเบิด")
       void infoDialog({
-        title: info.found ? '⚠ มีระเบิดอยู่ใกล้ ๆ!' : '✓ ไม่มีระเบิดอยู่ใกล้ ๆ',
+        title: info.found ? '⚠ มีระเบิดอยู่ใกล้ ๆ!' : 'ไม่มีระเบิดอยู่ใกล้ ๆ',
         text: `ตรวจช่วง ${lo}–${hi} (รอบเลข ${info.center})`,
-        icon: info.found ? 'error' : 'success',
+        icon: info.found ? 'warning' : 'info',
       })
     }, 2200)
   }, [state.lastCardResult, state.rangeMin, state.rangeMax, state.settings.scanRadius])
@@ -133,6 +141,23 @@ export function GameScreen({ onExit }: Props) {
               )}
             </div>
           )}
+          {/* FIX_LISTS #14: บังคับเข้าโหมดตัดสาย — ทุกช่องที่เหลือเป็นระเบิดจริงหมด */}
+          {forcedWireCut && state.phase !== 'gameover' && (
+            <div
+              className={
+                'rounded-xl border-2 border-red-600 bg-red-600/10 p-3 text-center ' +
+                'text-lg font-bold text-red-700 dark:text-red-300'
+              }
+              role="status"
+            >
+              💣 ช่องที่เหลือเป็นระเบิดทั้งหมด — เปิดช่องไหนก็ต้องตัดสาย
+              <span className="mt-1 block text-sm font-semibold opacity-80">
+                แข่งกันตัดสายสลับทีมไปจนกว่าจะเหลือทีมเดียว
+              </span>
+            </div>
+          )}
+          {/* FIX_LISTS #12: ช่องคีย์เลขอยู่เหนือตารางตัวเลข (เดิมลอยอยู่ล่างจอ มองไม่เห็นตอนโฟกัสกระดาน) */}
+          <TypedCell typed={typed} onClear={() => setTyped('')} visible={state.phase !== 'gameover'} />
           <Board
             rangeMin={state.rangeMin}
             rangeMax={state.rangeMax}
@@ -163,24 +188,50 @@ export function GameScreen({ onExit }: Props) {
       {state.phase === 'blocking' && <BlockPrompt />}
       {state.phase === 'gameover' && <GameOverScreen onExit={onExit} />}
       <Hand locked={!cardMode} />
-      <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
+      {/* FIX_LISTS ชุดใหม่ #8: ปุ่มปิดเสียงเคยเป็น fixed top-4 right-4 ของตัวเอง
+          ซ้อนทับปุ่มสลับธีมที่ App วางไว้ fixed right-3 top-3 (z สูงกว่า) —
+          ในหน้าเล่นเกมจึงเห็นเป็นปุ่มซ้อนกัน 2 ชั้น กดโดนผิดปุ่ม
+          ตอนนี้ปุ่มปิดเสียงเลื่อนลงมาอยู่ใต้ปุ่มธีมแทน ไม่ทับกันแล้ว */}
+      <div className="fixed right-3 top-16 z-40 flex items-center gap-2">
         <MuteButton />
       </div>
-      {/* FIX #16: พิมพ์เลขแล้วต้องกด Enter ยืนยัน — ไม่เปิดให้อัตโนมัติ กันลั่นกดผิดช่อง */}
-      {typed !== '' && state.phase !== 'gameover' && (
-        <div
-          className={
-            'fixed bottom-48 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-xl ' +
-            'border-2 border-primary bg-card px-4 py-2 shadow-2xl'
-          }
-        >
-          <span className="font-mono text-3xl font-black">{typed}</span>
-          <span className="text-sm font-bold text-muted-foreground">
-            กด Enter เพื่อเปิด · Esc ยกเลิก
-          </span>
-        </div>
-      )}
       <GameEffects />
+    </div>
+  )
+}
+
+// FIX_LISTS #12: แถบคีย์เลขเลือกช่อง — อยู่เหนือตารางตัวเลขให้เห็นพร้อมกระดาน
+// เว้นที่ไว้ตลอด (min-h) กันกระดานขยับขึ้นลงตอนพิมพ์/ล้าง — ดู FIX #26 เรื่อง layout นิ่ง
+function TypedCell({
+  typed,
+  onClear,
+  visible,
+}: {
+  typed: string
+  onClear: () => void
+  visible: boolean
+}) {
+  if (!visible) return null
+  if (typed === '') {
+    return (
+      <p className="min-h-11 py-2 text-center text-sm text-muted-foreground">
+        พิมพ์เลขช่องแล้วกด Enter เพื่อเปิด (หรือกดที่ช่องบนกระดาน)
+      </p>
+    )
+  }
+  return (
+    <div className="flex min-h-11 flex-wrap items-center justify-center gap-3 rounded-xl border-2 border-primary bg-primary/10 px-4 py-2">
+      <span className="text-sm font-bold">เลือกช่อง</span>
+      <span className="font-mono text-3xl font-black leading-none">{typed}</span>
+      <span className="text-sm font-bold text-muted-foreground">
+        กด Enter เพื่อเปิด · Esc ยกเลิก
+      </span>
+      <button
+        onClick={onClear}
+        className="rounded-lg border border-border bg-background px-3 py-1 text-sm font-bold"
+      >
+        ล้าง
+      </button>
     </div>
   )
 }
@@ -284,14 +335,29 @@ function CurrentTeamBanner() {
             {paused ? '▶' : '⏸'}
           </button>
         )}
-        {/* FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้าได้ตามที่พิจารณา */}
-        <button
-          onClick={() => dispatch({ type: 'UNDO_TURN' })}
-          title="ย้อนกลับไปทีมก่อนหน้า (กรรมการพิจารณา)"
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-bold"
-        >
-          ↩ ย้อนทีม
-        </button>
+        {/* FIX #18: กรรมการย้อนกลับไปทีมก่อนหน้าได้ตามที่พิจารณา
+            FIX_LISTS #9: ปุ่มไปทีมถัดไปอยู่ข้างกัน — จับเป็นกลุ่มเดียว ไม่ให้ปุ่มกระจายจนรก */}
+        <div className="flex overflow-hidden rounded-lg border border-border bg-background">
+          <button
+            onClick={() => dispatch({ type: 'UNDO_TURN' })}
+            title="ย้อนกลับไปทีมก่อนหน้า (กรรมการพิจารณา)"
+            aria-label="ย้อนกลับไปทีมก่อนหน้า"
+            className="px-3 py-2 text-sm font-bold hover:bg-secondary"
+          >
+            ↩ ย้อนทีม
+          </button>
+          <span className="w-px self-stretch bg-border" aria-hidden="true" />
+          {/* ข้ามตาให้ทีมปัจจุบัน = เสีย turn เหมือนหมดเวลา (ไม่ได้จั่วการ์ด) */}
+          <button
+            onClick={() => dispatch({ type: 'TIMEOUT' })}
+            disabled={state.phase !== 'cards' && state.phase !== 'opening'}
+            title="ข้ามไปทีมถัดไป (ทีมนี้เสีย turn)"
+            aria-label="ไปทีมถัดไป"
+            className="px-3 py-2 text-sm font-bold hover:bg-secondary disabled:opacity-40"
+          >
+            ทีมถัดไป ↪
+          </button>
+        </div>
         <TimerCircle
           duration={state.settings.turnSeconds}
           phase={state.phase}
@@ -398,12 +464,12 @@ function TeamList() {
 
 function StatusPanel() {
   const { state } = useGame()
-  // FIX #28: โอกาสโดนระเบิดระหว่างเล่น = ระเบิดทั้งหมด / ช่องที่ยังไม่เปิด
-  let hidden = 0
-  for (let n = state.rangeMin; n <= state.rangeMax; n++) {
-    if (!(n in state.cells)) hidden++
-  }
-  const chance = Math.round(hitChance(state.bombsRemaining, hidden) * 100)
+  // FIX #28: โอกาสโดนระเบิดระหว่างเล่น = ระเบิด / ช่องที่ยังไม่เปิด
+  // FIX_LISTS #16: นับเฉพาะ "ระเบิดจริง" — ระบบไม่เห็น glitch bomb จึงไม่เอามาคิดรวม
+  // (snapshot เก่าไม่มี field นี้ → ตกกลับไปใช้ยอดรวมเหมือนเดิม)
+  const hidden = hiddenCellCount(state)
+  const realBombs = state.realBombsRemaining ?? state.bombsRemaining
+  const chance = Math.round(hitChance(realBombs, hidden) * 100)
   const chanceClass =
     chance >= 50
       ? 'text-red-600 dark:text-red-400'
@@ -418,7 +484,7 @@ function StatusPanel() {
       <div className="flex items-center justify-between gap-2">
         <div className="text-center">
           <p className="section-label">ระเบิดเหลือ</p>
-          <p className="font-mono text-3xl font-black text-destructive">{state.bombsRemaining}</p>
+          <p className="font-mono text-3xl font-black text-destructive">{realBombs}</p>
         </div>
         <div className="text-center">
           <p className="section-label">ช่องเหลือ</p>
@@ -453,6 +519,19 @@ function StatusPanel() {
       </div>
     </div>
   )
+}
+
+// นับช่องที่ยังไม่เปิด — ใช้ทั้งแถบสถานะ (#16) และเช็คบังคับตัดสาย (#14)
+export function hiddenCellCount(state: {
+  rangeMin: number
+  rangeMax: number
+  cells: Record<number, unknown>
+}): number {
+  let hidden = 0
+  for (let n = state.rangeMin; n <= state.rangeMax; n++) {
+    if (!(n in state.cells)) hidden++
+  }
+  return hidden
 }
 
 function LogPanel() {

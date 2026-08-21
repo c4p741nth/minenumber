@@ -19,11 +19,14 @@ export function GameOverScreen({ onExit }: Props) {
   const { rankings, isDraw, noWinner } = computeRankings(state.teams)
   const winner = rankings.find((r) => r.rank === 1)
   const savedRef = useRef(false)
+  // FIX_LISTS ชุดใหม่ #10: กรรมการกดจบเกมเอง ≠ ผลการแข่งที่เล่นจนจบ
+  // ทีมที่เหลือรอดพร้อมกันตอนถูกยุติจะเข้าเงื่อนไข isDraw ทำให้ขึ้น "เสมอกัน!"
+  // ซึ่งโกหก — เกมยังไม่ได้ตัดสิน จึงต้องบอกตรง ๆ ว่าถูกยุติ และไม่โชว์โพเดียม
+  const userEnded = state.log.some((l) => l.message === USER_ENDED_LOG)
 
   // FIX_LISTS #7: เสียงตอนขึ้น Leaderboard ตอนจบเกม — ครั้งเดียวตอน mount
   // FIX #44 ยังใช้อยู่: กรรมการสั่งยุติเกมเองไม่ใช่ชัยชนะ จึงไม่ต้องมีเสียงฉลอง
   useEffect(() => {
-    const userEnded = state.log.some((l) => l.message === USER_ENDED_LOG)
     if (!userEnded) sfx.finished()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -66,17 +69,39 @@ export function GameOverScreen({ onExit }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankings])
 
+  // FIX_LISTS ชุดใหม่ #9: จัดกลางแนวตั้งด้วย flex + m-auto แทน grid place-items-center
+  // place-items-center บนกล่องที่ scroll ได้ จะดัน overflow ทะลุขอบบนจนเลื่อนขึ้นไปดูไม่ได้
+  // (m-auto ในแกนที่ล้น จะยุบเป็น 0 เอง → เนื้อหายาวเกินจอก็ยังเลื่อนอ่านครบ)
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/70 p-3 sm:p-6">
-      <div className="w-full max-w-3xl rounded-2xl border border-border bg-card p-4 sm:p-8">
+    <div className="fixed inset-0 z-40 flex overflow-y-auto bg-black/70 p-3 sm:p-6">
+      <div className="m-auto w-full max-w-3xl rounded-2xl border border-border bg-card p-4 sm:p-8">
         <p className="section-label text-center">จบเกม</p>
+        {/* FIX_LISTS ชุดใหม่ #10: ยุติเอง → ไม่ประกาศผู้ชนะ/ไม่บอกว่าเสมอ บอกแค่ว่าถูกยุติ */}
         <h2 className="mt-1 text-center font-serif text-3xl font-bold sm:text-5xl">
-          {noWinner ? 'ไม่มีผู้ชนะ' : isDraw ? 'เสมอกัน!' : `ชนะเลิศ — ${winner?.team.name}`}
+          {userEnded
+            ? 'เกมถูกยุติโดยผู้ใช้'
+            : noWinner
+              ? 'ไม่มีผู้ชนะ'
+              : isDraw
+                ? 'เสมอกัน!'
+                : `ชนะเลิศ — ${winner?.team.name}`}
         </h2>
-        {isDraw && <p className="mt-2 text-center text-muted-foreground">ช่องหมด — ทุกทีมที่รอดเสมอกัน</p>}
-        {noWinner && <p className="mt-2 text-center text-muted-foreground">ทุกทีมตกรอบ</p>}
+        {userEnded ? (
+          <p className="mt-2 text-center text-muted-foreground">
+            เกมยังไม่จบตามกติกา — ด้านล่างคือคะแนน ณ ตอนที่ยุติ
+          </p>
+        ) : (
+          <>
+            {isDraw && (
+              <p className="mt-2 text-center text-muted-foreground">ช่องหมด — ทุกทีมที่รอดเสมอกัน</p>
+            )}
+            {noWinner && <p className="mt-2 text-center text-muted-foreground">ทุกทีมตกรอบ</p>}
+          </>
+        )}
 
-        <Podium rankings={rankings} />
+        {/* FIX_LISTS ชุดใหม่ #10: ยุติเอง → ไม่โชว์กราฟโพเดียม เพราะยังไม่มีผู้ชนะจริง
+            เหลือเฉพาะตารางคะแนนข้างล่าง */}
+        {!userEnded && <Podium rankings={rankings} />}
 
         <ol className="mt-6 flex flex-col gap-1">
           {rankings.map((r) => (

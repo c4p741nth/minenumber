@@ -22,6 +22,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     glitchMode: 'auto',
     glitchRatio: 0.3,
     glitchCount: 0,
+    glitchLockTurns: 2, // FIX_LISTS ชุดใหม่ #5: ค่าเดิมที่เคย hardcode ในเอนจิน
     cardsEnabled: false,
     maxHandSize: 5,
     startingHand: 0,
@@ -141,6 +142,40 @@ describe('opening cells', () => {
     // (เดิมหายทำให้ระเบิดในกระดานลดลงเรื่อย ๆ ระหว่างเล่น)
     expect(state.bombsRemaining).toBe(before)
     expect(state.phase).not.toBe('defusing') // กู้ไม่ได้
+  })
+
+  // FIX_LISTS ชุดใหม่ #5: จำนวน turn ที่ติดกลิตช์มาจาก settings ไม่ใช่ 2 ตายตัว
+  it('glitchLockTurns = 5 → ติดกลิตช์ 5 turn', () => {
+    const settings = baseSettings({
+      glitchEnabled: true,
+      glitchRatio: 0.5,
+      glitchLockTurns: 5,
+      rangeMin: 1,
+      rangeMax: 30,
+    })
+    const h = createGame(settings, 11)
+    const cell = bombCellOf(h, 'glitch')
+    const openerId = h.getState().currentTeamIndex
+    const state = h.dispatch({ type: 'OPEN_CELL', cell })
+    expect(state.teams[openerId].glitchTurnsLeft).toBe(5)
+  })
+
+  it('glitchLockTurns = 0 → เปิดเจอแล้วเสียแค่ตานั้น ไม่ล็อกการ์ดต่อ', () => {
+    const settings = baseSettings({
+      glitchEnabled: true,
+      glitchRatio: 0.5,
+      glitchLockTurns: 0,
+      rangeMin: 1,
+      rangeMax: 30,
+    })
+    const h = createGame(settings, 11)
+    const cell = bombCellOf(h, 'glitch')
+    const openerId = h.getState().currentTeamIndex
+    const state = h.dispatch({ type: 'OPEN_CELL', cell })
+    expect(state.teams[openerId].alive).toBe(true)
+    expect(state.teams[openerId].glitchTurnsLeft).toBe(0)
+    // ยังจบตาตามปกติ — ตาที่เปิดเจอ glitch ไม่ได้จั่วการ์ด
+    expect(state.cells[cell]).toBe('glitched')
   })
 })
 

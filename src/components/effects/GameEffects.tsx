@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
-import { DEFUSE_TIMEOUT_LOG } from '@/lib/game/engine'
+import { DEFUSE_FAILED_LOG, DEFUSE_TIMEOUT_LOG } from '@/lib/game/engine'
 import type { CardType } from '@/lib/game/types'
 
 type FxOverlay = 'glitch' | 'redflash' | null
@@ -16,8 +16,9 @@ export function GameEffects() {
   const lastCardSig = useRef<string | null>(null)
   const lastDrawLogId = useRef(0)
   const deadSig = useRef('')
-  // FIX_LISTS #4: log id ของ timeout ล่าสุดที่ปิดเสียงระเบิดซ้ำไปแล้ว
-  const lastTimeoutLogId = useRef(-1)
+  // FIX_LISTS #4/#11: log id ล่าสุดของการตายที่ DefuseModal เล่นเสียงระเบิดไปแล้ว
+  // (ตัดไม่ทันเวลา + ตัดสายพลาด) — ใช้กันเล่นซ้ำตรงนี้
+  const lastModalBoomLogId = useRef(-1)
   const rangeSig = useRef('')
   const overlayTimer = useRef<number | null>(null)
   const drawTimer = useRef<number | null>(null)
@@ -56,14 +57,17 @@ export function GameEffects() {
       .sort()
       .join(',')
     if (sig && sig !== deadSig.current) {
-      // FIX_LISTS #4: ตัดสายไม่ทันเวลา — DefuseModal เล่นเสียงระเบิดไปแล้ว
-      // ตอนตัวนับเวลาหมด ตรงนี้เล่นซ้ำจะได้ยิน 2 ครั้ง
-      // นับเฉพาะ log timeout "อันใหม่" ที่ยังไม่เคยเห็น — endTurn ต่อท้าย log
+      // FIX_LISTS #4/#11: ตายจากระเบิดในหน้าตัดสาย (ตัดไม่ทันเวลา / ตัดสายพลาด)
+      // DefuseModal เล่นเสียงระเบิดไปแล้วตอนเฉลยผล — เล่นซ้ำตรงนี้จะได้ยิน 2 ครั้ง
+      // และครั้งที่สองจะไปดังตอนกดปุ่ม "รับทราบ" (dispatch เกิดตอนนั้น)
+      // นับเฉพาะ log "อันใหม่" ที่ยังไม่เคยเห็น — endTurn ต่อท้าย log
       // ได้อีกหลายบรรทัด (ชนะ/เสมอ/จั่วการ์ด) จึงดูแค่บรรทัดสุดท้ายไม่ได้
-      const timeoutLog = state.log.find(
-        (l) => l.id > lastTimeoutLogId.current && l.message.endsWith(DEFUSE_TIMEOUT_LOG),
+      const modalBoomLog = state.log.find(
+        (l) =>
+          l.id > lastModalBoomLogId.current &&
+          (l.message.endsWith(DEFUSE_TIMEOUT_LOG) || l.message.endsWith(DEFUSE_FAILED_LOG)),
       )
-      if (timeoutLog) lastTimeoutLogId.current = timeoutLog.id
+      if (modalBoomLog) lastModalBoomLogId.current = modalBoomLog.id
       else sfx.explosion()
       showOverlay('redflash', 600)
     }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import {
+  DEFAULTS,
   LIMITS,
   autoCellsFor,
   bombQuota,
@@ -10,7 +11,7 @@ import {
   minCellsFor,
   suggestedScanRadius,
 } from '@/lib/game/config'
-import { bombDensity, chanceDisplay, suggestRange, verdictFor, type BalanceVerdict } from '@/lib/game/balance'
+import { chanceDisplay, suggestRange, type BalanceVerdict } from '@/lib/game/balance'
 import { createRng, randomSeed, shuffle } from '@/lib/game/rng'
 import type { GameSettings } from '@/lib/game/types'
 import { RulesPanel } from './RulesPanel'
@@ -51,6 +52,8 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const [glitchMode, setGlitchMode] = useState<'auto' | 'manual'>(initial.glitchMode)
   const [glitchRatioInput, setGlitchRatioInput] = useState(String(Math.round(initial.glitchRatio * 100)))
   const [glitchCountInput, setGlitchCountInput] = useState(String(initial.glitchCount))
+  // FIX_LISTS ชุดใหม่ #5: จำนวน turn ที่โดน glitch แล้วใช้ item ไม่ได้ — ตั้งค่าได้แล้ว
+  const [glitchLockInput, setGlitchLockInput] = useState(String(initial.glitchLockTurns))
   const [cardsEnabled, setCardsEnabled] = useState(initial.cardsEnabled)
   const [handLimited, setHandLimited] = useState(initial.maxHandSize > 0)
   const [maxHandInput, setMaxHandInput] = useState(String(initial.maxHandSize || LIMITS.minHandSize))
@@ -75,11 +78,13 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const autoGlitch = glitchEnabled
     ? glitchCountFor(quota, quota + LIMITS.maxGlitchCount, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
     : 0
-  const autoCells = clampInt(
-    autoCellsFor(quota, autoGlitch, deckSize),
-    minCellsFor(teams),
-    LIMITS.maxRange,
-  )
+  // FIX_LISTS #3 + ชุดใหม่ #4: ขั้นต่ำต้องขยับตาม option ที่เปิดอยู่ ไม่ใช่ระเบิดจริงอย่างเดียว
+  // ไม่งั้นพอลดช่องลงชนขั้นต่ำ glitch bomb ที่ตั้งไว้จะถูก clamp หายไปเงียบ ๆ
+  // นับ glitch ทั้งสองโหมด: manual = จำนวนที่กรอก, auto = จำนวนที่สูตรสัดส่วนจะได้
+  // (เดิมนับเฉพาะ manual → ระเบิด 5 + glitch auto 1 + การ์ด 7 ให้ลดเหลือ 12 ได้ ทั้งที่ต้อง 13)
+  const minOpts = { glitchCount: autoGlitch, deckSize }
+  const minCells = minCellsFor(teams, minOpts)
+  const autoCells = clampInt(autoCellsFor(quota, autoGlitch, deckSize), minCells, LIMITS.maxRange)
   const cells = cellsTouched
     ? clampInt(Number(cellsInput), LIMITS.minRange, LIMITS.maxRange)
     : autoCells
@@ -88,11 +93,14 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const glitchCount = glitchEnabled
     ? glitchCountFor(quota, cells, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
     : 0
-  const density = bombDensity(quota + glitchCount, cells)
-  const balance = verdictFor(density)
-  const chance = chanceDisplay(quota + glitchCount, cells, teams)
-  const suggestion = suggestRange(teams)
-  const minCells = minCellsFor(teams)
+  const chance = chanceDisplay(quota + glitchCount, cells, teams, minOpts)
+  const glitchLock = clampInt(
+    Number(glitchLockInput),
+    LIMITS.minGlitchLockTurns,
+    LIMITS.maxGlitchLockTurns,
+  )
+  // ค่าแนะนำต้องไม่ต่ำกว่าขั้นต่ำ ไม่งั้นกดปุ่ม "แนะนำ" แล้วเริ่มเกมไม่ได้
+  const suggestedCells = Math.max(suggestRange(teams).max, minCells)
   const canStart = cells >= minCells
 
   function isDefaultName(name: string, index: number): boolean {
@@ -124,13 +132,6 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
     setCountInput(String(target))
   }
 
-  function addTeam() {
-    if (teams >= LIMITS.maxTeams) return
-    const next = [...names, defaultTeamNames(teams + 1)[teams]]
-    setNames(next)
-    setCountInput(String(next.length))
-  }
-
   function removeTeam(i: number) {
     if (teams <= LIMITS.minTeams) return
     const next = names.filter((_, j) => j !== i)
@@ -152,6 +153,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       glitchMode,
       glitchRatio: clampInt(Number(glitchRatioInput) / 100, 0, LIMITS.maxGlitchRatio),
       glitchCount: clampInt(Number(glitchCountInput), 0, LIMITS.maxGlitchCount),
+      glitchLockTurns: glitchLock,
       cardsEnabled,
       maxHandSize: handLimited
         ? clampInt(Number(maxHandInput), LIMITS.minHandSize, LIMITS.maxHandSizeCap)
@@ -202,16 +204,12 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ทีม */}
         <section className="panel">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="section-label">ทีม ({teams})</h2>
-            <button
-              onClick={shuffleNames}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-bold"
-            >
-              🎲 สุ่มลำดับ
-            </button>
-          </div>
-          <div className="mb-3 flex items-center gap-2">
+          {/* FIX_LISTS ชุดใหม่ #1: มีหัวข้อกำกับเหมือนฝั่ง "ตั้งค่าเกม" — เดิมแผงนี้
+              ขึ้นด้วยช่องกรอกเลย อ่านแล้วไม่รู้ว่าเป็นส่วนของอะไร */}
+          <h2 className="section-label mb-3">ตั้งค่าทีม</h2>
+          {/* FIX_LISTS #6: เอา "ทีม (x)" ออก แล้วยกช่องกรอกจำนวนทีมขึ้นมาอยู่แถวเดียว
+              กับปุ่มสุ่มลำดับ — จำนวนทีมอ่านได้จากตัวเลขในช่องกรอกอยู่แล้ว ไม่ต้องบอกซ้ำ */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-2 text-base font-semibold">
               จำนวนทีม
               <input
@@ -229,11 +227,18 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                 (ขั้นต่ำ {LIMITS.minTeams})
               </span>
             </label>
+            {/* FIX_LISTS #7: ยืนยันจำนวนทีมผ่านการกรอกตัวเลขอย่างเดียว — ปุ่มเพิ่มทีมถูกเอาออก */}
             <button
               onClick={() => void applyCount()}
               className="rounded-lg border border-primary px-3 py-2 text-sm font-bold text-primary"
             >
               ยืนยัน
+            </button>
+            <button
+              onClick={shuffleNames}
+              className="ml-auto rounded-lg border border-border px-3 py-2 text-sm font-bold"
+            >
+              🎲 สุ่มลำดับ
             </button>
           </div>
           <p className="mb-2 text-xs leading-5 text-muted-foreground">
@@ -260,20 +265,15 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
               </li>
             ))}
           </ul>
-          <button
-            onClick={addTeam}
-            disabled={teams >= LIMITS.maxTeams}
-            className="mt-3 rounded-lg border border-dashed border-border px-4 py-2 text-sm font-bold disabled:opacity-40"
-          >
-            + เพิ่มทีม
-          </button>
         </section>
 
         {/* จำนวนช่อง + ระเบิด + โอกาสโดนระเบิด */}
         <section className="panel flex flex-col gap-5">
           <div>
-            <h2 className="section-label mb-3">จำนวนช่องทั้งหมด</h2>
-            <div className="flex items-center gap-3">
+            {/* FIX_LISTS ชุดใหม่ #2: แผงนี้ไม่ได้มีแค่จำนวนช่องแล้ว (มีสรุปห้อง/โอกาสโดนระเบิด
+                /ปุ่มเริ่มเกมด้วย) — ชื่อหัวข้อจึงเป็น "ตั้งค่าเกม" ให้ตรงกับของจริง */}
+            <h2 className="section-label mb-3">ตั้งค่าเกม</h2>
+            <div className="flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-base font-semibold">
                 ช่อง
                 <input
@@ -292,18 +292,30 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                   className="control w-24 text-lg font-bold"
                 />
               </label>
-              <span className="text-sm font-normal text-muted-foreground">
-                ขั้นต่ำ {minCells} (= ระเบิดจริง)
-              </span>
-              {/* FIX_LISTS #1: กลับไปใช้ค่าอัตโนมัติ (ระเบิดจริง + glitch + การ์ด) */}
-              {cellsTouched && cells !== autoCells && (
-                <button
-                  onClick={() => setCellsTouched(false)}
-                  className="rounded-lg border border-border px-3 py-1 text-sm font-bold"
-                >
-                  auto ({autoCells})
-                </button>
-              )}
+              {/* FIX_LISTS ชุดใหม่ #3: เหลือ 2 ปุ่ม "ขั้นต่ำ"/"แนะนำ" — ปุ่ม Auto ถูกเอาออก
+                  (ค่าอัตโนมัติเป็นค่าตั้งต้นของช่องอยู่แล้ว ไม่ต้องมีปุ่มกดกลับ)
+                  ปุ่มที่กดไปแล้วไม่เปลี่ยนอะไร → disable ไว้ ไม่ใช่ให้หายไป
+                  ปุ่มโผล่ ๆ หาย ๆ ทำให้ปุ่มข้าง ๆ ขยับ กดพลาดง่าย */}
+              <button
+                onClick={() => {
+                  setCellsTouched(true)
+                  setCellsInput(String(minCells))
+                }}
+                disabled={cells === minCells}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ขั้นต่ำ {minCells}
+              </button>
+              <button
+                onClick={() => {
+                  setCellsTouched(true)
+                  setCellsInput(String(suggestedCells))
+                }}
+                disabled={cells === suggestedCells}
+                className="rounded-lg border border-primary px-3 py-1.5 text-sm font-bold text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                แนะนำ {suggestedCells}
+              </button>
             </div>
           </div>
 
@@ -319,21 +331,6 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
               />
               <RoomStat label="การ์ดในสำรับ" value={cardsEnabled ? CARD_DECK_SIZE : 0} />
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className={`rounded-full px-3 py-1 text-sm font-bold ${balanceBadgeClass(balance)}`}>
-                {balanceBadgeText(balance)} ({Math.round(density * 100)}% เต็ม)
-              </span>
-              {/* FIX #1: ปุ่มแนะนำโชว์เฉพาะเลขช่อง ไม่ต้องมี "1–" */}
-              <button
-                onClick={() => {
-                  setCellsTouched(true)
-                  setCellsInput(String(suggestion.max))
-                }}
-                className="rounded-lg border border-primary px-3 py-1 text-sm font-bold text-primary"
-              >
-                ใช้ค่าแนะนำ {suggestion.max}
-              </button>
-            </div>
           </div>
 
           {/* Bar โอกาสโดนระเบิด (W2.2 / W2.3) */}
@@ -347,9 +344,15 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
             </div>
           ) : (
             <div className="rounded-xl border border-border bg-background p-4">
-              <div className="mb-1 flex items-center justify-between text-sm font-bold">
+              {/* FIX_LISTS ชุดใหม่ #12: บรรทัด "สมดุล" ถูกตัดทิ้ง แล้วเอาคำบอกความยากง่าย
+                  มาไว้ติดกับเปอร์เซ็นต์เลย → อ่านได้เป็นก้อนเดียว "(ง่ายเกินไป 6%)"
+                  เดิมแยกเป็น 2 บรรทัดทั้งที่เป็นเลขชุดเดียวกัน อ่านแล้วนึกว่าคนละค่า
+                  ใช้ chance.level ตัวเดียวคุมทั้งสีของ bar และคำ — ไม่มีเกณฑ์ซ้อนสองชุด */}
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 text-sm font-bold">
                 <span>โอกาสโดนระเบิด (ช่องถัดไปแบบสุ่ม)</span>
-                <span className="font-mono text-xl font-black">{chance.percent}%</span>
+                <span className={`font-mono text-xl font-black ${chanceTextClass(chance.level)}`}>
+                  ({verdictText(chance.level)} {chance.percent}%)
+                </span>
               </div>
               <div className="range-bar">
                 <div
@@ -378,7 +381,11 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
             </div>
             {!canStart && (
               <p className="mt-2 text-center text-sm font-semibold text-destructive">
-                ช่องน้อยไป: ต้องมีอย่างน้อยเท่ากับจำนวนระเบิดจริง = {minCells} ช่อง (ตอนนี้ {cells})
+                {/* FIX_LISTS ชุดใหม่ #4: ขั้นต่ำไม่ใช่ "เท่าระเบิดจริง" อีกแล้ว — มันรวม
+                    glitch กับการ์ดที่เปิดอยู่ด้วย ข้อความเดิมจึงบอกเลขที่ไม่ตรงกับเหตุผล */}
+                ช่องน้อยไป: ต้องมีอย่างน้อย {minCells} ช่อง (ระเบิดจริง {quota}
+                {autoGlitch > 0 ? ` + glitch ${autoGlitch}` : ''}
+                {deckSize > 0 ? ` + การ์ด ${deckSize}` : ''}) — ตอนนี้ {cells}
               </p>
             )}
           </div>
@@ -439,9 +446,14 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
 
                 {settingsTab === 'bomb' && (
                   <div className="flex flex-col gap-4">
+                    {/* FIX_LISTS #17: อธิบายให้ชัดว่า glitch เป็นระเบิด "เพิ่ม" ไม่ใช่ระเบิดจริง
+                        ที่กลายร่าง — ระเบิดจริงยังครบ (ทีม − 1) เสมอ ไม่ได้หายไปไหน */}
                     {toggle(
                       'Glitch bomb (ระเบิดกลิตช์)',
-                      'ระเบิดปลอม เปิดโดนแล้วไม่ตาย แต่ทีมนั้นใช้การ์ดไม่ได้ 2 ตา เป็นระเบิดส่วนเกินจากระเบิดจริง',
+                      // FIX_LISTS ชุดใหม่ #5: จำนวนตาที่ล็อกมาจากค่าที่ตั้งไว้ ไม่ใช่ 2 ตายตัว
+                      `ระเบิดปลอมที่เพิ่มเข้ามาต่างหาก เปิดโดนแล้วไม่ตาย ${
+                        glitchLock > 0 ? `แต่ทีมนั้นใช้การ์ดไม่ได้ ${glitchLock} ตา` : 'แต่เสียตานั้นไป'
+                      } — ระเบิดจริงไม่ได้กลายร่างเป็น glitch และไม่ได้ลดลง ยังมีครบ (จำนวนทีม − 1) เสมอ`,
                       glitchEnabled,
                       setGlitchEnabled,
                     )}
@@ -473,7 +485,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                         {glitchMode === 'auto' ? (
                           <NumberField
                             label="สัดส่วน Glitch"
-                            hint="เปอร์เซ็นต์ของระเบิดจริงที่จะเพิ่มเป็น glitch (0–50%)"
+                            hint={`สัดส่วนเทียบกับระเบิดจริง — glitch 30% แปลว่ามี glitch เท่ากับ 30% ของระเบิดจริง (ตอนนี้ระเบิดจริง ${quota} ลูก → glitch ${glitchCount} ลูก) เป็นระเบิดที่เพิ่มเข้ามา ไม่ได้แบ่งมาจากระเบิดจริง`}
                             value={glitchRatioInput}
                             onChange={setGlitchRatioInput}
                             min={0}
@@ -492,7 +504,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                         ) : (
                           <NumberField
                             label="จำนวน Glitch"
-                            hint={`ระเบิดปลอมส่วนเกินจากระเบิดจริง (ไม่เกินช่องว่าง ${Math.max(cells - quota, 0)})`}
+                            hint={`ระเบิดปลอมที่เพิ่มจากระเบิดจริง ${quota} ลูก (ไม่เกินช่องว่าง ${Math.max(cells - quota, 0)})`}
                             value={glitchCountInput}
                             onChange={setGlitchCountInput}
                             min={0}
@@ -509,6 +521,27 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                             }
                           />
                         )}
+                        {/* FIX_LISTS ชุดใหม่ #5: เดิม 2 turn ตายตัวในเอนจิน — ตอนนี้ตั้งเองได้
+                            0 = โดนแล้วไม่ล็อก item เลย (เสียแค่ตาที่เปิดเจอ) */}
+                        <NumberField
+                          label="โดน Glitch แล้วใช้ item ไม่ได้"
+                          unit="turn"
+                          hint="ทีมที่เปิดเจอ Glitch bomb จะใช้การ์ดและจั่วการ์ดไม่ได้กี่ตาของตัวเอง (ตั้ง 0 = ไม่ล็อก เสียแค่ตาที่เปิดเจอ)"
+                          value={glitchLockInput}
+                          onChange={setGlitchLockInput}
+                          min={LIMITS.minGlitchLockTurns}
+                          max={LIMITS.maxGlitchLockTurns}
+                          suffix={Number(glitchLockInput) === 0 ? '(ไม่ล็อก)' : undefined}
+                          onBlurFix={() =>
+                            fixInput(
+                              glitchLockInput,
+                              LIMITS.minGlitchLockTurns,
+                              LIMITS.maxGlitchLockTurns,
+                              DEFAULTS.glitchLockTurns,
+                              setGlitchLockInput,
+                            )
+                          }
+                        />
                       </div>
                     )}
                   </div>
@@ -602,28 +635,28 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                       shrinkingEnabled,
                       setShrinkingEnabled,
                     )}
+                    {/* FIX_LISTS ชุดใหม่ #6: อ่านเป็นประโยคเดียว "เวลาต่อรอบ [60] วินาที"
+                        เดิม label อยู่บรรทัดบน ช่องกรอกเต็มความกว้างข้างล่าง ไม่รู้ว่าหน่วยอะไร */}
                     <NumberField
-                      label="เวลา/ตารอบ"
+                      label="เวลาต่อรอบ"
+                      unit="วินาที"
                       hint="หมดเวลาแล้วทีมนั้นเสีย turn ไป (ไม่มีการสุ่มเปิดให้) ตั้ง 0 = ไม่จับเวลา"
                       value={turnInput}
                       onChange={setTurnInput}
                       min={0}
                       max={LIMITS.maxTurnSeconds}
-                      suffix={Number(turnInput) === 0 ? 'ไม่จับเวลา' : `${Number(turnInput) || 0} วิ`}
+                      suffix={Number(turnInput) === 0 ? '(ไม่จับเวลา)' : undefined}
                       onBlurFix={() => fixInput(turnInput, 0, LIMITS.maxTurnSeconds, 0, setTurnInput)}
                     />
                     <NumberField
                       label="เวลาตัดสายระเบิด"
+                      unit="วินาที"
                       hint="เวลานับถอยหลังตอนตัดสาย มีเสียงนับทุกวินาที — ตัดไม่ทันคือระเบิดทันที (ตั้ง 0 = ไม่จับเวลา)"
                       value={defuseSecondsInput}
                       onChange={setDefuseSecondsInput}
                       min={0}
                       max={LIMITS.maxDefuseSeconds}
-                      suffix={
-                        Number(defuseSecondsInput) === 0
-                          ? 'ไม่จับเวลา'
-                          : `${Number(defuseSecondsInput) || 0} วิ`
-                      }
+                      suffix={Number(defuseSecondsInput) === 0 ? '(ไม่จับเวลา)' : undefined}
                       onBlurFix={() =>
                         fixInput(defuseSecondsInput, 0, LIMITS.maxDefuseSeconds, 0, setDefuseSecondsInput)
                       }
@@ -652,6 +685,9 @@ function clampInt(n: number, min: number, max: number): number {
 }
 
 // ช่องกรอกเลขที่รับค่าเป็น string — ใช้แทนสไลด์ทุกตัว (W1.3)
+// FIX_LISTS ชุดใหม่ #6: ส่ง `unit` เข้ามา = จัดเป็นบรรทัดเดียว "label [ช่องกรอก] หน่วย"
+// (เช่น "เวลาต่อรอบ [60] วินาที") แทนที่จะเป็น label บนสุด / ช่องเต็มความกว้างข้างล่าง
+// ไม่ส่ง unit = ใช้เลย์เอาต์เดิม ช่องกรอกเต็มบรรทัด สำหรับค่าที่ไม่มีหน่วยสั้น ๆ
 function NumberField(props: {
   label: string
   hint: string
@@ -660,25 +696,46 @@ function NumberField(props: {
   min: number
   max: number
   suffix?: string
+  unit?: string
   disabled?: boolean
   onBlurFix: () => void
 }) {
+  const input = (
+    <input
+      type="number"
+      value={props.value}
+      min={props.min}
+      max={props.max}
+      disabled={props.disabled}
+      onChange={(e) => props.onChange(e.target.value)}
+      onBlur={props.onBlurFix}
+      className={`control text-lg font-bold ${props.unit ? 'w-24 text-center' : 'w-full'}`}
+    />
+  )
+
+  if (props.unit) {
+    return (
+      <label className={`block ${props.disabled ? 'opacity-40' : ''}`}>
+        <span className="flex flex-wrap items-center gap-2 text-base font-semibold">
+          {props.label}
+          {input}
+          {props.unit}
+          {props.suffix && (
+            <span className="text-sm font-normal text-muted-foreground">{props.suffix}</span>
+          )}
+        </span>
+        <span className="mt-1 block text-sm leading-6 text-muted-foreground">{props.hint}</span>
+      </label>
+    )
+  }
+
   return (
     <label className={`block ${props.disabled ? 'opacity-40' : ''}`}>
       <span className="mb-1 flex justify-between gap-2 text-base font-semibold">
         {props.label}
         <span className="text-muted-foreground">{props.suffix}</span>
       </span>
-      <input
-        type="number"
-        value={props.value}
-        min={props.min}
-        max={props.max}
-        disabled={props.disabled}
-        onChange={(e) => props.onChange(e.target.value)}
-        onBlur={props.onBlurFix}
-        className="control w-full text-lg font-bold"
-      />
+      {input}
       <span className="mt-1 block text-sm leading-6 text-muted-foreground">{props.hint}</span>
     </label>
   )
@@ -697,21 +754,22 @@ function chanceBarClass(level: BalanceVerdict): string {
   }
 }
 
-function balanceBadgeClass(balance: 'too-easy' | 'good' | 'risky' | 'brutal'): string {
-  switch (balance) {
+// FIX_LISTS ชุดใหม่ #12: สีตัวหนังสือของ "(คำบอกความยาก %)" ใช้เกณฑ์เดียวกับ bar
+function chanceTextClass(level: BalanceVerdict): string {
+  switch (level) {
     case 'too-easy':
-      return 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'
+      return 'text-emerald-600 dark:text-emerald-400'
     case 'good':
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+      return 'text-yellow-600 dark:text-yellow-400'
     case 'risky':
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+      return 'text-orange-600 dark:text-orange-400'
     case 'brutal':
-      return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+      return 'text-red-600 dark:text-red-400'
   }
 }
 
-function balanceBadgeText(balance: 'too-easy' | 'good' | 'risky' | 'brutal'): string {
-  switch (balance) {
+function verdictText(level: BalanceVerdict): string {
+  switch (level) {
     case 'too-easy':
       return 'ง่ายเกินไป'
     case 'good':
@@ -774,7 +832,7 @@ export function MusicSettings({
   return (
     <div className="flex flex-col gap-5">
       <VolumeField
-        label="ระดับเสียง effect"
+        label="ระดับเสียง Effect"
         hint="เสียงระเบิด ตัดสาย จั่วการ์ด ฯลฯ — ลากแถบ หมุนลูกกลิ้งเมาส์ หรือกรอกตัวเลข 0–100"
         value={sfxVolumeInput}
         onChange={setSfxVolumeInput}
@@ -801,14 +859,13 @@ export function VolumeField({
     onChange(String(Math.min(Math.max(n + delta, 0), 100)))
   }
 
+  // FIX_LISTS ชุดใหม่ #7: เดิมโชว์เปอร์เซ็นต์ 2 ที่ — ตัวเลขข้าง label กับในช่องกรอก
+  // ซึ่งเป็นค่าเดียวกัน อ่านแล้วสับสนว่าอันไหนคือค่าจริง
+  // ตอนนี้เหลือชุดเดียว เรียงเป็นบรรทัดเดียว: "ระดับเสียง Effect [bar] [ช่องกรอก] %"
   return (
     <label className="block">
-      <span className="mb-2 flex items-center justify-between gap-2 text-base font-semibold">
-        {label}
-        <span className="font-mono text-muted-foreground">{n}%</span>
-      </span>
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true">🔈</span>
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-2 text-base font-semibold">
+        <span className="shrink-0">{label}</span>
         <input
           type="range"
           min={0}
@@ -821,9 +878,8 @@ export function VolumeField({
             bump(e.deltaY < 0 ? 5 : -5)
           }}
           aria-label={label}
-          className="h-2 min-w-0 flex-1 accent-[var(--primary)]"
+          className="h-2 min-w-32 flex-1 accent-[var(--primary)]"
         />
-        <span aria-hidden="true">🔊</span>
         <input
           type="number"
           min={0}
@@ -832,9 +888,10 @@ export function VolumeField({
           onChange={(e) => onChange(e.target.value)}
           onBlur={() => onChange(String(n))}
           aria-label={`${label} (ตัวเลข)`}
-          className="control w-20 text-center text-base font-bold"
+          className="control w-20 shrink-0 text-center text-base font-bold"
         />
-      </div>
+        <span className="shrink-0">%</span>
+      </span>
       {hint && <span className="mt-1 block text-sm leading-6 text-muted-foreground">{hint}</span>}
     </label>
   )

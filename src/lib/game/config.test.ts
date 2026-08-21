@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  DEFAULTS,
   LIMITS,
   autoCellsFor,
   bombQuota,
+  defaultSettings,
   defaultTeamNames,
+  glitchCountFor,
   maxScanRadiusFor,
   minCellsFor,
   suggestedScanRadius,
@@ -72,5 +75,71 @@ describe('FIX_LISTS #2/#15: ตั้งช่องให้เท่ากั�
     expect(cells).toBe(bombs)
     // ทุกช่องเป็นระเบิด → เปิดช่องไหนก็เจอ
     expect(bombs / cells).toBe(1)
+  })
+})
+
+describe('FIX_LISTS #3: ช่องขั้นต่ำขยับตาม option ที่เปิด', () => {
+  it('ไม่เปิด option อะไรเลย → ขั้นต่ำ = ระเบิดจริง (พฤติกรรมเดิม #2/#15)', () => {
+    expect(minCellsFor(8)).toBe(bombQuota(8))
+    expect(minCellsFor(8, {})).toBe(bombQuota(8))
+  })
+
+  it('เปิด glitch แบบกำหนดเอง → ขั้นต่ำบวกจำนวน glitch ที่กรอกไว้', () => {
+    // 8 ทีม → ระเบิดจริง 7 + glitch 3 = 10 ช่อง
+    expect(minCellsFor(8, { glitchCount: 3 })).toBe(bombQuota(8) + 3)
+  })
+
+  it('เปิดการ์ดด้วย → ขั้นต่ำเผื่อที่ให้การ์ดในสำรับ', () => {
+    expect(minCellsFor(8, { deckSize: 7 })).toBe(bombQuota(8) + 7)
+  })
+
+  it('เปิดทั้ง glitch และการ์ด → บวกทั้งสองอย่าง', () => {
+    expect(minCellsFor(8, { glitchCount: 2, deckSize: 7 })).toBe(bombQuota(8) + 9)
+  })
+
+  it('ที่ขั้นต่ำพอดี glitch ที่ตั้งไว้ต้องไม่ถูก clamp หาย (เหตุผลของข้อนี้)', () => {
+    const teams = 8
+    const glitch = 3
+    const cells = minCellsFor(teams, { glitchCount: glitch })
+    // ช่องว่างหลังวางระเบิดจริง ต้องพอสำหรับ glitch ทุกลูก
+    expect(glitchCountFor(bombQuota(teams), cells, 'manual', 0, glitch)).toBe(glitch)
+  })
+
+  it('ค่าติดลบ/ว่าง ไม่ทำให้ขั้นต่ำเพี้ยน', () => {
+    expect(minCellsFor(8, { glitchCount: -5, deckSize: -2 })).toBe(bombQuota(8))
+  })
+})
+
+// ── FIX_LISTS ชุดใหม่ #4: ขั้นต่ำต้องนับ glitch ที่ลงกระดานจริง (auto ด้วย) ──
+describe('FIX_LISTS ชุดใหม่ #4: ขั้นต่ำนับ glitch โหมด auto ด้วย', () => {
+  it('ระเบิดจริง 5 + glitch(auto 30% → 1) + การ์ด 7 → ขั้นต่ำ 13 ไม่ใช่ 12', () => {
+    const teams = 6 // ระเบิดจริง = 5
+    expect(bombQuota(teams)).toBe(5)
+    // glitch โหมด auto ที่ 30% ของระเบิดจริง 5 ลูก → floor(1.5) = 1
+    const autoGlitch = glitchCountFor(5, 5 + LIMITS.maxGlitchCount, 'auto', 0.3, 0)
+    expect(autoGlitch).toBe(1)
+    expect(minCellsFor(teams, { glitchCount: autoGlitch, deckSize: 7 })).toBe(13)
+  })
+
+  it('ที่ขั้นต่ำพอดี glitch โหมด auto ต้องไม่ถูก clamp หาย', () => {
+    const teams = 6
+    const quota = bombQuota(teams)
+    const autoGlitch = glitchCountFor(quota, quota + LIMITS.maxGlitchCount, 'auto', 0.3, 0)
+    const cells = minCellsFor(teams, { glitchCount: autoGlitch, deckSize: 7 })
+    // วางลงกระดานขนาดขั้นต่ำแล้ว glitch ต้องยังครบทุกลูก
+    expect(glitchCountFor(quota, cells, 'auto', 0.3, 0)).toBe(autoGlitch)
+  })
+})
+
+// ── FIX_LISTS ชุดใหม่ #5: จำนวน turn ที่ glitch ล็อกการใช้ item ───────────
+describe('FIX_LISTS ชุดใหม่ #5: glitchLockTurns ตั้งค่าได้', () => {
+  it('ค่า default = 2 turn (พฤติกรรมเดิมที่เคย hardcode ในเอนจิน)', () => {
+    expect(DEFAULTS.glitchLockTurns).toBe(2)
+    expect(defaultSettings().glitchLockTurns).toBe(2)
+  })
+
+  it('ขอบเขตตั้งได้ 0 ถึง 10 — 0 = โดนแล้วไม่ล็อกเลย', () => {
+    expect(LIMITS.minGlitchLockTurns).toBe(0)
+    expect(LIMITS.maxGlitchLockTurns).toBe(10)
   })
 })

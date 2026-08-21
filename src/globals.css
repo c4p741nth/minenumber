@@ -35,7 +35,12 @@ button { cursor: pointer; }
 .primary-button { border-radius: 8px; background: var(--primary); padding: 12px 22px; color: var(--primary-foreground); font-weight: 800; transition: transform .2s, opacity .2s; }
 .primary-button:hover { opacity: .9; transform: translateY(-1px); }
 .range-bar { height: 8px; overflow: hidden; border-radius: 99px; background: var(--secondary); }
-.range-bar div { height: 100%; border-radius: inherit; background: var(--primary); transition: width .35s ease; }
+/* FIX_LISTS ชุดใหม่ #11: bar โอกาสโดนระเบิดต้องเปลี่ยนสีตามระดับความเสี่ยง
+   rule นี้อยู่นอก @layer จึงชนะ utility ของ Tailwind เสมอ (unlayered > layered) —
+   ที่ผ่านมา background ตายตัวตรงนี้กลืน bg-emerald/yellow/orange/red ที่ส่งมาจาก JSX
+   ทำให้ bar เป็นสีส้ม --primary ตลอดไม่ว่าโอกาสโดนจะเท่าไร
+   ทุกที่ที่ใช้ .range-bar ส่ง class สีมาเองอยู่แล้ว จึงไม่ต้องมีสีตั้งต้นที่นี่ */
+.range-bar div { height: 100%; border-radius: inherit; transition: width .35s ease, background-color .35s ease; }
 .number-board { min-height: 300px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 18px; }
 .number-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; }
 .number-tile { min-height: 48px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 10px 6px; font-family: var(--font-mono); font-size: 16px; font-weight: 800; transition: background .2s, color .2s, transform .2s; }
@@ -85,7 +90,10 @@ button { cursor: pointer; }
 /* ---- Defuse modal (Task 6) ---- */
 .defuse-vignette {
   position: fixed; inset: 0; z-index: 50;
-  display: grid; place-items: center;
+  /* FIX_LISTS ชุดใหม่ #9: safe center — เนื้อหาสูงเกินจอแล้วต้องไม่ถูกตัดหัว
+     (place-items: center ล้วน จะดันส่วนบนทะลุขอบขึ้นไปจนอ่านไม่ครบ)
+     ตัว overlay ยังเป็น overflow: hidden ตาม FIX #34 อยู่ — กันขอบขาวโผล่ตอนสั่น */
+  display: grid; place-items: safe center;
   background: radial-gradient(ellipse, rgba(60, 10, 10, 0.55), rgba(10, 5, 5, 0.92) 70%);
   padding: 24px;
   animation: mn-vignette 0.9s ease-in-out infinite;
@@ -167,10 +175,16 @@ button { cursor: pointer; }
 .mn-swal-cancel { color: #fff !important; }
 
 /* ---- Board cell states ---- */
-/* FIX #16: ช่องที่เลือกไว้รอยืนยัน */
+/* FIX #16: ช่องที่เลือกไว้รอยืนยัน
+   FIX_LISTS #8: ขอบเคยดู "ขาด ๆ หาย ๆ" เพราะ box-shadow วงนอก + scale(1.06)
+   ล้นออกนอกช่องไปโดนช่องข้าง ๆ ทับ (grid ไม่มี z-index) และโดนกรอบ overflow ของ
+   กระดานตัดที่ขอบ ใช้ outline แทน — วาดนอก layout ไม่ดันเพื่อนบ้าน ไม่ถูกทับ
+   แล้วยก z-index ให้ลอยเหนือช่องอื่น ขอบจึงครบวงเสมอ */
 .cell-picked {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 45%, transparent);
-  transform: scale(1.06);
+  outline: 3px solid color-mix(in srgb, var(--primary) 75%, transparent);
+  outline-offset: 2px;
+  position: relative;
+  z-index: 2;
 }
 /* FIX #15: ช่องที่เปิดแล้วได้การ์ด */
 .cell-gave-card {

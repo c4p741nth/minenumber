@@ -68,7 +68,9 @@ export function Board({
     <div className="flex flex-col gap-3">
       <div
         // scroll ในกรอบตัวเองเมื่อกระดานสูงเกินจอ — ไม่ดันหน้าให้ยาวจนต้องเลื่อนทั้งหน้า
-        className="grid max-h-[calc(100vh-16rem)] gap-1.5 overflow-y-auto pr-1 sm:max-h-[calc(100vh-20rem)] sm:gap-2"
+        // FIX_LISTS #8: เว้น padding รอบกรอบ ไม่ให้ outline ของช่องที่เลือก (.cell-picked)
+        // ที่อยู่ริมสุดโดนขอบ overflow ตัดจนขอบดูขาดไปด้านหนึ่ง
+        className="grid max-h-[calc(100vh-16rem)] gap-1.5 overflow-y-auto p-1.5 sm:max-h-[calc(100vh-20rem)] sm:gap-2"
         style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${size}px, 1fr))` }}
       >
         {numbers.map((n) => {

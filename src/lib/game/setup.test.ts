@@ -13,6 +13,7 @@ function baseSettings(overrides: Partial<GameSettings> = {}): GameSettings {
     glitchMode: 'manual',
     glitchRatio: 0.3,
     glitchCount: 5,
+    glitchLockTurns: 2, // FIX_LISTS ชุดใหม่ #5: ค่าเดิมที่เคย hardcode ในเอนจิน
     cardsEnabled: true,
     maxHandSize: 5,
     startingHand: 0,

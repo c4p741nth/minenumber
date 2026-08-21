@@ -41,12 +41,14 @@ export function DefuseModal() {
     return () => window.clearInterval(t)
   }, [stage])
 
-  // FIX #29: เดิมพลาดแล้วดัง 2 ครั้ง — defuseFailed ที่นี่ + explosion จาก GameEffects
-  // ตอนทีมตกรอบ ตอนนี้ให้ที่นี่เล่นเฉพาะตอนกู้สำเร็จ ส่วนตอนพลาดปล่อยให้
-  // GameEffects เล่น explosion ครั้งเดียวตอนทีมตกรอบจริง
+  // FIX #29: ห้ามดัง 2 ครั้ง — เสียงต้องมาจากที่เดียว
+  // FIX_LISTS #11: ตอนพลาดต้องดัง "ตอนเฉลยผล" ที่นี่ ไม่ใช่รอ GameEffects
+  // ซึ่งยิงตอน state ทีมตกรอบ = ตอนกด "รับทราบ" (ช้ากว่าภาพระเบิดหลายวินาที
+  // จนฟังดูเหมือนเสียงลั่นตอนกดปุ่ม) — GameEffects กันเล่นซ้ำผ่าน DEFUSE_FAILED_LOG
   useEffect(() => {
     if (stage !== 'result') return
     if (survived) sfx.defuseSuccess()
+    else sfx.explosion()
   }, [stage, survived])
 
   // FIX_LISTS #3/#4: หมดเวลา = ระเบิดทันที และเสียงระเบิดต้องมาตอนตัวนับเวลาหมด

@@ -120,3 +120,100 @@ test('FIX #38: bronze medal shows mid-game for the team that placed 3rd', () => 
     expect(screen.getAllByText(t.name).length).toBeGreaterThan(0)
   }
 })
+
+// ── FIX_LISTS ชุดใหม่ ────────────────────────────────────────────────────────
+// ชุดใหม่ #8: ปุ่มปิดเสียงเคยวางทับปุ่มสลับธีม (ทั้งคู่ fixed มุมขวาบน)
+// ทำให้หน้าเล่นเกมเห็นเป็นปุ่มซ้อนกัน — ตอนนี้ต้องคนละตำแหน่ง
+test('ชุดใหม่ #8: ปุ่มปิดเสียงไม่ทับตำแหน่งปุ่มสลับธีม (มุมขวาบน)', () => {
+  renderGame()
+  const muteBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+    /ปิดเสียง|เปิดเสียง/.test(b.getAttribute('title') ?? ''),
+  )
+  expect(muteBtn).toBeDefined()
+  const holder = muteBtn?.parentElement
+  // ปุ่มธีมของ App อยู่ที่ right-3 top-3 — ปุ่มเสียงต้องไม่นั่งทับจุดเดียวกัน
+  expect(holder?.className).not.toMatch(/(^| )top-4( |$)/)
+  expect(holder?.className).toMatch(/(^| )top-16( |$)/)
+})
+
+// ชุดใหม่ #10: กดจบเกมเอง → ไม่ใช่ "เสมอกัน" และไม่โชว์กราฟโพเดียม
+test('ชุดใหม่ #10: ยุติเกมเอง → ขึ้น "เกมถูกยุติโดยผู้ใช้" ไม่ใช่ "เสมอกัน!"', () => {
+  const settings: GameSettings = {
+    ...defaultSettings(),
+    teamNames: ['ทีม 1', 'ทีม 2', 'ทีม 3'],
+    rangeMin: 1,
+    rangeMax: 20,
+  }
+  const handle = createGame(settings, 42)
+  handle.dispatch({ type: 'END_GAME' })
+
+  // ยืนยันว่าเข้าสถานะที่ทุกทีมยังรอด — สถานะที่เดิมจะถูกอ่านว่า "เสมอกัน"
+  const st = handle.getState()
+  expect(st.phase).toBe('gameover')
+  expect(st.teams.every((t) => t.alive)).toBe(true)
+
+  render(
+    <GameProvider handle={handle}>
+      <GameScreen onExit={() => {}} />
+    </GameProvider>,
+  )
+
+  expect(screen.getByText('เกมถูกยุติโดยผู้ใช้')).toBeDefined()
+  expect(screen.queryByText('เสมอกัน!')).toBeNull()
+  expect(screen.queryByText(/ช่องหมด — ทุกทีมที่รอดเสมอกัน/)).toBeNull()
+  // ไม่โชว์กราฟ (โพเดียม) — เหลือแต่ตารางคะแนน
+  // ต้องดูเฉพาะในกล่องสรุปผล: เหรียญของ TeamList ข้างกระดานเป็นคนละชุด
+  expect(podiumMedals()).toBe(0)
+  // ตารางคะแนนยังอยู่ครบทุกทีม
+  for (const t of st.teams) {
+    expect(screen.getAllByText(t.name).length).toBeGreaterThan(0)
+  }
+})
+
+// นับเหรียญโพเดียมเฉพาะในกล่องสรุปผลจบเกม
+// (TeamList ข้างกระดานก็โชว์เหรียญของตัวเอง — นับรวมจะได้เลขที่ไม่ได้แปลว่าอะไร)
+// หา overlay จากปุ่ม "กลับไปหน้าหลัก" ซึ่งมีเฉพาะในกล่องสรุปผล
+function gameOverBox(): HTMLElement {
+  const btn = screen.getByText('กลับไปหน้าหลัก')
+  const box = btn.closest('div.fixed') as HTMLElement | null
+  if (!box) throw new Error('หากล่องสรุปผลจบเกมไม่เจอ')
+  return box
+}
+
+function podiumMedals(): number {
+  // ต้องมี flag u — emoji เหรียญเป็น surrogate pair ถ้าไม่มี u ตัว class จะถูกหั่นครึ่ง
+  // แล้วไม่ match อะไรเลย (เทสจะผ่านแบบว่างเปล่าทั้งที่นับไม่ได้จริง)
+  return Array.from(gameOverBox().querySelectorAll('span')).filter((el) =>
+    /^[🥇🥈🥉]$/u.test(el.textContent ?? ''),
+  ).length
+}
+
+// เกมจบตามกติกาจริง (ไม่ได้กดยุติ) ต้องยังโชว์โพเดียมเหมือนเดิม
+test('ชุดใหม่ #10: เกมจบเองตามกติกา ยังโชว์โพเดียมตามปกติ', () => {
+  const settings: GameSettings = {
+    ...defaultSettings(),
+    teamNames: ['ทีม 1', 'ทีม 2'],
+    rangeMin: 1,
+    rangeMax: 20,
+    cardsEnabled: false,
+  }
+  const handle = createGame(settings, 1)
+  const secret = handle.serializeSecret()
+  const bombCell = Number(Object.keys(secret).find((k) => secret[Number(k)] === 'real'))
+  handle.dispatch({ type: 'OPEN_CELL', cell: bombCell })
+  handle.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+
+  const st = handle.getState()
+  // 2 ทีม ตัดสายพลาด 1 → จบเกมโดยไม่ได้กดยุติ
+  expect(st.phase).toBe('gameover')
+
+  render(
+    <GameProvider handle={handle}>
+      <GameScreen onExit={() => {}} />
+    </GameProvider>,
+  )
+
+  expect(screen.queryByText('เกมถูกยุติโดยผู้ใช้')).toBeNull()
+  // จบตามกติกา → โพเดียมยังอยู่ในกล่องสรุปผล
+  expect(podiumMedals()).toBeGreaterThan(0)
+})

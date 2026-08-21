@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test'
-import { bombDensity, chanceDisplay, hitChance, suggestRange, verdictFor } from './balance'
+import {
+  bombDensity,
+  chanceDisplay,
+  hitChance,
+  isForcedWireCut,
+  suggestRange,
+  verdictFor,
+} from './balance'
 import { bombQuota } from './config'
 
 describe('bombDensity', () => {
@@ -81,5 +88,30 @@ describe('chanceDisplay — ทั้ง 3 kind (W2.3)', () => {
       kind: 'unplayable',
       text: 'เล่นยังไงก่อน (มันเล่นไม่ได้ ช่องน้อยไป๊)',
     })
+  })
+})
+describe('FIX_LISTS #14: บังคับเข้าโหมดตัดสายเมื่อโอกาสโดน 100%', () => {
+  it('ช่องที่เหลือ = ระเบิดจริง → บังคับตัดสาย', () => {
+    expect(isForcedWireCut(3, 3)).toBe(true)
+    expect(isForcedWireCut(1, 1)).toBe(true)
+  })
+
+  it('ยังมีช่องปลอดภัยเหลือ → ยังไม่บังคับ', () => {
+    expect(isForcedWireCut(3, 4)).toBe(false)
+    expect(isForcedWireCut(0, 5)).toBe(false)
+  })
+
+  it('ระเบิดมากกว่าช่อง (เผื่อ state เพี้ยน) → ยังถือว่าบังคับ', () => {
+    expect(isForcedWireCut(5, 3)).toBe(true)
+  })
+
+  it('ไม่มีช่องเหลือแล้ว → ไม่บังคับ (เกมจบไปแล้ว ไม่ใช่โหมดตัดสาย)', () => {
+    expect(isForcedWireCut(0, 0)).toBe(false)
+    expect(isForcedWireCut(3, 0)).toBe(false)
+  })
+
+  it('สอดคล้องกับ hitChance = 100%', () => {
+    expect(hitChance(3, 3)).toBe(1)
+    expect(isForcedWireCut(3, 3)).toBe(true)
   })
 })

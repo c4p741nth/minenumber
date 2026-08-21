@@ -37,6 +37,8 @@ export interface GameSettings {
   glitchMode: 'auto' | 'manual' // auto = ตามสัดส่วน, manual = กำหนดจำนวนเอง
   glitchRatio: number // 0–0.5 (ใช้เมื่อ auto)
   glitchCount: number // จำนวน glitch (ใช้เมื่อ manual)
+  // FIX_LISTS #5: โดน glitch bomb แล้วใช้ item ไม่ได้กี่ turn (0 = ไม่ล็อกเลย)
+  glitchLockTurns: number
   cardsEnabled: boolean
   maxHandSize: number // 3–7 จำนวนการ์ดที่ถือได้สูงสุด
   startingHand: number // 0–3 การ์ดแจกตอนเริ่มเกม
@@ -112,6 +114,10 @@ export interface PublicGameState {
   rangeMin: number // เปลี่ยนได้ถ้าเปิด Shrinking Mode
   rangeMax: number
   bombsRemaining: number // จำนวนเท่านั้น ห้ามมีตำแหน่ง
+  // FIX_LISTS #16: ระเบิดจริงเท่านั้น (ไม่รวม glitch) — ใช้คิด "โอกาสโดนระเบิด" ระหว่างเล่น
+  // ระบบมองไม่เห็น glitch bomb จึงต้องไม่เอาไปคิดรวมในเปอร์เซ็นต์ที่โชว์ผู้เล่น
+  // optional เพราะ snapshot เก่า deserialize มาเป็น type นี้โดยไม่มี field นี้
+  realBombsRemaining?: number
   turnNumber: number
   // FIX #36: เวลาที่เกมเริ่ม (epoch ms) — optional เพราะ snapshot เก่า deserialize
   // มาเป็น type นี้ ถ้า required จะเป็นการโกหกว่ามีข้อมูล
@@ -119,7 +125,14 @@ export interface PublicGameState {
   log: LogEntry[]
   pendingDefuse: { cell: number } | null
   // FIX #25: กำลังถามทีมเป้าหมายว่าจะใช้ Block กันไหม (ไม่บอกว่ามีการ์ดอะไร)
-  pendingBlock: { targetTeamId: string; sourceTeamId: string; card: CardType } | null
+  // FIX_LISTS #10: askQueue = ทีมที่ยังไม่ได้ตอบว่าจะกันไหม (หัวคิว = ทีมที่ถูกถามอยู่)
+  // optional เพราะ snapshot เก่าไม่มี field นี้
+  pendingBlock: {
+    targetTeamId: string
+    sourceTeamId: string
+    card: CardType
+    askQueue?: string[]
+  } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
   // การ์ดที่เพิ่งจั่วตอนจบตาก่อนหน้า — ใช้ทำ toast สี (W5.4)

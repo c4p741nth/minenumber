@@ -9,11 +9,22 @@ const theme = {
   color: 'var(--foreground)',
   confirmButtonColor: 'var(--confirm)',
   cancelButtonColor: 'var(--cancel)',
-  iconColor: 'var(--primary)',
   customClass: {
     confirmButton: 'mn-swal-confirm',
     cancelButton: 'mn-swal-cancel',
   },
+}
+
+// FIX_LISTS #13: สีไอคอนต้องสื่อความหมายของ icon นั้น ๆ
+// เดิม theme บังคับ iconColor = var(--primary) ทุก dialog ทำให้ warning ไม่เหลือง
+// info ไม่ฟ้า — ผลสแกน "ปลอดภัย/ไม่ปลอดภัย" จึงดูเหมือนกันหมด
+// ปล่อย warning/info/error/success ใช้สีมาตรฐานของ SweetAlert
+// (confirmDialog ยังคุมสีเองได้ผ่าน iconColor ที่ส่งเข้ามาทีหลัง)
+const ICON_COLORS: Record<string, string> = {
+  info: '#3b82f6',
+  warning: '#f59e0b',
+  error: '#dc2626',
+  success: '#16a34a',
 }
 
 export async function confirmDialog(opts: {
@@ -25,6 +36,7 @@ export async function confirmDialog(opts: {
     title: opts.title,
     text: opts.text,
     icon: 'warning',
+    iconColor: ICON_COLORS.warning,
     showCancelButton: true,
     confirmButtonText: opts.confirmText ?? 'ยืนยัน',
     cancelButtonText: 'ยกเลิก',
@@ -37,12 +49,16 @@ export async function confirmDialog(opts: {
 export async function infoDialog(opts: {
   title: string
   text?: string
-  icon?: 'info' | 'success' | 'error'
+  // FIX_LISTS #13: รองรับ warning (สามเหลี่ยมเหลือง) — ผลสแกนที่ "ไม่ปลอดภัย"
+  // ควรเป็นคำเตือน ไม่ใช่กากบาทแดงซึ่งอ่านเหมือนคำสั่งผิดพลาด/ทำไม่สำเร็จ
+  icon?: 'info' | 'success' | 'error' | 'warning'
 }): Promise<void> {
+  const icon = opts.icon ?? 'info'
   await Swal.fire({
     title: opts.title,
     text: opts.text,
-    icon: opts.icon ?? 'info',
+    icon,
+    iconColor: ICON_COLORS[icon],
     confirmButtonText: 'ตกลง',
     ...theme,
   })

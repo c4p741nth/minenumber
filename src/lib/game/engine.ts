@@ -1,7 +1,7 @@
-import { CARD_LABELS, drawRandomCard } from './cards'
+import { CARD_LABELS, cardIsBlockable, drawRandomCard } from './cards'
 import { createRng, pickRandom, shuffle } from './rng'
 import { setupBombs } from './setup'
-import { maxScanRadiusFor } from './config'
+import { DEFAULTS, maxScanRadiusFor } from './config'
 import type {
   BombKind,
   CardResult,
@@ -44,12 +44,16 @@ interface EngineState {
   pendingDefuse: { cell: number } | null
   // ตัดสินไว้ตอน OPEN_CELL (§5) — สีที่เลือกไม่มีผล
   pendingDefuseSurvived: boolean
-  // FIX #25: การ์ดที่ค้างรอคำตอบว่าเป้าหมายจะใช้ Block กันไหม
+  // FIX #25: การ์ดที่ค้างรอคำตอบว่าจะมีใครใช้ Block กันไหม
+  // FIX_LISTS #10/#15: ถามทีละทีมจนกว่าจะมีคนกัน หรือทุกทีมที่มี Block ตอบว่าไม่กัน
+  //   askQueue = คิวทีมที่ยังไม่ได้ตอบ (ทีมแรกในคิวคือทีมที่กำลังถูกถามอยู่)
+  //   ทีมที่ "ถูกใส่ effect" อยู่หัวคิวเสมอ แล้วค่อยไล่ทีมอื่นที่ถือ Block
   pendingBlock: {
     targetTeamId: string
     sourceTeamId: string
     card: CardType
     targetCell?: number
+    askQueue: string[]
   } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
@@ -187,7 +191,16 @@ export function createGameFromState(
     pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
     pendingDefuseSurvived:
       state.lastResult?.kind === 'real' ? state.lastResult.survived : false,
-    pendingBlock: state.pendingBlock ? { ...state.pendingBlock } : null,
+    // FIX_LISTS #10: snapshot เก่าไม่มี askQueue — สร้างคิวขึ้นใหม่จากทีมที่ถือ Block อยู่
+    // (ถ้าไม่เติม คิวจะเป็น undefined แล้ว resolveBlock หาหัวคิวไม่เจอ = ตอบ popup ไม่ได้)
+    pendingBlock: state.pendingBlock
+      ? {
+          ...state.pendingBlock,
+          askQueue:
+            state.pendingBlock.askQueue ??
+            blockAskQueue(state, state.pendingBlock.targetTeamId, state.pendingBlock.sourceTeamId),
+        }
+      : null,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
     lastCardResult: state.lastCardResult ? { ...state.lastCardResult } : null,
     lastDraw: state.lastDraw ? { ...state.lastDraw } : null,
@@ -230,6 +243,8 @@ function buildPublic(state: EngineState): PublicGameState {
     rangeMin: state.rangeMin,
     rangeMax: state.rangeMax,
     bombsRemaining: state.bombs.size,
+    // FIX_LISTS #16: นับเฉพาะระเบิดจริง — glitch ไม่นับ (ระบบไม่เห็น glitch)
+    realBombsRemaining: countRealBombs(state),
     turnNumber: state.turnNumber,
     startedAt: state.startedAt,
     log: state.log.map((l) => ({ ...l })),
@@ -307,6 +322,15 @@ function aliveTeams(state: EngineState): Team[] {
   return state.teams.filter((t) => t.alive)
 }
 
+// FIX_LISTS #16: นับระเบิดจริงในกระดาน (glitch เป็นระเบิดส่วนเกิน ไม่นับ)
+function countRealBombs(state: EngineState): number {
+  let n = 0
+  for (const [, kind] of state.bombs) {
+    if (kind === 'real') n += 1
+  }
+  return n
+}
+
 function hiddenCells(state: EngineState): number[] {
   const out: number[] = []
   for (let n = state.rangeMin; n <= state.rangeMax; n++) {
@@ -362,11 +386,19 @@ function openCell(state: EngineState, cell: number): void {
     // FIX #35: glitch ที่โดนเปิดต้องย้ายไปช่องอื่น ไม่ใช่หายไปเฉย ๆ
     // (เดิม delete ทิ้ง → ระเบิดในกระดานลดลงเรื่อย ๆ ระหว่างเล่น)
     relocateBomb(state, cell, 'glitch')
-    team.glitchTurnsLeft = 2
+    // FIX_LISTS #5: จำนวน turn ที่ล็อกการใช้ item ตั้งค่าได้แล้ว (เดิม hardcode 2)
+    // settings เก่าใน snapshot ไม่มี field นี้ → fallback เป็น 2 ตามพฤติกรรมเดิม
+    const lock = Math.max(state.settings.glitchLockTurns ?? DEFAULTS.glitchLockTurns, 0)
+    team.glitchTurnsLeft = lock
     state.lastResult = { kind: 'glitch' }
-    pushLog(state, team.id, `${team.name} เจอ Glitch bomb — ติดกลิตช์ 2 turn`, {
-      level: 'warn',
-    })
+    pushLog(
+      state,
+      team.id,
+      lock > 0
+        ? `${team.name} เจอ Glitch bomb — ติดกลิตช์ ${lock} turn`
+        : `${team.name} เจอ Glitch bomb — เสียตานี้ไป`,
+      { level: 'warn' },
+    )
     endTurn(state, { draw: false }) // ติดกลิตช์ไม่ได้จั่วการ์ด
     return
   }
@@ -384,6 +416,10 @@ function openCell(state: EngineState, cell: number): void {
 // FIX_LISTS #4: DefuseModal เล่นเสียงระเบิดไปแล้วตอนตัวนับเวลาหมด
 // GameEffects อ่าน log นี้เพื่อ "ไม่" เล่นซ้ำตอนทีมตกรอบ
 export const DEFUSE_TIMEOUT_LOG = 'ตัดสายไม่ทันเวลา ระเบิดตูม ถูกคัดออก'
+
+// FIX_LISTS #11: ตัดสายพลาด — DefuseModal เล่นเสียงระเบิดตอน "เฉลยผล" แล้ว
+// GameEffects ต้องไม่เล่นซ้ำตอน dispatch (ซึ่งเกิดตอนกดปุ่มรับทราบ ช้ากว่าภาพหลายวินาที)
+export const DEFUSE_FAILED_LOG = 'กู้ระเบิดพลาด ถูกคัดออก'
 
 // FIX_LISTS #3: ตัดสายไม่ทันเวลา → ระเบิดทันที
 // ผลที่สุ่มไว้ตอน OPEN_CELL ถูกทิ้ง เพราะ "ไม่ตัด" ไม่ใช่ "ตัดแล้วเดาถูก"
@@ -429,7 +465,7 @@ function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
     // จบ turn ทันที ไม่ต้องเปิดต่อแม้ pendingOpens ยังเหลือ (§3.4.2)
     endTurn(state)
   } else {
-    detonate(state, team, cell, `${team.name} กู้ระเบิดพลาด ถูกคัดออก`)
+    detonate(state, team, cell, `${team.name} ${DEFUSE_FAILED_LOG}`)
   }
 }
 
@@ -595,16 +631,20 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       pushLog(state, team.id, `${team.name} เตรียม Block — กัน effect จากทีมอื่นได้ 1 ครั้ง`)
       break
     case 'reverse':
-      state.direction = (state.direction === 1 ? -1 : 1) as 1 | -1
-      state.lastCardResult = { card: 'reverse' }
-      pushLog(state, team.id, `${team.name} ใช้ Reverse — สลับทิศทาง`)
-      endTurn(state, { draw: false })
+      // FIX_LISTS #10: Reverse สลับลำดับของทั้งวง — ทีมอื่นเอา Block มากันได้
+      // เป้าหมายของการถามคือทีมถัดไป (คนที่เสียสิทธิ์เล่นเพราะทิศเปลี่ยน)
+      if (!offerBlock(state, nextAliveTeamId(state), 'reverse')) {
+        applyReverse(state)
+      }
       break
     case 'shuffle':
-      playShuffle(state)
+      // FIX_LISTS #10: Shuffle ย้ายระเบิดทั้งกระดาน กระทบทุกทีม — กันได้
+      if (!offerBlock(state, nextAliveTeamId(state), 'shuffle')) {
+        playShuffle(state)
+      }
       break
     case 'attack':
-      // FIX #25: ถ้าเป้าหมายมี Block ให้ถามก่อนว่าจะกันไหม
+      // FIX #25: ถ้ามีทีมถือ Block ให้ถามก่อนว่าจะกันไหม
       if (!offerBlock(state, action.targetTeamId!, 'attack')) {
         playAttack(state, action.targetTeamId!)
       }
@@ -612,42 +652,86 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
   }
 }
 
-// FIX #25: เป้าหมายมี Block ค้างอยู่ → เข้าสู่ phase 'blocking' รอคำตอบ
+// FIX #25: มีทีมถือ Block อยู่ → เข้าสู่ phase 'blocking' รอคำตอบ
+// FIX_LISTS #10: ไม่ใช่แค่ "ทีมเป้าหมาย" — ทุกทีมที่ถือ Block มีสิทธิ์กันได้
+//   (เช่น ทีม 2 โจมตีทีม 1 แต่ทีม 3 เข้ามากันแทนก็ได้) จึงต้องถามไล่ไปทีละทีม
+//   จนกว่าจะมีคนกัน หรือหมดคนที่ยังถือ Block อยู่
+// FIX_LISTS #15: ทีมที่ใช้การ์ด (sourceTeam) กัน effect ของตัวเองไม่ได้ — ไม่เข้าคิว
 // คืน true ถ้าต้องรอ (การ์ดยังไม่ resolve), false ถ้าเล่นต่อได้เลย
 function offerBlock(state: EngineState, targetId: string, card: CardType): boolean {
-  const target = state.teams.find((t) => t.id === targetId)
-  if (!target || !target.alive || target.blockCharges <= 0) return false
+  // FIX_LISTS #15: การ์ดที่กันไม่ได้ (รวมถึง Block เอง) ไม่ต้องเปิด phase ถามเลย
+  if (!cardIsBlockable(card)) return false
+  const sourceId = currentTeam(state).id
+  const queue = blockAskQueue(state, targetId, sourceId)
+  if (queue.length === 0) return false
   state.pendingBlock = {
     targetTeamId: targetId,
-    sourceTeamId: currentTeam(state).id,
+    sourceTeamId: sourceId,
     card,
+    askQueue: queue,
   }
   state.phase = 'blocking'
   return true
 }
 
-// FIX #25: ตอบ popup — use = ใช้ Block กัน, ไม่ใช้ = ปล่อยให้ effect ทำงาน
+// FIX_LISTS #10: ลำดับการถาม — ทีมที่โดน effect ได้สิทธิ์ตอบก่อน แล้วค่อยทีมอื่น
+// ตามลำดับที่นั่ง (เสถียร ไม่สุ่ม) เฉพาะทีมที่ยังรอดและยังถือ Block อยู่จริง
+export function blockAskQueue(
+  state: { teams: Team[] },
+  targetId: string,
+  sourceId: string,
+): string[] {
+  const eligible = (t: Team) => t.alive && t.blockCharges > 0 && t.id !== sourceId
+  const queue: string[] = []
+  const target = state.teams.find((t) => t.id === targetId)
+  if (target && eligible(target)) queue.push(target.id)
+  for (const t of state.teams) {
+    if (t.id !== targetId && eligible(t)) queue.push(t.id)
+  }
+  return queue
+}
+
+// FIX #25: ตอบ popup — use = ใช้ Block กัน, ไม่ใช้ = ส่งคิวต่อให้ทีมถัดไปตอบ
+// FIX_LISTS #10: ถามวนจนกว่าจะมีคนกัน หรือทุกทีมที่ถือ Block ตอบว่าไม่กัน
+// FIX_LISTS #15: กันได้ = จบเลย ห้าม stack — ทีมอื่นจะเอา Block มาซ้อนกัน Block ไม่ได้
+//   (Block เป็นการ์ด counter ไม่ใช่การ์ดที่ใส่ใส่กันเป็นชั้น ๆ)
 function resolveBlock(state: EngineState, use: boolean): void {
   if (state.phase !== 'blocking' || !state.pendingBlock) return
   const pending = state.pendingBlock
-  const target = state.teams.find((t) => t.id === pending.targetTeamId)
-  state.pendingBlock = null
-  state.phase = 'cards'
+  // ทีมที่กำลังถูกถามอยู่คือหัวคิว
+  const responderId = pending.askQueue[0]
+  const responder = state.teams.find((t) => t.id === responderId)
 
-  if (use && target && target.blockCharges > 0) {
-    target.blockCharges -= 1
+  if (use && responder && responder.alive && responder.blockCharges > 0) {
+    responder.blockCharges -= 1
+    state.pendingBlock = null
+    state.phase = 'cards'
     pushLog(
       state,
-      target.id,
-      `${target.name} ใช้ Block — กัน ${CARD_LABELS[pending.card]} ไว้ได้`,
+      responder.id,
+      `${responder.name} ใช้ Block — กัน ${CARD_LABELS[pending.card]} ไว้ได้`,
     )
     // การ์ดถูกกัน → ทีมที่ใช้จบ turn ไปเลย (เสียการ์ดฟรี)
     endTurn(state, { draw: false })
     return
   }
 
-  // ไม่กัน → effect ทำงานตามปกติ
+  // ทีมนี้ไม่กัน → ถามทีมถัดไปในคิวที่ยังรอดและยังถือ Block อยู่
+  const rest = pending.askQueue.slice(1).filter((id) => {
+    const t = state.teams.find((x) => x.id === id)
+    return t?.alive && t.blockCharges > 0
+  })
+  if (rest.length > 0) {
+    state.pendingBlock = { ...pending, askQueue: rest }
+    return
+  }
+
+  // ไม่มีใครกัน → effect ทำงานตามปกติ
+  state.pendingBlock = null
+  state.phase = 'cards'
   if (pending.card === 'attack') playAttack(state, pending.targetTeamId)
+  else if (pending.card === 'reverse') applyReverse(state)
+  else if (pending.card === 'shuffle') playShuffle(state)
 }
 
 // ทิ้งการ์ด 1 ใบ (W5.3) — เฉพาะช่วงใช้การ์ด + ไม่ติด glitch/block
@@ -678,6 +762,28 @@ function playScan(state: EngineState, target: number): void {
   }
   state.lastCardResult = { card: 'scan', found, center: target }
   pushLog(state, team.id, `${team.name} Scan ${target}: ${found ? 'มีระเบิด!' : 'ไม่มีระเบิด'}`)
+}
+
+// FIX_LISTS #10: แยก effect ของ Reverse ออกมา เพื่อให้เรียกได้ทั้งตอนใช้ทันที
+// และตอนที่ผ่านด่าน Block มาแล้ว (resolveBlock)
+function applyReverse(state: EngineState): void {
+  const team = currentTeam(state)
+  state.direction = (state.direction === 1 ? -1 : 1) as 1 | -1
+  state.lastCardResult = { card: 'reverse' }
+  pushLog(state, team.id, `${team.name} ใช้ Reverse — สลับทิศทาง`)
+  endTurn(state, { draw: false })
+}
+
+// ทีมถัดไปที่ยังรอด — ใช้เป็น "เป้าหมาย" ของการ์ดที่กระทบทั้งวง (Reverse/Shuffle)
+// เพื่อให้คนที่เสียประโยชน์ที่สุดได้สิทธิ์ตอบ Block ก่อน (FIX_LISTS #10)
+function nextAliveTeamId(state: EngineState): string {
+  const len = state.teams.length
+  let i = state.currentTeamIndex
+  for (let step = 1; step < len; step++) {
+    i = (i + state.direction + len) % len
+    if (state.teams[i].alive) return state.teams[i].id
+  }
+  return currentTeam(state).id
 }
 
 function playShuffle(state: EngineState): void {
