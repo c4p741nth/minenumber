@@ -23,6 +23,10 @@ export function AttackPrompt() {
   const phase = state.phase
   const attacks = team?.pendingAttacks.length ?? 0
   const blocksLeft = team ? team.hand.filter((c) => c === 'block').length : 0
+  // FIX_LISTS ชุดที่สิบสาม #2: โควตา Skip แยกจาก Block คนละก้อน
+  //   Block = กันรายใบ (1 ใบต่อ 1 การ์ดโจมตี), Skip = ข้ามการเปิดป้ายทั้งตาในทีเดียว
+  //   จึงนับแยกและโชว์แยก ไม่ให้ผู้เล่นเข้าใจว่าใช้โควตาเดียวกัน
+  const skipsLeft = team ? team.hand.filter((c) => c === 'skip').length : 0
   const limit = state.settings.defendSeconds
   const [left, setLeft] = useState(limit)
 
@@ -99,7 +103,20 @@ export function AttackPrompt() {
             }
             aria-live="polite"
           >
-            🚫 block ใช้ไป {selectedCount}/{blocksLeft}
+            🚫 Block {selectedCount}/{blocksLeft}
+          </span>
+          {/* FIX_LISTS ชุดที่สิบสาม #2: โควตา Skip แยกก้อน — เห็นชัดว่าเป็นทางออกอีกทาง
+              ไม่ได้กินโควตา Block และใช้ทีเดียวข้ามทั้งตา */}
+          <span
+            className={
+              'rounded-full border-2 px-3 py-1 font-mono text-base font-black ' +
+              (skipsLeft > 0
+                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'border-border text-muted-foreground')
+            }
+            aria-live="polite"
+          >
+            ⏭ Skip 0/{skipsLeft}
           </span>
           {limit > 0 && (
             <span
@@ -238,10 +255,22 @@ export function AttackPrompt() {
               ล้างที่เลือก
             </button>
           )}
+          {/* FIX_LISTS ชุดที่สิบสาม #2: ใช้ Skip ตอนตั้งรับได้เลย ไม่ต้องรอ phase ใช้การ์ด
+              ข้ามการเปิดป้ายทั้งตา (รวมหนี้โจมตี) และหนี้ไม่โอนต่อให้ทีมถัดไป (#3)
+              ทีมถัดไปยังมีสิทธิ์เอา Block มากัน Skip ใบนี้ตามกติกาเดิม */}
+          {skipsLeft > 0 && (
+            <button
+              onClick={() => dispatch({ type: 'PLAY_CARD', card: 'skip' })}
+              className="rounded-lg border-2 border-emerald-500 bg-emerald-500/15 px-6 py-3 text-lg font-black text-emerald-700 dark:text-emerald-300"
+            >
+              ⏭ ใช้ Skip — ข้ามการเปิด {totalOpens + 1} ป้าย
+            </button>
+          )}
         </div>
 
         <p className="mt-3 text-center text-sm text-muted-foreground">
           เก็บ Block ไว้ได้ถ้าอยากกัน Skip / Reverse / Shuffle ที่อาจมาภายหลัง
+          {skipsLeft > 0 && ' · Skip ข้ามทั้งตาในทีเดียว แต่ทีมถัดไปเอา Block มากันได้'}
         </p>
       </div>
     </div>

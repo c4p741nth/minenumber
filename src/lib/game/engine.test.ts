@@ -1336,3 +1336,134 @@ describe('FIX_LISTS ชุดใหม่ #2 — เข้าโหมดตั�
     expect(h2.getState().autoWireCut).toBe(true)
   })
 })
+
+// FIX_LISTS ชุดที่สิบสาม #1/#2/#3 — Skip กับการโจมตี
+//   #1 Block กัน Skip ของทีมก่อนหน้าได้ (พฤติกรรมเดิม — ล็อกไว้กัน regression)
+//   #2 ใช้ Skip ได้ตอน phase 'defending' โดยโควตาแยกจาก Block
+//   #3 Skip ตอนโดนโจมตี = ข้ามการเปิดป้าย ไม่โอนหนี้ต่อให้ทีมถัดไป
+describe('ชุดที่สิบสาม: Skip กับการโจมตี', () => {
+  // สร้างเกมที่กำหนดมือของแต่ละทีมเองได้ (id ทีม = '0','1','2','3')
+  function gameWithHands(hands: Record<string, CardType[]>, seed = 1): GameHandle {
+    const h = createGame(baseSettings({ cardsEnabled: true, startingHand: 0 }), seed)
+    const before = h.getState()
+    const patched: PublicGameState = {
+      ...before,
+      teams: before.teams.map((t) => ({ ...t, hand: hands[t.id] ?? [] })),
+    }
+    return createGameFromState(patched, h.serializeSecret(), seed)
+  }
+
+  it('#1: ทีมก่อนหน้าใช้ Skip → ทีมถัดไปที่ถือ Block ถูกถามและกันได้', () => {
+    const h = gameWithHands({ '0': ['skip'], '1': ['block'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+
+    // A ใช้ Skip → B (ทีมถัดไป) ได้สิทธิ์ตอบว่าจะกันไหม
+    let st = h.getState()
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.card).toBe('skip')
+    expect(st.pendingBlock?.targetTeamId).toBe('1')
+
+    // B กัน → Skip ล้ม, A เสียการ์ดเปล่าและจบตาไปตามเดิม
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    expect(st.phase).not.toBe('blocking')
+    expect(st.teams[1].hand).not.toContain('block')
+    expect(st.log.some((l) => l.message.includes('กัน Skip ไว้ได้'))).toBe(true)
+  })
+
+  it('#2: ใช้ Skip ได้ตอน phase defending (ยังไม่เข้า phase cards)', () => {
+    // A โจมตี B, B ถือ block + skip → B เข้า phase 'defending'
+    const h = gameWithHands({ '0': ['attack'], '1': ['block', 'skip'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().phase).toBe('defending')
+
+    // กด Skip ได้ทันทีในจังหวะตั้งรับ ไม่ต้องรอ/ไม่ต้องกัน Block ก่อน
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    expect(st.phase).not.toBe('defending')
+    // Skip ถูกใช้จริง (หายจากมือ) แต่ Block ยังอยู่ — โควตาแยกกันคนละก้อน
+    expect(st.teams[1].hand).not.toContain('skip')
+    expect(st.teams[1].hand).toContain('block')
+    expect(st.teams[1].stats.cardsPlayed.skip).toBe(1)
+    expect(st.teams[1].stats.cardsPlayed.block).toBe(0)
+  })
+
+  it('#2: การ์ดอื่นยังใช้ตอน defending ไม่ได้ (เฉพาะ Skip เท่านั้น)', () => {
+    const h = gameWithHands({ '0': ['attack'], '1': ['block', 'scan', 'shield'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().phase).toBe('defending')
+
+    // Shield/Scan ใช้ในจังหวะตั้งรับไม่ได้ — ต้องยังค้างที่ phase เดิมและการ์ดไม่หาย
+    let st = h.dispatch({ type: 'PLAY_CARD', card: 'shield' })
+    expect(st.phase).toBe('defending')
+    expect(st.teams[1].hand).toContain('shield')
+    st = h.dispatch({ type: 'PLAY_CARD', card: 'scan', targetCell: 5 })
+    expect(st.phase).toBe('defending')
+    expect(st.teams[1].hand).toContain('scan')
+  })
+
+  it('#3: Skip ตอนโดนโจมตี → หนี้เปิดป้ายไม่โอนต่อให้ทีมถัดไป', () => {
+    // A โจมตี B (B ไม่มี Block → หนี้ลงทันที), B ใช้ Skip หนี
+    const h = gameWithHands({ '0': ['attack'], '1': ['skip'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    let st = h.getState()
+    // ไม่มี Block → ข้าม phase defending, หนี้ลงเป็น pendingOpens แล้ว
+    expect(st.teams[1].pendingOpens).toBe(2)
+
+    st = h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    // ไม่มีใครถือ Block → Skip ทำงานเลย ตาไปที่ C
+    expect(st.teams[st.currentTeamIndex].id).toBe('2')
+    // หัวใจของข้อ #3: ทุกทีมกลับมาเปิด 1 ป้ายตามปกติ ไม่มีใครรับหนี้ต่อ
+    for (const t of st.teams) {
+      expect(t.pendingOpens).toBe(1)
+      expect(t.pendingAttacks).toEqual([])
+    }
+    // log บอกชัดว่าข้ามกี่ป้าย และหนี้ไม่โอนต่อ
+    expect(st.log.some((l) => l.message.includes('หนี้โจมตีไม่โอนต่อ'))).toBe(true)
+  })
+
+  it('#3: Skip ตอน defending ล้างคิวโจมตีที่ยังไม่ลง — ไม่ไปโผล่ที่ทีมอื่น', () => {
+    const h = gameWithHands({ '0': ['attack'], '1': ['block', 'skip'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().teams[1].pendingAttacks.length).toBe(1)
+
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    // คิวโจมตีของ B หายไปกับการ Skip และไม่ถูกยัดใส่ทีมไหนเลย
+    for (const t of st.teams) {
+      expect(t.pendingAttacks).toEqual([])
+      expect(t.pendingOpens).toBe(1)
+    }
+  })
+
+  it('#3: Skip ตอน defending ถูก Block กัน → กลับไปตั้งรับ หนี้ยังอยู่ (ไม่หายฟรี)', () => {
+    // B โดนโจมตี, B ใช้ Skip, C ถือ Block มากัน Skip นั้น
+    const h = gameWithHands({ '0': ['attack'], '1': ['block', 'skip'], '2': ['block'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().phase).toBe('defending')
+
+    h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    let st = h.getState()
+    // C ได้สิทธิ์กัน Skip ของ B
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.card).toBe('skip')
+    expect(st.pendingBlock?.targetTeamId).toBe('2')
+
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    // C กันแล้ว → B (คนใช้ Skip) ได้สิทธิ์ล้ม Block ของ C ด้วย Block ของตัวเอง (counter-block)
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.counter).toBe(true)
+
+    // B ไม่ล้ม → Skip ถูกกันจริง ชั้นคี่ = กันสำเร็จ
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
+    // Skip ถูกกัน → ยังเป็นตาของ B และกลับไปตั้งรับต่อ หนี้โจมตีไม่หาย
+    expect(st.teams[st.currentTeamIndex].id).toBe('1')
+    expect(st.phase).toBe('defending')
+    expect(st.teams[1].pendingAttacks.length).toBe(1)
+  })
+
+  it('#3: Skip ธรรมดา (ไม่โดนโจมตี) ยังจบตาปกติ', () => {
+    const h = gameWithHands({ '0': ['skip'] })
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    // ไม่มีใครถือ Block → ข้ามตาไปทีมถัดไปตามปกติ
+    expect(st.teams[st.currentTeamIndex].id).toBe('1')
+    expect(st.log.some((l) => l.message.includes('ใช้ Skip — ข้าม turn'))).toBe(true)
+  })
+})

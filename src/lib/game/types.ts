@@ -160,6 +160,9 @@ export interface PublicGameState {
     askQueue?: string[]
     chain?: string[]
     counter?: boolean
+    // FIX_LISTS ชุดที่สิบสาม #2: Skip ใบนี้ถูกใช้ตอน phase 'defending' (มีหนี้ attack ค้าง)
+    // ถูกกันสำเร็จ = กลับไปตั้งรับต่อ ไม่ใช่จบตา
+    fromDefending?: boolean
   } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null

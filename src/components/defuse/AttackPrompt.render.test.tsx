@@ -5,7 +5,7 @@ import { BlockPrompt } from './BlockPrompt'
 import { GameProvider } from '@/components/game/GameProvider'
 import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
-import type { GameSettings } from '@/lib/game/types'
+import type { CardType, GameSettings } from '@/lib/game/types'
 
 afterEach(cleanup)
 
@@ -122,15 +122,17 @@ test('ชุดที่สิบสอง #3: โดน 3 ใบ → เห็�
   expect(row?.className).toContain('flex')
 })
 
-// ตัวนับ "block ใช้ไป N/M" — N ขยับตามที่เลือก, M = Block ที่มีในมือ
-test('ชุดที่สิบสอง #3: ตัวนับ "block ใช้ไป N/M" ขยับตามที่เลือก', () => {
+// ตัวนับ "Block N/M" — N ขยับตามที่เลือก, M = Block ที่มีในมือ
+// FIX_LISTS ชุดที่สิบสาม #2: ป้ายเปลี่ยนข้อความเป็น "🚫 Block N/M" เพราะมีป้าย
+// "⏭ Skip N/M" มาอยู่ข้าง ๆ (โควตาแยกกัน) — ชื่อเดิม "block ใช้ไป" ยาวเกินจนสองป้ายเบียด
+test('ชุดที่สิบสอง #3: ตัวนับ "Block N/M" ขยับตามที่เลือก', () => {
   const h = multiAttackGame(3)
   const blocks = h.getState().teams[1].hand.filter((c) => c === 'block').length
   renderPrompt(h)
-  expect(screen.getByText(new RegExp(`block ใช้ไป 0/${blocks}`))).toBeDefined()
+  expect(screen.getByText(new RegExp(`Block 0/${blocks}`))).toBeDefined()
 
   fireEvent.click(screen.getAllByRole('button', { name: /Attack/ })[0])
-  expect(screen.getByText(new RegExp(`block ใช้ไป 1/${blocks}`))).toBeDefined()
+  expect(screen.getByText(new RegExp(`Block 1/${blocks}`))).toBeDefined()
 })
 
 // เลือกป้องกัน/ปล่อยผ่านได้รายใบ — กดใบไหนก็สลับเฉพาะใบนั้น
@@ -305,4 +307,58 @@ test('ชุดที่สิบสอง #4: ชั้น counter หงาย
   // ไม่มีใบคว่ำแล้ว — ทั้งสองใบเป็น Block ที่ประกาศตัวแล้ว
   expect(screen.queryByAltText(/ยังไม่เปิดเผย/)).toBeNull()
   expect(screen.getAllByAltText(/Block/).length).toBe(2)
+})
+
+// FIX_LISTS ชุดที่สิบสาม #2: โควตา Skip แยกจาก Block + กด Skip ได้ในจังหวะตั้งรับ
+// สร้างเกมที่ทีม 2 ถือ skip ครบตามต้องการ โดยยัดมือลง snapshot ตรง ๆ
+// (คุมการจั่วให้ได้ skip พอดีไม่ได้ — เลี่ยงลูป findSeed ที่อาจวนไม่จบ)
+function defendingWithHand(hand: CardType[], attacks = 1): GameHandle {
+  const settings = settingsFor({ startingHand: 0 })
+  const base = createGame(settings, 7)
+  const st = base.getState()
+  const next = {
+    ...st,
+    currentTeamIndex: 1,
+    phase: 'defending' as const,
+    teams: st.teams.map((t, i) =>
+      i === 1
+        ? { ...t, hand, pendingAttacks: Array.from({ length: attacks }, () => ({ opens: 1 })) }
+        : { ...t, hand: [] },
+    ),
+  }
+  return createGameFromState(next, base.serializeSecret(), 7)
+}
+
+test('ชุดที่สิบสาม #2: โควตา Skip โชว์แยกจาก Block', () => {
+  const h = defendingWithHand(['block', 'skip', 'skip'])
+  renderPrompt(h)
+  // สองป้ายอยู่คู่กัน แต่นับแยกก้อน — Block 0/1 กับ Skip 0/2
+  expect(screen.getByText(/Block 0\/1/)).toBeDefined()
+  expect(screen.getByText(/Skip 0\/2/)).toBeDefined()
+})
+
+test('ชุดที่สิบสาม #2: ไม่มี Skip ในมือ → ไม่มีปุ่มใช้ Skip', () => {
+  const h = defendingWithHand(['block'])
+  renderPrompt(h)
+  expect(screen.getByText(/Skip 0\/0/)).toBeDefined()
+  expect(screen.queryByRole('button', { name: /ใช้ Skip/ })).toBeNull()
+})
+
+test('ชุดที่สิบสาม #2: กดปุ่ม Skip ในจังหวะตั้งรับ → ออกจาก phase defending', () => {
+  const h = defendingWithHand(['block', 'skip'])
+  renderPrompt(h)
+  const btn = screen.getByRole('button', { name: /ใช้ Skip/ })
+  fireEvent.click(btn)
+  const st = h.getState()
+  expect(st.phase).not.toBe('defending')
+  // ใช้ Skip ไป แต่ Block ยังอยู่ในมือ — โควตาแยกกันจริง
+  expect(st.teams[1].hand).not.toContain('skip')
+  expect(st.teams[1].hand).toContain('block')
+})
+
+test('ชุดที่สิบสาม #3: ปุ่ม Skip บอกจำนวนป้ายที่ข้าม (รวมหนี้โจมตี)', () => {
+  // โดนโจมตี 2 ใบ (+1 ป้ายต่อใบ) + ป้ายปกติ 1 = ข้าม 3 ป้าย
+  const h = defendingWithHand(['skip'], 2)
+  renderPrompt(h)
+  expect(screen.getByRole('button', { name: /ข้ามการเปิด 3 ป้าย/ })).toBeDefined()
 })

@@ -61,6 +61,10 @@ interface EngineState {
     askQueue: string[]
     chain: string[]
     counter: boolean
+    // FIX_LISTS ชุดที่สิบสาม #2: Skip ใบนี้ถูกใช้ตอน phase 'defending' (มีหนี้ attack ค้าง)
+    // ถ้าถูกกันสำเร็จ ต้องกลับไป 'defending' ให้ตัดสินใจใหม่ ไม่ใช่จบตา
+    // (จบตาแล้ว endTurn จะรีเซ็ต pendingOpens = หนี้หายฟรี ซึ่งเป็นบั๊กเดิม)
+    fromDefending?: boolean
   } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
@@ -233,6 +237,8 @@ export function createGameFromState(
           // FIX_LISTS ชุดใหม่ #1: snapshot เก่าไม่มี chain/counter — เริ่มที่ชั้น 0
           chain: state.pendingBlock.chain ?? [],
           counter: state.pendingBlock.counter ?? false,
+          // FIX_LISTS ชุดที่สิบสาม #2: snapshot เก่าไม่มี field นี้ — default false
+          fromDefending: state.pendingBlock.fromDefending ?? false,
         }
       : null,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
@@ -763,7 +769,12 @@ function drawCardAction(state: EngineState, teamId: string): void {
 // ใช้การ์ด 1 ใบ — ต้องอยู่ในช่วงใช้การ์ด ('cards') และไม่ติด glitch/block
 // index (optional) ระบุใบที่เปิดอยู่ (ไพ่คว่ำหน้า W5.3) — ถ้าไม่ส่ง จะหาใบแรกที่ตรงชนิด
 function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_CARD' }>): void {
-  if (state.phase !== 'cards') return
+  // FIX_LISTS ชุดที่สิบสาม #2: Skip ใช้ได้ตอน phase 'defending' ด้วย
+  //   ทีมที่โดน Attack ค้างอยู่ต้องมีทางออกอื่นนอกจาก "กันด้วย Block หรือรับไปเต็ม ๆ"
+  //   Skip ตอนนี้ = ข้ามการเปิดป้ายทั้งหมดของตานี้ (รวมหนี้ attack) โดยหนี้ไม่ตกไปทีมอื่น
+  //   การ์ดอื่นยังใช้ได้แค่ตอน 'cards' เหมือนเดิม — defending เป็นจังหวะตั้งรับ ไม่ใช่ตาเล่นเต็ม
+  const inDefending = state.phase === 'defending' && action.card === 'skip'
+  if (state.phase !== 'cards' && !inDefending) return
   const team = currentTeam(state)
   if (state.currentGlitched || state.currentBlocked) return
   const idx =
@@ -815,7 +826,9 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       // FIX_LISTS ชุดใหม่: Skip เป็นการ์ดเชิงรุก — คนใช้ไม่ต้องเปิดป้าย แต่ทีมถัดไป
       // ต้องรับเคราะห์แทน (เปิดป้ายเร็วขึ้น 1 ตา) จึงให้ทีมถัดไปในทิศเอา Block มากันได้
       // ถ้ากันติด: Skip ล้ม → คนใช้เสียการ์ดฟรีและจบตาไปเอง (settleBlockChain)
-      if (!offerBlock(state, nextAliveTeamId(state), 'skip')) {
+      // FIX_LISTS ชุดที่สิบสาม #2: ใช้ตอน 'defending' ได้ด้วย — ถ้าถูกกัน ต้องกลับไป
+      // ตั้งรับต่อ (ยังมีหนี้ attack ค้าง) ไม่ใช่จบตาแล้วหนี้หายฟรี
+      if (!offerBlock(state, nextAliveTeamId(state), 'skip', { fromDefending: inDefending })) {
         applySkip(state)
       }
       break
@@ -853,7 +866,12 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
 //   จนกว่าจะมีคนกัน หรือหมดคนที่ยังถือ Block อยู่
 // FIX_LISTS #15: ทีมที่ใช้การ์ด (sourceTeam) กัน effect ของตัวเองไม่ได้ — ไม่เข้าคิว
 // คืน true ถ้าต้องรอ (การ์ดยังไม่ resolve), false ถ้าเล่นต่อได้เลย
-function offerBlock(state: EngineState, targetId: string, card: CardType): boolean {
+function offerBlock(
+  state: EngineState,
+  targetId: string,
+  card: CardType,
+  opts?: { fromDefending?: boolean },
+): boolean {
   // FIX_LISTS #15: การ์ดที่กันไม่ได้ (รวมถึง Block เอง) ไม่ต้องเปิด phase ถามเลย
   if (!cardIsBlockable(card)) return false
   const sourceId = currentTeam(state).id
@@ -866,6 +884,7 @@ function offerBlock(state: EngineState, targetId: string, card: CardType): boole
     askQueue: queue,
     chain: [],
     counter: false,
+    fromDefending: opts?.fromDefending,
   }
   state.phase = 'blocking'
   return true
@@ -963,6 +982,15 @@ function settleBlockChain(state: EngineState, pending: NonNullable<EngineState['
         `${teamName(state, pending.targetTeamId)} กัน Skip ไว้ได้ — คนใช้เสียการ์ดเปล่าและจบตาไปตามเดิม`,
         { level: 'warn' },
       )
+      // FIX_LISTS ชุดที่สิบสาม #2: Skip ที่ใช้ตอนตั้งรับถูกกัน → หนี้ attack ยังอยู่
+      //   ต้องกลับไป 'defending' ให้เลือกใหม่ (กันด้วย Block / Skip ใบอื่น / รับไปเต็ม ๆ)
+      //   ห้าม endTurn — endTurn รีเซ็ต pendingOpens = 1 ทำให้หนี้หายฟรี (บั๊กเดิมข้อ 3)
+      //   ถ้ากันด้วย Block หมดคิวไปแล้ว (pendingAttacks ว่าง) ก็ปล่อยเข้าตาเล่นตามปกติ
+      if (pending.fromDefending) {
+        const user = currentTeam(state)
+        state.phase = user.pendingAttacks.length > 0 ? 'defending' : 'cards'
+        return
+      }
     }
     endTurn(state, { draw: false })
     return
@@ -1025,10 +1053,26 @@ function playScan(state: EngineState, target: number): void {
 // และตอนที่ผ่านด่าน Block มาแล้ว (resolveBlock)
 // FIX_LISTS ชุดใหม่: แยก effect ของ Skip ออกมา เพื่อเรียกได้ทั้งตอนใช้ทันที
 // และตอนที่ผ่านด่าน Block มาแล้ว (settleBlockChain) — แบบเดียวกับ applyReverse
+// FIX_LISTS ชุดที่สิบสาม #3: Skip คือ "ข้ามการเปิดป้าย X ป้าย" ไม่ใช่ "โยนหนี้ให้คนอื่น"
+//   เดิมทีมที่โดน Attack แล้วกด Skip → endTurn() รีเซ็ต pendingOpens กลับเป็น 1
+//   → หนี้หายเกลี้ยง ๆ (Attack กลายเป็นของฟรี) หรือตกไปทีมอื่นโดยไม่ควร
+//   ตอนนี้เคลียร์หนี้ที่ตัวเองอย่างชัดเจน แล้ว log ว่าข้ามกี่ป้าย — หนี้ไม่โอนต่อให้ทีมถัดไป
 function applySkip(state: EngineState): void {
   const team = currentTeam(state)
   state.lastCardResult = { card: 'skip' }
-  pushLog(state, team.id, `${team.name} ใช้ Skip — ข้าม turn`)
+  // หนี้เปิดป้ายทั้งหมดของตานี้ — ทั้งคิวที่ยังไม่ได้ลง (pendingAttacks)
+  // และหนี้ที่ลงไปแล้ว (pendingOpens ส่วนที่เกิน 1)
+  const queued = team.pendingAttacks.reduce((sum, a) => sum + a.opens, 0)
+  const owed = Math.max(team.pendingOpens - 1, 0) + queued
+  team.pendingAttacks = []
+  team.pendingOpens = 1
+  pushLog(
+    state,
+    team.id,
+    owed > 0
+      ? `${team.name} ใช้ Skip — ข้ามการเปิด ${owed + 1} ป้ายในตานี้ (หนี้โจมตีไม่โอนต่อให้ทีมอื่น)`
+      : `${team.name} ใช้ Skip — ข้าม turn`,
+  )
   endTurn(state, { draw: false })
 }
 
