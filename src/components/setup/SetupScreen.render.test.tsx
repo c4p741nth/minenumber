@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { SetupScreen } from './SetupScreen'
 import {
   autoCellsFor,
@@ -142,10 +142,50 @@ test('ชุดใหม่ #4: ขั้นต่ำนับ glitch โหม�
   expect(cellsInput().min).toBe(String(quota + autoGlitch + CARD_DECK_SIZE))
 })
 
-test('ชุดใหม่ #12: คำบอกความยากง่ายอยู่ติดกับ % และไม่มีบรรทัด "สมดุล" แยกอีก', () => {
+// FIX_LISTS ชุดใหม่ #7: ไม่โชว์คำบอกความยากง่ายแล้ว — เหลือแค่ตัวเลข % + แถบสี
+test('ชุดใหม่ #7: ไม่มีคำบอกความยากง่าย เหลือแค่ตัวเลข %', () => {
   render(<SetupScreen initial={defaultSettings()} onStart={() => {}} onBack={() => {}} />)
-  // ป้าย "สมดุล" ที่เคยเป็นบรรทัดของตัวเองต้องหายไป
-  expect(screen.queryByText('สมดุล')).toBeNull()
-  // เหลือรูปแบบเดียว "(คำบอกความยาก NN%)" ก้อนเดียวกัน
-  expect(screen.getByText(/^\((ง่ายเกินไป|สมดุล|เสี่ยง|โหดมาก) \d+%\)$/)).toBeDefined()
+  for (const word of ['ง่ายเกินไป', 'ง่ายมาก', 'สมดุล', 'เสี่ยง', 'โหดมาก']) {
+    expect(screen.queryByText(new RegExp(word))).toBeNull()
+  }
+  // เหลือตัวเลขเปอร์เซ็นต์ล้วน ๆ
+  expect(screen.getByText(/^\d+%$/)).toBeDefined()
+})
+
+// FIX_LISTS ชุดใหม่ #8: ช่องน้อยกว่าขั้นต่ำ → ไม่ขึ้น "เล่นยังไงก่อน" แต่เป็นแถบ 100%
+test('ชุดใหม่ #8: ช่องน้อยเกินไป → แถบ 100% ไม่ใช่ข้อความ "เล่นยังไงก่อน"', () => {
+  // 8 ทีม แต่กระดาน 3 ช่อง — เดิมเข้าเคส unplayable แล้วโชว์ข้อความแทนแถบ
+  const initial = {
+    ...defaultSettings(),
+    teamNames: defaultTeamNames(8),
+    rangeMin: 1,
+    rangeMax: 3,
+    glitchEnabled: false,
+    cardsEnabled: false,
+  }
+  render(<SetupScreen initial={initial} onStart={() => {}} onBack={() => {}} />)
+  expect(screen.queryByText(/เล่นยังไงก่อน/)).toBeNull()
+  expect(screen.queryByText(/หลบยังไงก่อน/)).toBeNull()
+  expect(screen.getByText('100%')).toBeDefined()
+})
+
+// FIX_LISTS ชุดใหม่ #4: ช่องกรอกเลขในหน้าตั้งค่าอยู่บรรทัดเดียวกับ label (เหมือนตัวปรับเสียง)
+// ไม่ใช่ช่องเต็มความกว้างบรรทัดล่างอีกแล้ว — ตัวเลขกรอกไม่กี่หลัก ช่องใหญ่เกินจำเป็น
+test('ชุดใหม่ #4: ช่องกรอกเลขในหมวดระเบิด/การ์ด เป็นช่องแคบอยู่บรรทัดเดียวกับ label', () => {
+  render(<SetupScreen initial={defaultSettings()} onStart={() => {}} onBack={() => {}} />)
+  fireEvent.click(screen.getByText(/ตั้งค่าเพิ่มเติม/))
+
+  const numbers = Array.from(
+    document.querySelectorAll('input[type="number"]'),
+  ) as HTMLInputElement[]
+  // ในหมวด "ระเบิด" ต้องมีช่องกรอกโผล่มาแล้ว
+  expect(numbers.length).toBeGreaterThan(0)
+
+  // ทุกช่องต้องเป็นช่องแคบ (w-24) ไม่ใช่เต็มความกว้าง (w-full)
+  const inDialog = numbers.filter((el) => el.closest('[role="dialog"]') !== null)
+  expect(inDialog.length).toBeGreaterThan(0)
+  for (const el of inDialog) {
+    expect(el.className).toContain('w-24')
+    expect(el.className).not.toContain('w-full')
+  }
 })

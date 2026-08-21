@@ -241,8 +241,14 @@ describe('FIX #35/#40 — โควตาระเบิดจริงคงท
         if (st.phase !== 'defusing' && st.phase !== 'blocking') {
           const hiddenLeft = hiddenCells(h).length
           const expected = Math.max(aliveCount - 1, 0)
-          // เช็กได้เมื่อกระดานยังมีที่ว่างพอจะวางระเบิดตามโควตา
-          if (hiddenLeft >= expected) {
+          // FIX_LISTS ชุดใหม่ #1: "สนามตัดสาย" (ช่องหมดแล้วเปิดรอบใหม่) ตั้งใจให้ระเบิดจริง
+          // เต็มทุกช่อง โควตา (ทีมรอด − 1) จึงไม่ใช้กับสถานะนั้น — ที่ต้องจริงคือ
+          // ระเบิดจริงไม่เกินจำนวนช่องที่ยังเปิดได้
+          const inWireCutArena = realCount >= hiddenLeft && hiddenLeft > 0
+          if (inWireCutArena) {
+            expect(realCount).toBe(hiddenLeft)
+          } else if (hiddenLeft >= expected) {
+            // เช็กได้เมื่อกระดานยังมีที่ว่างพอจะวางระเบิดตามโควตา
             expect(realCount).toBe(expected)
           }
         }
@@ -252,7 +258,9 @@ describe('FIX #35/#40 — โควตาระเบิดจริงคงท
     }
   })
 
-  it('จบเกมแล้วต้องเหลือทีมรอดไม่เกิน 1 ทีม (ไม่มีเคสระเบิดหมดแต่ทีมเหลือ)', () => {
+  // FIX_LISTS ชุดใหม่ #1: จบเกมต้องเหลือผู้ชนะทีมเดียวเท่านั้น
+  // ช่องหมดแล้วยังเหลือหลายทีม → เอนจินเปิดสนามตัดสายรอบใหม่ ไม่จบแบบเสมอ
+  it('จบเกมแล้วต้องเหลือทีมรอด 1 ทีมเท่านั้น', () => {
     const settings = baseSettings({
       teamNames: ['A', 'B', 'C', 'D', 'E'],
       rangeMin: 1,
@@ -271,9 +279,8 @@ describe('FIX #35/#40 — โควตาระเบิดจริงคงท
       const st = h.getState()
       expect(st.phase).toBe('gameover')
       const alive = st.teams.filter((t) => t.alive).length
-      const hiddenLeft = hiddenCells(h).length
-      // เสมอได้เฉพาะตอนช่องหมดจริง ๆ เท่านั้น
-      if (alive > 1) expect(hiddenLeft).toBe(0)
+      // เหลือผู้ชนะทีมเดียว (0 ได้เฉพาะเคสสุดโต่งที่ทุกทีมตกรอบพร้อมกัน)
+      expect(alive).toBeLessThanOrEqual(1)
     }
   })
 

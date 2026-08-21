@@ -210,7 +210,10 @@ describe('defuse', () => {
     expect(state.bombsRemaining).toBe(before - 1) // หายจากระบบ (คัดทีมออก)
   })
 
-  it('defuse สำเร็จแต่ไม่มีช่องให้ย้าย → ระเบิดถูกทำลาย หายจากระบบ (ไม่ค้างเป็นระเบิดผี)', () => {
+  // FIX_LISTS ชุดใหม่ #1: ช่องหมดแล้วเกมไม่จบแบบเสมออีก — เอนจินเปิด "สนามตัดสาย"
+  // รอบใหม่ให้แทน ระเบิดลูกที่ย้ายไม่ได้จึงไม่ได้หายเฉย ๆ แต่ไปโผล่ในสนามรอบใหม่
+  // สิ่งที่ยังต้องจริงคือ: ช่องที่เพิ่งกู้สำเร็จต้องไม่ค้างเป็นระเบิดผี
+  it('defuse สำเร็จแต่ไม่มีช่องให้ย้าย → ช่องนั้นถูกกู้ แล้วเปิดสนามตัดสายรอบใหม่', () => {
     // 2 ทีม range 1–3 ระเบิดจริง 1 ลูก — เปิด safe 2 ช่องก่อน เหลือแต่ช่องระเบิด
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 3, cardsEnabled: false })
     let seed = -1
@@ -236,9 +239,16 @@ describe('defuse', () => {
     h.dispatch({ type: 'OPEN_CELL', cell })
     const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
     expect(state.teams[0].alive).toBe(true)
-    expect(state.cells[cell]).toBe('defused')
-    expect(state.bombsRemaining).toBe(before - 1) // ถูกทำลาย ไม่ย้าย ไม่ค้าง
-    expect(Object.keys(h.serializeSecret())).toHaveLength(0) // ไม่มีระเบิดผีค้าง
+    expect(before).toBeGreaterThan(0)
+    // ยังเหลือ 2 ทีม → ห้ามจบเกม ต้องเดินต่อเป็นการแข่งตัดสาย
+    expect(state.phase).not.toBe('gameover')
+    // ระเบิดที่ค้างต้องอยู่บนช่องที่ยัง hidden เท่านั้น — ไม่มีระเบิดผีบนช่องที่เปิดแล้ว
+    const secret = h.serializeSecret()
+    for (const n of Object.keys(secret)) {
+      expect(state.cells[Number(n)]).toBeUndefined()
+    }
+    // สนามรอบใหม่ต้องมีช่องให้เปิดจริง
+    expect(Object.keys(secret).length).toBeGreaterThan(0)
   })
 
   it('ผลไม่ขึ้นกับสีที่เลือก — แดงกับน้ำเงินให้ผลเท่ากัน (ตัดสินไว้ก่อนแล้ว)', () => {
@@ -307,7 +317,10 @@ describe('end conditions', () => {
     expect(state.log.some((l) => l.message.includes('ชนะ'))).toBe(true)
   })
 
-  it('ช่อง hidden หมด แต่เหลือ >1 ทีม → เสมอ', () => {    // 2 ทีม range 1–8, 1 ระเบิดจริง — เปิด safe 7 ช่อง เหลือ hidden เฉพาะช่องระเบิด
+  // FIX_LISTS ชุดใหม่ #1: ช่องหมดแต่ยังเหลือ >1 ทีม → ห้ามจบแบบเสมอ
+  // ต้องเปิดสนามตัดสายรอบใหม่แล้วแข่งกันต่อจนเหลือผู้ชนะทีมเดียว
+  it('ช่อง hidden หมด แต่เหลือ >1 ทีม → เปิดสนามตัดสายรอบใหม่ ไม่ใช่เสมอ', () => {
+    // 2 ทีม range 1–8, 1 ระเบิดจริง — เปิด safe 7 ช่อง เหลือ hidden เฉพาะช่องระเบิด
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     const seed = findDefuseSeed(settings, true)
     const h = createGame(settings, seed)
@@ -317,12 +330,53 @@ describe('end conditions', () => {
       h.dispatch({ type: 'OPEN_CELL', cell: n })
     }
     expect(h.getState().phase).toBe('opening')
-    // เปิดช่องระเบิด → กู้สำเร็จ → ไม่มี hidden ให้ย้าย → hidden = 0 → เสมอ
+    // เปิดช่องระเบิด → กู้สำเร็จ → ไม่มี hidden ให้ย้าย → เปิดสนามใหม่แทนการเสมอ
     h.dispatch({ type: 'OPEN_CELL', cell: bombCell })
     const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
-    expect(state.phase).toBe('gameover')
-    expect(state.log.some((l) => l.message.includes('เสมอ'))).toBe(true)
+    expect(state.phase).not.toBe('gameover')
+    expect(state.log.some((l) => l.message.includes('เสมอ'))).toBe(false)
+    expect(state.log.some((l) => l.message.includes('สนามตัดสายรอบใหม่'))).toBe(true)
     expect(state.teams.every((t) => t.alive)).toBe(true)
+    // สนามรอบใหม่ต้องเป็นระเบิดจริงทุกช่อง → เปิดช่องไหนก็ต้องตัดสาย
+    const hidden: number[] = []
+    for (let n = state.rangeMin; n <= state.rangeMax; n++) {
+      if (!(n in state.cells)) hidden.push(n)
+    }
+    expect(hidden.length).toBeGreaterThan(0)
+    const secret = h.serializeSecret()
+    for (const n of hidden) expect(secret[n]).toBe('real')
+  })
+
+  // FIX_LISTS ชุดใหม่ #1: เล่นต่อจากสนามตัดสายจนจบจริง → ต้องเหลือผู้ชนะ 1 ทีมเท่านั้น
+  it('เกมเดินต่อจนเหลือผู้ชนะทีมเดียว ไม่มีทางจบแบบเสมอเพราะช่องหมด', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B', 'C'], rangeMin: 1, rangeMax: 12 })
+    const h = createGame(settings, 12345)
+    // เดินเกมแบบสุ่ม: เปิดช่องแรกที่ยังว่าง / ตัดสายเมื่อต้องตัด จนกว่าจะจบ
+    for (let guard = 0; guard < 4000; guard++) {
+      const st = h.getState()
+      if (st.phase === 'gameover') break
+      if (st.phase === 'defusing') {
+        h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+        continue
+      }
+      if (st.phase === 'blocking') {
+        h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
+        continue
+      }
+      let opened = false
+      for (let n = st.rangeMin; n <= st.rangeMax; n++) {
+        if (!(n in st.cells)) {
+          h.dispatch({ type: 'OPEN_CELL', cell: n })
+          opened = true
+          break
+        }
+      }
+      if (!opened) break
+    }
+    const final = h.getState()
+    expect(final.phase).toBe('gameover')
+    // เหลือผู้ชนะทีมเดียวเท่านั้น (ไม่ใช่เสมอหลายทีม)
+    expect(final.teams.filter((t) => t.alive)).toHaveLength(1)
   })
 
   it('ระเบิดหมดแต่เหลือ 3 ทีม → เติมระเบิดใหม่ 2 ลูก (safety net, refillBombs)', () => {
@@ -1054,5 +1108,75 @@ describe('FIX_LISTS #3: DEFUSE_TIMEOUT', () => {
     const after = h.dispatch({ type: 'DEFUSE_TIMEOUT' })
     expect(after.teams.every((t) => t.alive)).toBe(true)
     expect(after.phase).toBe(before.phase)
+  })
+})
+
+// FIX_LISTS ชุดใหม่ #2: บังคับตัดสายแล้วไม่ต้องเลือกช่อง → เริ่มตัดสายเลย
+// ยกเว้นทีมยังถือ item ที่เกี่ยวกับ turn (Skip / Reverse / Attack)
+describe('FIX_LISTS ชุดใหม่ #2 — เข้าโหมดตัดสายโดยไม่ต้องเลือกช่อง', () => {
+  // จัดฉาก: 2 ทีม range 1–3, ระเบิดจริง 1 ลูก — เปิด safe หมดจนเหลือแต่ช่องระเบิด
+  function forcedBoard(overrides: Partial<GameSettings> = {}) {
+    const settings = baseSettings({
+      teamNames: ['A', 'B'],
+      rangeMin: 1,
+      rangeMax: 3,
+      cardsEnabled: false,
+      ...overrides,
+    })
+    const h = createGame(settings, 7)
+    const bombCell = bombCellOf(h, 'real')
+    for (let n = 1; n <= 3; n++) {
+      if (n !== bombCell) h.dispatch({ type: 'OPEN_CELL', cell: n })
+    }
+    return { h, bombCell }
+  }
+
+  it('ทุกช่องที่เหลือเป็นระเบิดจริง และไม่มีการ์ด turn → autoWireCut = true', () => {
+    const { h } = forcedBoard()
+    expect(h.getState().autoWireCut).toBe(true)
+  })
+
+  it('START_WIRE_CUT → เข้า phase defusing ทันทีโดยไม่ต้องส่ง OPEN_CELL', () => {
+    const { h } = forcedBoard()
+    const st = h.dispatch({ type: 'START_WIRE_CUT' })
+    expect(st.phase).toBe('defusing')
+    expect(st.pendingDefuse).not.toBeNull()
+  })
+
+  it('ยังมีช่องปลอดภัยเหลือ → ไม่ auto และ START_WIRE_CUT ไม่ทำอะไร', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 20, cardsEnabled: false })
+    const h = createGame(settings, 7)
+    expect(h.getState().autoWireCut).toBe(false)
+    const st = h.dispatch({ type: 'START_WIRE_CUT' })
+    expect(st.phase).not.toBe('defusing')
+  })
+
+  it('ทีมยังถือ item ที่เกี่ยวกับ turn (Skip) → ไม่ auto ต้องให้เลือกใช้การ์ดก่อน', () => {
+    const { h } = forcedBoard({ cardsEnabled: true })
+    const before = h.getState()
+    const team = before.teams[before.currentTeamIndex]
+    // ยัด Skip เข้ามือทีมปัจจุบันผ่าน snapshot แล้วสร้างเกมต่อจาก state นั้น
+    const patched: PublicGameState = {
+      ...before,
+      teams: before.teams.map((t) =>
+        t.id === team.id ? { ...t, hand: ['skip' as CardType] } : { ...t, hand: [] },
+      ),
+    }
+    const h2 = createGameFromState(patched, h.serializeSecret(), 7)
+    expect(h2.getState().autoWireCut).toBe(false)
+    expect(h2.dispatch({ type: 'START_WIRE_CUT' }).phase).not.toBe('defusing')
+  })
+
+  it('ถือแต่การ์ดที่ไม่เกี่ยวกับ turn (Scan) → ยัง auto ได้', () => {
+    const { h } = forcedBoard({ cardsEnabled: true })
+    const before = h.getState()
+    const patched: PublicGameState = {
+      ...before,
+      teams: before.teams.map((t, i) =>
+        i === before.currentTeamIndex ? { ...t, hand: ['scan' as CardType] } : { ...t, hand: [] },
+      ),
+    }
+    const h2 = createGameFromState(patched, h.serializeSecret(), 7)
+    expect(h2.getState().autoWireCut).toBe(true)
   })
 })

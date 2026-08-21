@@ -7,15 +7,19 @@ export function bombDensity(totalBombs: number, totalCells: number): number {
   return totalBombs / totalCells
 }
 
-export type BalanceVerdict = 'too-easy' | 'good' | 'risky' | 'brutal'
+// FIX_LISTS ชุดใหม่ #6: "ง่ายเกินไป" เปลี่ยนเป็น "ง่ายมาก" และเพิ่มระดับ "ง่าย"
+// คั่นระหว่าง "ง่ายมาก" กับ "สมดุล" — ช่วงต่ำจึงไม่เหมาเป็นก้อนเดียวอีก
+export type BalanceVerdict = 'very-easy' | 'easy' | 'good' | 'risky' | 'brutal'
 
 // เกณฑ์เดียวกับสีของ bar โอกาสโดนระเบิด (W2.2) — อย่าตั้งเกณฑ์ซ้อนคนละชุด
-//   < 0.15  too-easy   เขียว   ระเบิดน้อย เปิดกันสบาย
-//   0.15–0.30 good      เหลือง  พอดี ๆ ต้องระวังบ้าง
-//   0.30–0.50 risky     ส้ม    เริ่มอันตราย
-//   > 0.50   brutal     แดง    โดนง่ายมาก
+//   < 0.08   very-easy  เขียวอ่อน ระเบิดน้อยมาก แทบไม่โดน
+//   0.08–0.15 easy      เขียว    ระเบิดน้อย เปิดกันสบาย
+//   0.15–0.30 good      เหลือง   พอดี ๆ ต้องระวังบ้าง
+//   0.30–0.50 risky     ส้ม     เริ่มอันตราย
+//   > 0.50   brutal     แดง     โดนง่ายมาก
 export function verdictFor(density: number): BalanceVerdict {
-  if (density < 0.15) return 'too-easy'
+  if (density < 0.08) return 'very-easy'
+  if (density < 0.15) return 'easy'
   if (density <= 0.3) return 'good'
   if (density <= 0.5) return 'risky'
   return 'brutal'

@@ -93,7 +93,14 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   const glitchCount = glitchEnabled
     ? glitchCountFor(quota, cells, glitchMode, glitchRatio, Number(glitchCountInput) || 0)
     : 0
-  const chance = chanceDisplay(quota + glitchCount, cells, teams, minOpts)
+  // FIX_LISTS ชุดใหม่ #3: "โอกาสโดนระเบิด" นับเฉพาะระเบิดจริง ไม่รวม glitch
+  // glitch เปิดโดนแล้วไม่ตกรอบ (แค่เสียตา/ติดล็อก item) จึงไม่ใช่ "โอกาสโดนระเบิด"
+  // — ตรงกับแถบระหว่างเล่นที่ใช้ realBombsRemaining อยู่แล้ว (#16)
+  const chance = chanceDisplay(quota, cells, teams, minOpts)
+  // FIX_LISTS ชุดใหม่ #7/#8: ทุกเคสแสดงเป็น "แถบสี + ตัวเลข %" ชุดเดียวกัน
+  // unplayable (ช่องน้อยกว่าขั้นต่ำ) และ certain (ระเบิดเต็มกระดาน) = โอกาสโดน 100% โหดสุด
+  const chancePercent = chance.kind === 'normal' ? chance.percent : 100
+  const chanceLevel: BalanceVerdict = chance.kind === 'normal' ? chance.level : 'brutal'
   const glitchLock = clampInt(
     Number(glitchLockInput),
     LIMITS.minGlitchLockTurns,
@@ -333,35 +340,25 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
             </div>
           </div>
 
-          {/* Bar โอกาสโดนระเบิด (W2.2 / W2.3) */}
-          {chance.kind === 'unplayable' ? (
-            <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-4 text-center">
-              <p className="text-lg font-bold text-destructive">{chance.text}</p>
+          {/* Bar โอกาสโดนระเบิด (W2.2 / W2.3)
+              FIX_LISTS ชุดใหม่ #7: ไม่โชว์คำบอกความยากง่ายแล้ว — สีแถบกับตัวเลข % สื่อพอ
+              FIX_LISTS ชุดใหม่ #8: เคส "เล่นยังไงก่อน" (ช่องน้อยกว่าขั้นต่ำ) ไม่ขึ้นข้อความ
+              พิเศษอีก แต่แสดงเป็นแถบ 100% สีเดียวกับเคสอื่น — ทุกเคสจึงหน้าตาเดียวกัน
+              (เหตุผลว่าทำไมเริ่มเกมไม่ได้ ยังบอกอยู่ที่ข้อความใต้ปุ่มเริ่มเกม) */}
+          <div className="rounded-xl border border-border bg-background p-4">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 text-sm font-bold">
+              <span>โอกาสโดนระเบิด (ช่องถัดไปแบบสุ่ม)</span>
+              <span className={`font-mono text-xl font-black ${chanceTextClass(chanceLevel)}`}>
+                {chancePercent}%
+              </span>
             </div>
-          ) : chance.kind === 'certain' ? (
-            <div className="rounded-xl border-2 border-red-600 bg-red-600/10 p-4 text-center">
-              <p className="text-lg font-bold text-red-600 dark:text-red-400">{chance.text}</p>
+            <div className="range-bar">
+              <div
+                className={chanceBarClass(chanceLevel)}
+                style={{ width: `${Math.max(chancePercent, 1)}%` }}
+              />
             </div>
-          ) : (
-            <div className="rounded-xl border border-border bg-background p-4">
-              {/* FIX_LISTS ชุดใหม่ #12: บรรทัด "สมดุล" ถูกตัดทิ้ง แล้วเอาคำบอกความยากง่าย
-                  มาไว้ติดกับเปอร์เซ็นต์เลย → อ่านได้เป็นก้อนเดียว "(ง่ายเกินไป 6%)"
-                  เดิมแยกเป็น 2 บรรทัดทั้งที่เป็นเลขชุดเดียวกัน อ่านแล้วนึกว่าคนละค่า
-                  ใช้ chance.level ตัวเดียวคุมทั้งสีของ bar และคำ — ไม่มีเกณฑ์ซ้อนสองชุด */}
-              <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 text-sm font-bold">
-                <span>โอกาสโดนระเบิด (ช่องถัดไปแบบสุ่ม)</span>
-                <span className={`font-mono text-xl font-black ${chanceTextClass(chance.level)}`}>
-                  ({verdictText(chance.level)} {chance.percent}%)
-                </span>
-              </div>
-              <div className="range-bar">
-                <div
-                  className={chanceBarClass(chance.level)}
-                  style={{ width: `${Math.max(chance.percent, 1)}%` }}
-                />
-              </div>
-            </div>
-          )}
+          </div>
 
           <div className="mt-auto">
             <div className="mb-3 flex gap-3">
@@ -700,50 +697,42 @@ function NumberField(props: {
   disabled?: boolean
   onBlurFix: () => void
 }) {
-  const input = (
-    <input
-      type="number"
-      value={props.value}
-      min={props.min}
-      max={props.max}
-      disabled={props.disabled}
-      onChange={(e) => props.onChange(e.target.value)}
-      onBlur={props.onBlurFix}
-      className={`control text-lg font-bold ${props.unit ? 'w-24 text-center' : 'w-full'}`}
-    />
-  )
-
-  if (props.unit) {
-    return (
-      <label className={`block ${props.disabled ? 'opacity-40' : ''}`}>
-        <span className="flex flex-wrap items-center gap-2 text-base font-semibold">
-          {props.label}
-          {input}
-          {props.unit}
+  // FIX_LISTS ชุดใหม่ #4: ทุกช่องกรอกเลขอยู่บรรทัดเดียวกับ label เหมือนตัวปรับเสียง
+  // ตัวเลขที่กรอกสั้น (ไม่กี่หลัก) ช่องเต็มความกว้างจึงกว้างเกินจำเป็น
+  // label ดัน suffix/unit ไปชิดขวาด้วย ml-auto → ตำแหน่งช่องกรอกตรงกันทุกแถว
+  return (
+    <label className={`block ${props.disabled ? 'opacity-40' : ''}`}>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold">
+        <span className="min-w-0 flex-1">{props.label}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          <input
+            type="number"
+            value={props.value}
+            min={props.min}
+            max={props.max}
+            disabled={props.disabled}
+            onChange={(e) => props.onChange(e.target.value)}
+            onBlur={props.onBlurFix}
+            className="control w-24 shrink-0 text-center text-lg font-bold"
+          />
+          {props.unit && <span>{props.unit}</span>}
           {props.suffix && (
             <span className="text-sm font-normal text-muted-foreground">{props.suffix}</span>
           )}
         </span>
-        <span className="mt-1 block text-sm leading-6 text-muted-foreground">{props.hint}</span>
-      </label>
-    )
-  }
-
-  return (
-    <label className={`block ${props.disabled ? 'opacity-40' : ''}`}>
-      <span className="mb-1 flex justify-between gap-2 text-base font-semibold">
-        {props.label}
-        <span className="text-muted-foreground">{props.suffix}</span>
       </span>
-      {input}
       <span className="mt-1 block text-sm leading-6 text-muted-foreground">{props.hint}</span>
     </label>
   )
 }
 
+// FIX_LISTS ชุดใหม่ #6: 5 ระดับแล้ว — "ง่ายมาก" (เขียวอ่อน) กับ "ง่าย" (เขียว) แยกสีกัน
+// FIX_LISTS ชุดใหม่ #7: ไม่มีคำบอกความยากง่ายแล้ว สีจึงเป็นตัวสื่อระดับเพียงอย่างเดียว
 function chanceBarClass(level: BalanceVerdict): string {
   switch (level) {
-    case 'too-easy':
+    case 'very-easy':
+      return 'bg-teal-400'
+    case 'easy':
       return 'bg-emerald-500'
     case 'good':
       return 'bg-yellow-400'
@@ -754,10 +743,12 @@ function chanceBarClass(level: BalanceVerdict): string {
   }
 }
 
-// FIX_LISTS ชุดใหม่ #12: สีตัวหนังสือของ "(คำบอกความยาก %)" ใช้เกณฑ์เดียวกับ bar
+// FIX_LISTS ชุดใหม่ #12: สีตัวเลข % ใช้เกณฑ์เดียวกับ bar — ไม่มีเกณฑ์ซ้อนสองชุด
 function chanceTextClass(level: BalanceVerdict): string {
   switch (level) {
-    case 'too-easy':
+    case 'very-easy':
+      return 'text-teal-600 dark:text-teal-400'
+    case 'easy':
       return 'text-emerald-600 dark:text-emerald-400'
     case 'good':
       return 'text-yellow-600 dark:text-yellow-400'
@@ -765,19 +756,6 @@ function chanceTextClass(level: BalanceVerdict): string {
       return 'text-orange-600 dark:text-orange-400'
     case 'brutal':
       return 'text-red-600 dark:text-red-400'
-  }
-}
-
-function verdictText(level: BalanceVerdict): string {
-  switch (level) {
-    case 'too-easy':
-      return 'ง่ายเกินไป'
-    case 'good':
-      return 'สมดุล'
-    case 'risky':
-      return 'เสี่ยง'
-    case 'brutal':
-      return 'โหดมาก'
   }
 }
 

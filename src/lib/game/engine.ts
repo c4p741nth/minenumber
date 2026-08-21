@@ -1,7 +1,8 @@
-import { CARD_LABELS, cardIsBlockable, drawRandomCard } from './cards'
+import { CARD_LABELS, cardEndsTurn, cardIsBlockable, drawRandomCard } from './cards'
 import { createRng, pickRandom, shuffle } from './rng'
 import { setupBombs } from './setup'
 import { DEFAULTS, maxScanRadiusFor } from './config'
+import { isForcedWireCut } from './balance'
 import type {
   BombKind,
   CardResult,
@@ -225,6 +226,38 @@ function makeHandle(state: EngineState): GameHandle {
   }
 }
 
+// FIX_LISTS ชุดใหม่ #2: บังคับเข้าโหมดตัดสายแล้ว "ไม่ต้องเลือกช่อง" — เริ่มตัดสายได้เลย
+// เงื่อนไข: ทุกช่องที่เหลือเป็นระเบิดจริง (เปิดช่องไหนก็ผลเหมือนกัน การเลือกจึงไม่มีความหมาย)
+// ยกเว้นเมื่อทีมยังมี "item เกี่ยวกับ turn" (Skip / Reverse / Attack) ที่เปลี่ยนได้ว่าใครต้องเปิด
+// — กรณีนั้นต้องปล่อยให้ทีมตัดสินใจใช้การ์ดก่อน ห้ามลากเข้าโหมดตัดสายอัตโนมัติ
+function shouldAutoWireCut(state: EngineState): boolean {
+  if (state.phase !== 'cards' && state.phase !== 'opening') return false
+  const hidden = hiddenCells(state)
+  if (!isForcedWireCut(countRealBombs(state), hidden.length)) return false
+  const team = currentTeam(state)
+  if (!team?.alive) return false
+  // ติด glitch = ใช้การ์ดไม่ได้อยู่แล้ว → การ์ด turn ในมือไม่มีผล เริ่มตัดสายได้เลย
+  const canUseCards = state.settings.cardsEnabled && !state.currentGlitched
+  if (canUseCards && team.hand.some(cardEndsTurn)) return false
+  return true
+}
+
+// ช่องที่จะถูกเปิดอัตโนมัติเมื่อเข้าโหมดตัดสาย — ทุกช่องเป็นระเบิดเหมือนกันหมด
+// เลือกช่องแรกเพื่อให้ผลลัพธ์ deterministic (ทดสอบซ้ำได้ ไม่กิน rng)
+function autoWireCutCell(state: EngineState): number | null {
+  const hidden = hiddenCells(state)
+  return hidden.length > 0 ? hidden[0] : null
+}
+
+// FIX_LISTS ชุดใหม่ #2: เริ่มตัดสายเลยโดยไม่ต้องให้ทีมเลือกช่อง
+// ตรวจเงื่อนไขซ้ำในเอนจิน — UI จะกดมาผิดจังหวะไม่ได้
+function startWireCut(state: EngineState): void {
+  if (!shouldAutoWireCut(state)) return
+  const cell = autoWireCutCell(state)
+  if (cell === null) return
+  openCell(state, cell)
+}
+
 function buildPublic(state: EngineState): PublicGameState {
   return {
     phase: state.phase,
@@ -255,6 +288,8 @@ function buildPublic(state: EngineState): PublicGameState {
     lastDraw: state.lastDraw ? { ...state.lastDraw } : null,
     currentGlitched: state.currentGlitched,
     currentBlocked: state.currentBlocked,
+    // FIX_LISTS ชุดใหม่ #2: UI ใช้ค่านี้เข้าโหมดตัดสายเลย ไม่ต้องให้เลือกช่อง
+    autoWireCut: shouldAutoWireCut(state),
   }
 }
 
@@ -293,6 +328,9 @@ function dispatchAction(state: EngineState, action: GameAction): void {
       break
     case 'END_GAME':
       endGameNow(state)
+      break
+    case 'START_WIRE_CUT':
+      startWireCut(state)
       break
   }
 }
@@ -485,16 +523,25 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
     pushLog(state, alive[0].id, `${alive[0].name} ชนะ!`, { level: 'good' })
     return
   }
-  // ช่อง hidden หมดแต่ยังเหลือ >1 ทีม → เสมอ (§8)
+  // FIX_LISTS ชุดใหม่ #1: ช่องหมดแต่ยังเหลือ >1 ทีม → ไม่ใช่เสมออีกต่อไป
+  // เกมต้องเหลือผู้ชนะทีมเดียวเท่านั้น จึงเปิดกระดานรอบใหม่ให้ "แข่งกันตัดสาย"
+  // ต่อจนกว่าจะเหลือทีมเดียว (ดู reopenForWireCut)
+  let reopened = false
   if (hiddenCells(state).length === 0) {
-    state.phase = 'gameover'
-    pushLog(state, null, 'ช่องหมด — ทุกทีมที่รอดเสมอกัน')
-    return
+    reopened = reopenForWireCut(state, alive.length)
+    if (!reopened) {
+      // เปิดใหม่ไม่ได้จริง ๆ (ไม่มีช่องในช่วงเลยสักช่อง) → จบแบบเสมอตามเดิม
+      state.phase = 'gameover'
+      pushLog(state, null, 'ช่องหมด — ทุกทีมที่รอดเสมอกัน')
+      return
+    }
   }
   // FIX #40: ระเบิดจริงต้อง = ทีมที่ยังรอด − 1 เสมอ
   // ไม่งั้นจะเกิดเคส "ระเบิดหมด ช่องหมด แต่ทีมยังเหลือหลายทีม"
   // glitch ไม่นับรวมในโควตานี้ และระเบิดปกติไม่ mutate เป็น glitch
-  enforceRealBombQuota(state, alive.length)
+  // FIX_LISTS ชุดใหม่ #1: ข้ามตอนเพิ่งเปิดสนามตัดสาย — สนามนั้นตั้งใจให้ระเบิดเต็มทุกช่อง
+  // ถ้าปล่อยให้บังคับโควตา (ทีมรอด − 1) จะมีช่องปลอดภัยโผล่มา แล้วเกมวนกลับไปไม่จบอีก
+  if (!reopened) enforceRealBombQuota(state, alive.length)
 
   if (acting.alive) acting.pendingOpens = 1
   // จั่วการ์ดเมื่อรอดจบ turn และไม่ติด glitch (§7.1)
@@ -871,6 +918,39 @@ function relocateBomb(state: EngineState, fromCell: number, kind: BombKind): boo
   if (candidates.length === 0) return false
   const target = pickRandom(state.rng, candidates)
   state.bombs.set(target, kind)
+  return true
+}
+
+// FIX_LISTS ชุดใหม่ #1: เกมต้องเหลือผู้ชนะทีมเดียว — ห้ามจบแบบ "เสมอ" เพราะช่องหมด
+// ช่องบนกระดานหมดแต่ยังเหลือหลายทีม → เปิดกระดานรอบใหม่เป็นสนามตัดสายล้วน:
+//   คืนช่องที่เคยเปิดไปแล้วให้กลับเป็น hidden เท่ากับจำนวนทีมที่ยังรอด
+//   แล้ววางระเบิดจริงเต็มทุกช่อง (โควตา = ทีมรอด − 1 จะถูกบังคับให้ครบทีหลัง)
+// ทุกทีมจึงต้องเปิดเจอระเบิดและตัดสายวนไปจนตกรอบเหลือทีมเดียว
+// คืน false เมื่อไม่มีช่องในช่วงให้คืนเลย (กระดานว่างจริง ๆ) → ผู้เรียกค่อยจบเกม
+function reopenForWireCut(state: EngineState, aliveCount: number): boolean {
+  // ช่องที่เคยเปิดแล้วทั้งหมดในช่วงปัจจุบัน — เอากลับมาใช้เป็นสนามรอบใหม่
+  const reusable: number[] = []
+  for (let n = state.rangeMin; n <= state.rangeMax; n++) {
+    if (n in state.cells) reusable.push(n)
+  }
+  if (reusable.length === 0) return false
+
+  // เปิดคืนเท่าจำนวนทีมที่รอด (อย่างน้อย 2 ช่อง) — พอให้ทุกทีมมีช่องให้เปิดคนละช่อง
+  const want = Math.min(Math.max(aliveCount, 2), reusable.length)
+  const picked = shuffle(state.rng, reusable).slice(0, want)
+  for (const cell of picked) {
+    delete state.cells[cell]
+    // ช่องนี้เคยแจกการ์ดไปแล้ว — ล้าง mark ไม่ให้ค้างเป็นช่องการ์ดในรอบใหม่
+    delete state.cardCells[cell]
+    // ทุกช่องในสนามรอบใหม่เป็นระเบิดจริงหมด — เปิดช่องไหนก็ต้องตัดสาย
+    state.bombs.set(cell, 'real')
+  }
+  pushLog(
+    state,
+    null,
+    `ช่องหมดแต่ยังเหลือ ${aliveCount} ทีม — เปิดสนามตัดสายรอบใหม่ ${picked.length} ช่อง (ระเบิดทุกช่อง)`,
+    { level: 'warn' },
+  )
   return true
 }
 

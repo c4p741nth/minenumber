@@ -7,6 +7,7 @@ import { BlockPrompt } from '@/components/defuse/BlockPrompt'
 import { DefuseModal } from '@/components/defuse/DefuseModal'
 import { GameEffects } from '@/components/effects/GameEffects'
 import { MuteButton } from '@/components/effects/MuteButton'
+import { VolumeControl } from '@/components/effects/VolumeControl'
 import { GameOverScreen } from '@/components/gameover/GameOverScreen'
 import { confirmDialog, infoDialog } from '@/components/ui/alert'
 import { hitChance, isForcedWireCut } from '@/lib/game/balance'
@@ -49,6 +50,16 @@ export function GameScreen({ onExit }: Props) {
     state.realBombsRemaining ?? state.bombsRemaining,
     hiddenCellCount(state),
   )
+  // FIX_LISTS ชุดใหม่ #2: บังคับตัดสายแล้วไม่ต้องเลือกช่อง — เข้าโหมดตัดสายเลย
+  // เอนจินบอกมาว่าทีมนี้ไม่มี item ที่เกี่ยวกับ turn (Skip/Reverse/Attack) เหลืออยู่
+  // ถ้ายังมี ต้องปล่อยให้เลือกใช้การ์ดก่อน (autoWireCut จะเป็น false)
+  const autoWireCut = state.autoWireCut === true
+  useEffect(() => {
+    if (!autoWireCut) return
+    // หน่วงหนึ่ง frame ให้ผู้เล่นเห็นว่าถึงตาตัวเองก่อนโดน modal ตัดสายเด้ง
+    const id = window.setTimeout(() => dispatch({ type: 'START_WIRE_CUT' }), 600)
+    return () => window.clearTimeout(id)
+  }, [autoWireCut, state.turnNumber, state.currentTeamIndex, dispatch])
 
   // พิมพ์ตัวเลขตรง ๆ เพื่อเลือกช่อง (MC พิมพ์เร็วกว่าคลิก) + Esc ยกเลิก
   useEffect(() => {
@@ -152,7 +163,10 @@ export function GameScreen({ onExit }: Props) {
             >
               💣 ช่องที่เหลือเป็นระเบิดทั้งหมด — เปิดช่องไหนก็ต้องตัดสาย
               <span className="mt-1 block text-sm font-semibold opacity-80">
-                แข่งกันตัดสายสลับทีมไปจนกว่าจะเหลือทีมเดียว
+                {/* FIX_LISTS ชุดใหม่ #2: ไม่มี item เกี่ยวกับ turn → เข้าโหมดตัดสายให้เลย */}
+                {autoWireCut
+                  ? 'ไม่ต้องเลือกช่อง — กำลังเริ่มตัดสาย…'
+                  : 'แข่งกันตัดสายสลับทีมไปจนกว่าจะเหลือทีมเดียว (ใช้การ์ดที่เปลี่ยนตาได้ก่อน)'}
               </span>
             </div>
           )}
@@ -193,6 +207,8 @@ export function GameScreen({ onExit }: Props) {
           ในหน้าเล่นเกมจึงเห็นเป็นปุ่มซ้อนกัน 2 ชั้น กดโดนผิดปุ่ม
           ตอนนี้ปุ่มปิดเสียงเลื่อนลงมาอยู่ใต้ปุ่มธีมแทน ไม่ทับกันแล้ว */}
       <div className="fixed right-3 top-16 z-40 flex items-center gap-2">
+        {/* FIX_LISTS ชุดใหม่ #5: ปรับระดับเสียงได้ระหว่างเล่น ไม่ต้องกลับไปหน้าตั้งค่า */}
+        <VolumeControl />
         <MuteButton />
       </div>
       <GameEffects />

@@ -18,9 +18,15 @@ describe('bombDensity', () => {
 })
 
 describe('verdictFor — ทุกขอบเขต (เกณฑ์เดียวกับ bar โอกาสโดนระเบิด W2)', () => {
-  it('ต่ำกว่า 0.15 → too-easy', () => {
-    expect(verdictFor(0.149)).toBe('too-easy')
-    expect(verdictFor(0)).toBe('too-easy')
+  // FIX_LISTS ชุดใหม่ #6: ช่วงต่ำแยกเป็น 2 ระดับ — very-easy (ง่ายมาก) กับ easy (ง่าย)
+  it('ต่ำกว่า 0.08 → very-easy (ง่ายมาก)', () => {
+    expect(verdictFor(0.079)).toBe('very-easy')
+    expect(verdictFor(0)).toBe('very-easy')
+  })
+
+  it('0.08–0.15 → easy (ง่าย) คั่นระหว่างง่ายมากกับสมดุล', () => {
+    expect(verdictFor(0.08)).toBe('easy')
+    expect(verdictFor(0.149)).toBe('easy')
   })
 
   it('0.15–0.30 → good (ขอบบนรวมด้วย)', () => {
@@ -72,7 +78,7 @@ describe('chanceDisplay — ทั้ง 3 kind (W2.3)', () => {
     expect(d.kind).toBe('normal')
     if (d.kind === 'normal') {
       expect(d.percent).toBe(13)
-      expect(d.level).toBe('too-easy')
+      expect(d.level).toBe('easy')
     }
   })
 

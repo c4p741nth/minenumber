@@ -101,6 +101,9 @@ export type GameAction =
   | { type: 'UNDO_TURN' }
   // FIX #44: กรรมการสั่งยุติเกม → เข้าหน้าสรุปอันดับทันทีเหมือนเกมจบตามปกติ
   | { type: 'END_GAME' }
+  // FIX_LISTS ชุดใหม่ #2: เข้าโหมดตัดสายทันทีโดยไม่ต้องเลือกช่อง
+  // (ใช้ได้เฉพาะตอนทุกช่องที่เหลือเป็นระเบิดจริง — เอนจินตรวจเงื่อนไขเองอีกชั้น)
+  | { type: 'START_WIRE_CUT' }
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
 export interface PublicGameState {
   phase: Phase
@@ -141,4 +144,8 @@ export interface PublicGameState {
   // ทีมปัจจุบันใช้การ์ดไม่ได้ไหม (สำหรับ UI เทา/บอกเหตุผล)
   currentGlitched: boolean
   currentBlocked: boolean
+  // FIX_LISTS ชุดใหม่ #2: บังคับตัดสายแล้วไม่ต้องเลือกช่อง → เริ่มตัดสายได้เลย
+  // true = ทุกช่องที่เหลือเป็นระเบิดจริง และทีมนี้ไม่มีการ์ดที่เปลี่ยน turn ได้
+  // optional เพราะ snapshot เก่า deserialize มาเป็น type นี้โดยไม่มี field นี้
+  autoWireCut?: boolean
 }
