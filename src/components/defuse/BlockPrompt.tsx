@@ -1,9 +1,20 @@
 import { useGame } from '@/components/game/GameProvider'
+import { CARD_ART, CARD_BACK, CARD_META } from '@/lib/game/cards'
 
 // FIX #25: ทีมที่ถือ Block ถูกถามว่าจะใช้กัน effect ไหม
 // FIX_LISTS #10: ถามทีละทีมจนกว่าจะมีคนกัน หรือทุกทีมที่ถือ Block ตอบว่าไม่กัน
 //   หัวคิว (askQueue[0]) คือทีมที่กำลังถูกถามอยู่ตอนนี้
+// FIX_LISTS ชุดใหม่ #1: กัน Block ด้วย Block ได้ — ตอนเป็นชั้น counter ต้องบอกให้ชัด
+//   ว่ากำลังจะ "ล้ม Block ของทีมไหน" ไม่ใช่กัน effect ต้นทาง (คนละเรื่องกัน)
 // ⚠️ ห้ามบอกว่าอีกฝ่ายใช้การ์ดอะไร — ผู้เล่นต้องตัดสินใจโดยไม่เห็นการ์ด
+//   (ยกเว้นชั้น counter ที่ "การ์ดที่จะกัน" คือ Block ซึ่งประกาศออกมาแล้ว ไม่เป็นความลับ)
+//
+// FIX_LISTS ชุดที่สิบสอง #4: เดิมกล่องนี้มีแต่ text ล้วน ไม่มีรูปการ์ดสักใบ ทั้งที่
+// AttackPrompt (จังหวะตัดสินใจแบบเดียวกัน) โชว์การ์ดจริง — สองหน้าจอดูเป็นคนละเกม
+// ตอนนี้วางการ์ดคู่ที่กำลังปะทะกันให้เห็นภาพ: [ของอีกฝ่าย] ⚔ [🚫 Block ของคุณ]
+//   - ชั้นปกติ: ฝั่งซ้ายเป็น "ใบคว่ำ" (CARD_BACK) — ยังเป็นความลับตามกติกาข้อบน
+//     ห้ามเปลี่ยนเป็น CARD_ART ของ effect ต้นทางเด็ดขาด จะสปอยล์เกม
+//   - ชั้น counter: ฝั่งซ้ายหงายเป็น Block ได้ เพราะเจ้าของประกาศออกมาแล้ว
 export function BlockPrompt() {
   const { state, dispatch } = useGame()
   const pending = state.pendingBlock
@@ -14,10 +25,15 @@ export function BlockPrompt() {
   const responder = state.teams.find((t) => t.id === responderId)
   if (!responder) return null
 
-  const target = state.teams.find((t) => t.id === pending.targetTeamId)
-  // ทีมที่ถูกถามไม่ใช่ทีมที่โดน effect → บอกให้รู้ว่ากำลังกันแทนใคร
-  const defendingOther = target != null && target.id !== responder.id
-  const waiting = Math.max((pending.askQueue?.length ?? 1) - 1, 0)
+  const chain = pending.chain ?? []
+  const isCounter = pending.counter === true && chain.length > 0
+  // ทีมที่ประกาศกันไว้ล่าสุด — คือเจ้าของ Block ที่กำลังจะถูกล้ม
+  const lastBlocker = state.teams.find((t) => t.id === chain[chain.length - 1])
+  // FIX_LISTS ชุดที่สิบสอง #4: ใช้ทั้งใต้รูปการ์ดและในบรรทัดคำอธิบาย — คำนวณที่เดียว
+  const blocksLeft = responder.hand.filter((c) => c === 'block').length
+
+  // FIX_LISTS ชุดที่สาม #2: กันได้เฉพาะ effect ที่ลงกับทีมตัวเอง — คิวจึงมีทีมเดียวเสมอ
+  // ไม่มีเคส "กันแทนทีมอื่น" (defendingOther) และไม่มีทีมรอถามต่ออีก (waiting)
 
   // FIX_LISTS ชุดใหม่ #9: กลางจอแนวตั้งจริง และเลื่อนอ่านได้ถ้ากล่องสูงเกินจอ
   return (
@@ -26,26 +42,92 @@ export function BlockPrompt() {
       role="dialog"
       aria-modal="true"
     >
-      <div className="m-auto w-full max-w-lg rounded-2xl border-2 border-slate-500 bg-card p-8 text-center">
+      <div
+        className={
+          // FIX_LISTS ชุดที่สิบสอง #4: ขยายจาก max-w-lg — การ์ดสองใบวางคู่กันแล้วแคบไป
+          'm-auto w-full max-w-xl rounded-2xl border-2 bg-card p-8 text-center ' +
+          (isCounter ? 'border-amber-500' : 'border-slate-500')
+        }
+      >
         <p className="section-label">
-          {defendingOther ? 'มีทีมใช้ effect ใส่ทีมอื่น' : 'มีทีมใช้ effect ใส่คุณ'}
+          {isCounter ? `ชั้นที่ ${chain.length + 1} — มีทีมประกาศ Block` : 'มีทีมใช้ effect ใส่คุณ'}
         </p>
         <h2 className="mt-2 font-serif text-4xl font-bold">{responder.name}</h2>
-        {defendingOther && target && (
-          <p className="mt-1 text-sm font-semibold text-muted-foreground">
-            (effect กำลังจะลงที่ {target.name} — จะกันแทนก็ได้)
-          </p>
+
+        {/* FIX_LISTS ชุดที่สิบสอง #4: การ์ดคู่ที่กำลังปะทะกัน — ใบซ้าย = ของอีกฝ่าย
+            (คว่ำไว้ถ้ายังเป็นความลับ), ใบขวา = Block ที่เรากำลังจะตัดสินใจใช้ */}
+        <div className="mt-5 flex items-center justify-center gap-3">
+          <figure className="m-0">
+            <img
+              src={isCounter ? CARD_ART.block : CARD_BACK}
+              alt={isCounter ? `${CARD_META.block.name} ของ ${lastBlocker?.name ?? 'อีกทีม'}` : 'การ์ดที่อีกทีมใช้ (ยังไม่เปิดเผย)'}
+              className="h-40 w-auto rounded-xl shadow-lg"
+              draggable={false}
+            />
+            <figcaption className="mt-1.5 text-xs font-bold text-muted-foreground">
+              {isCounter ? (lastBlocker?.name ?? 'อีกทีม') : 'อีกทีมใช้ใส่คุณ'}
+            </figcaption>
+          </figure>
+
+          <span className="text-3xl font-black text-muted-foreground" aria-hidden="true">
+            ⚔
+          </span>
+
+          <figure className="m-0">
+            <img
+              src={CARD_ART.block}
+              alt={`${CARD_META.block.name} ในมือของ ${responder.name}`}
+              className="h-40 w-auto rounded-xl shadow-lg ring-2 ring-[var(--confirm)]"
+              draggable={false}
+            />
+            <figcaption className="mt-1.5 text-xs font-bold text-[var(--confirm)]">
+              ของคุณ — เหลือ {blocksLeft} ใบ
+            </figcaption>
+          </figure>
+        </div>
+
+        {isCounter && lastBlocker ? (
+          <>
+            <p className="mt-4 text-lg leading-7">
+              <b>{lastBlocker.name}</b> ประกาศใช้ <b>🚫 Block</b> — จะใช้ Block ของคุณ
+              <br />
+              เพื่อ <b className="text-amber-600 dark:text-amber-400">ล้ม Block ใบนั้น</b> ไหม?
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              ถ้าล้มสำเร็จ และ {lastBlocker.name} ไม่มี Block เหลือ — effect เดิมจะทำงานตามปกติ
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-4 text-lg leading-7">
+              จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              (ไม่บอกว่าเป็น effect อะไร — เหลือ Block อยู่ {blocksLeft} ใบ)
+            </p>
+          </>
         )}
-        <p className="mt-4 text-lg leading-7">
-          จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          (ไม่บอกว่าเป็น effect อะไร — เหลือ Block อยู่{' '}
-          {responder.hand.filter((c) => c === 'block').length} ใบ)
-        </p>
-        {waiting > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            ถ้าไม่กัน จะถามทีมที่ถือ Block ต่อไปอีก {waiting} ทีม
+
+        {/* FIX_LISTS ชุดใหม่ #1: เห็นภาพว่าตอนนี้กันซ้อนกันมากี่ชั้นแล้ว */}
+        {chain.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5 text-sm">
+            {chain.map((id, i) => {
+              const t = state.teams.find((x) => x.id === id)
+              return (
+                <span key={`${id}-${i}`} className="flex items-center gap-1.5">
+                  {i > 0 && <span className="text-muted-foreground">→</span>}
+                  <span className="rounded-full bg-secondary px-2.5 py-0.5 font-bold">
+                    🚫 {t?.name ?? id}
+                  </span>
+                </span>
+              )
+            })}
+          </div>
+        )}
+
+        {isCounter && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            ชั้นเลขคี่ = effect ถูกกันสำเร็จ · ชั้นเลขคู่ = effect ทำงานตามปกติ
           </p>
         )}
 
@@ -54,13 +136,13 @@ export function BlockPrompt() {
             onClick={() => dispatch({ type: 'RESOLVE_BLOCK', use: true })}
             className="rounded-lg bg-[var(--confirm)] px-6 py-3 text-lg font-black text-white"
           >
-            🚫 ใช้ Block กัน
+            🚫 {isCounter ? 'ใช้ Block ล้ม' : 'ใช้ Block กัน'}
           </button>
           <button
             onClick={() => dispatch({ type: 'RESOLVE_BLOCK', use: false })}
             className="rounded-lg border-2 border-border bg-background px-6 py-3 text-lg font-bold"
           >
-            ไม่กัน (เก็บการ์ดไว้)
+            ไม่{isCounter ? 'ล้ม' : 'กัน'} (เก็บการ์ดไว้)
           </button>
         </div>
       </div>

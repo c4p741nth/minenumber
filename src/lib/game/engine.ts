@@ -49,12 +49,18 @@ interface EngineState {
   // FIX_LISTS #10/#15: ถามทีละทีมจนกว่าจะมีคนกัน หรือทุกทีมที่มี Block ตอบว่าไม่กัน
   //   askQueue = คิวทีมที่ยังไม่ได้ตอบ (ทีมแรกในคิวคือทีมที่กำลังถูกถามอยู่)
   //   ทีมที่ "ถูกใส่ effect" อยู่หัวคิวเสมอ แล้วค่อยไล่ทีมอื่นที่ถือ Block
+  // FIX_LISTS ชุดใหม่ #1: Block กัน Block ได้ — เก็บเป็น "ชั้น" (chain)
+  //   chain[0] = ทีมที่ประกาศกัน effect เดิม, chain[1] = ทีมที่กัน chain[0], …
+  //   counter = กำลังถามว่าจะกัน Block ของ chain ชั้นล่าสุดไหม
+  //   จำนวนชั้นคี่ = effect ถูกกันสำเร็จ, จำนวนชั้นคู่ (รวม 0) = effect ทำงาน
   pendingBlock: {
     targetTeamId: string
     sourceTeamId: string
     card: CardType
     targetCell?: number
     askQueue: string[]
+    chain: string[]
+    counter: boolean
   } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
@@ -62,6 +68,10 @@ interface EngineState {
   // ทีมปัจจุบันติด glitch/block ไหม (ตั้งตอนเริ่ม turn ของตัวเอง)
   currentGlitched: boolean
   currentBlocked: boolean
+  // FIX_LISTS ชุดที่สาม #3: ผลสแกนที่ยัง "ใช้ได้อยู่" — cell -> มีระเบิดในโซนไหม
+  // mark ไว้บนกระดานเป็นสีขอบ (แดง = โซนนี้อาจมีระเบิด, เขียว = ปลอดภัย)
+  // ล้างทิ้งทันทีที่ระเบิดย้ายที่ (กู้สำเร็จ / Shuffle) เพราะข้อมูลเก่าไม่จริงอีกต่อไป
+  scanMarks: Record<number, boolean>
 }
 
 export interface GameHandle {
@@ -153,6 +163,8 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     lastDraw: null,
     currentGlitched: false,
     currentBlocked: false,
+    // FIX_LISTS ชุดที่สาม #3: ยังไม่มีใครสแกน — ไม่มี mark บนกระดาน
+    scanMarks: {},
   }
 
   return makeHandle(state)
@@ -218,6 +230,9 @@ export function createGameFromState(
           askQueue:
             state.pendingBlock.askQueue ??
             blockAskQueue(state, state.pendingBlock.targetTeamId, state.pendingBlock.sourceTeamId),
+          // FIX_LISTS ชุดใหม่ #1: snapshot เก่าไม่มี chain/counter — เริ่มที่ชั้น 0
+          chain: state.pendingBlock.chain ?? [],
+          counter: state.pendingBlock.counter ?? false,
         }
       : null,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
@@ -225,6 +240,8 @@ export function createGameFromState(
     lastDraw: state.lastDraw ? { ...state.lastDraw } : null,
     currentGlitched: state.currentGlitched,
     currentBlocked: state.currentBlocked,
+    // FIX_LISTS ชุดที่สาม #3: snapshot เก่าไม่มี field นี้ — เริ่มที่ไม่มี mark
+    scanMarks: { ...(state.scanMarks ?? {}) },
   }
   return makeHandle(restored)
 }
@@ -310,6 +327,8 @@ function buildPublic(state: EngineState): PublicGameState {
     currentBlocked: state.currentBlocked,
     // FIX_LISTS ชุดใหม่ #2: UI ใช้ค่านี้เข้าโหมดตัดสายเลย ไม่ต้องให้เลือกช่อง
     autoWireCut: shouldAutoWireCut(state),
+    // FIX_LISTS ชุดที่สาม #3: โซนที่สแกนไปแล้วและผลยังใช้ได้อยู่
+    scanMarks: { ...state.scanMarks },
   }
 }
 
@@ -695,9 +714,36 @@ function advanceToNext(state: EngineState): void {
 
 // FIX #18: หมดเวลา → ทีมนั้นเสีย turn ไปเลย ไม่มีการสุ่มเปิดให้อัตโนมัติ
 // (กรรมการกดย้อนกลับไปทีมก่อนหน้าเองได้ถ้าเห็นว่าควร — ดู UNDO_TURN)
+//
+// FIX_LISTS ชุดที่สิบเอ็ด #2: ยกเว้นตอน "โดน Attack ค้างอยู่" (pendingOpens > 1)
+//   ทีมที่โดนโจมตีติดหนี้เปิดป้ายไว้หลายใบ ถ้าปล่อยให้ timeout = เสีย turn เฉย ๆ
+//   การโดน Attack จะกลายเป็นของฟรี (อยู่เงียบ ๆ ให้หมดเวลาแล้วหนี้หายทั้งก้อน)
+//   ตอนนี้ระบบสุ่มเปิดป้ายให้แทน "ทีละอัน" ต่อการหมดเวลาหนึ่งครั้ง แล้วปล่อยให้
+//   flow ปกติทำงานต่อ:
+//     - เจอระเบิด → เข้า phase 'defusing' กู้ตาม flow ปกติ และถ้ากู้สำเร็จ
+//       ackDefuse() จบ turn ทันที (§3.4.2) → หนี้ attack ที่เหลือไม่มีผล ไปทีมถัดไปเลย
+//     - ปลอดภัย/glitch → openCell() หัก pendingOpens แล้วจบ turn เองเมื่อหมดหนี้
+//   หนี้ก้อนสุดท้าย (pendingOpens === 1) ไม่เข้าเงื่อนไขนี้ — เป็นตาปกติ ใช้ FIX #18 เดิม
 function timeout(state: EngineState): void {
   if (state.phase !== 'opening' && state.phase !== 'cards') return
   const team = currentTeam(state)
+
+  if (team.pendingOpens > 1) {
+    const candidates = hiddenCells(state)
+    if (candidates.length > 0) {
+      const cell = pickRandom(state.rng, candidates)
+      pushLog(
+        state,
+        team.id,
+        `${team.name} หมดเวลาระหว่างโดนโจมตี — ระบบสุ่มเปิด ${cell} ให้`,
+        { level: 'warn' },
+      )
+      openCell(state, cell)
+      return
+    }
+    // ไม่มีช่องให้เปิดแล้ว → ตกไปใช้ทางเดิม (เสีย turn)
+  }
+
   pushLog(state, team.id, `${team.name} หมดเวลา — เสีย turn`, { level: 'warn' })
   endTurn(state, { draw: false })
 }
@@ -766,8 +812,12 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       playScan(state, action.targetCell!)
       break
     case 'skip':
-      pushLog(state, team.id, `${team.name} ใช้ Skip — ข้าม turn`)
-      endTurn(state, { draw: false })
+      // FIX_LISTS ชุดใหม่: Skip เป็นการ์ดเชิงรุก — คนใช้ไม่ต้องเปิดป้าย แต่ทีมถัดไป
+      // ต้องรับเคราะห์แทน (เปิดป้ายเร็วขึ้น 1 ตา) จึงให้ทีมถัดไปในทิศเอา Block มากันได้
+      // ถ้ากันติด: Skip ล้ม → คนใช้เสียการ์ดฟรีและจบตาไปเอง (settleBlockChain)
+      if (!offerBlock(state, nextAliveTeamId(state), 'skip')) {
+        applySkip(state)
+      }
       break
     case 'shield':
       // FIX #24: ใช้กับทีมตัวเองเท่านั้น — กางแล้วเล่นต่อในตาเดิมได้
@@ -777,8 +827,10 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       break
     case 'reverse':
       // FIX_LISTS #10: Reverse สลับลำดับของทั้งวง — ทีมอื่นเอา Block มากันได้
-      // เป้าหมายของการถามคือทีมถัดไป (คนที่เสียสิทธิ์เล่นเพราะทิศเปลี่ยน)
-      if (!offerBlock(state, nextAliveTeamId(state), 'reverse')) {
+      // FIX_LISTS ชุดใหม่ #1: คนที่ได้ตอบก่อนคือ "ทีมที่อยู่ในทิศที่กำลังจะย้อนไป"
+      //   คือทีมที่จะได้เล่นต่อถ้า Reverse ติด (เช่น ทีม2จบตา ทีม3ใช้ Reverse →
+      //   ทิศพลิกกลับไปหาทีม2 ทีม2 จึงเป็นคนที่ถูกถามก่อน) ไม่ใช่ทีมถัดไปในทิศเดิม
+      if (!offerBlock(state, nextAliveTeamId(state, -state.direction as 1 | -1), 'reverse')) {
         applyReverse(state)
       }
       break
@@ -812,33 +864,41 @@ function offerBlock(state: EngineState, targetId: string, card: CardType): boole
     sourceTeamId: sourceId,
     card,
     askQueue: queue,
+    chain: [],
+    counter: false,
   }
   state.phase = 'blocking'
   return true
 }
 
-// FIX_LISTS #10: ลำดับการถาม — ทีมที่โดน effect ได้สิทธิ์ตอบก่อน แล้วค่อยทีมอื่น
-// ตามลำดับที่นั่ง (เสถียร ไม่สุ่ม) เฉพาะทีมที่ยังรอดและยังถือการ์ด Block อยู่จริงในมือ
-// (Block ไม่ได้กางล่วงหน้า — ต้องถืออยู่ในมือ ถึงจะถูกถามให้ใช้ตอนมี effect)
+// FIX_LISTS ชุดที่สาม #2: กันได้เฉพาะ effect ที่จะเกิดกับทีมตัวเองเท่านั้น
+//   เดิมทุกทีมที่ถือ Block เข้ามากันแทนคนอื่นได้ (FIX_LISTS #10) — กติกาใหม่ตัดออก
+//   คิวจึงมีได้อย่างมาก 1 ทีม คือทีมที่ effect กำลังจะลง (targetId) และต้อง
+//   ยังรอด + ถือ Block จริง + ไม่ใช่คนใช้การ์ดเอง
+// FIX_LISTS ชุดใหม่ #1: exclude = ทีมที่ประกาศกันไปแล้วในศึกนี้ (chain) — ห้ามกันซ้อนตัวเอง
 export function blockAskQueue(
   state: { teams: Team[] },
   targetId: string,
   sourceId: string,
+  exclude: string[] = [],
 ): string[] {
-  const eligible = (t: Team) => t.alive && t.hand.includes('block') && t.id !== sourceId
-  const queue: string[] = []
   const target = state.teams.find((t) => t.id === targetId)
-  if (target && eligible(target)) queue.push(target.id)
-  for (const t of state.teams) {
-    if (t.id !== targetId && eligible(t)) queue.push(t.id)
-  }
-  return queue
+  if (!target) return []
+  const eligible =
+    target.alive &&
+    target.hand.includes('block') &&
+    target.id !== sourceId &&
+    !exclude.includes(target.id)
+  return eligible ? [target.id] : []
 }
 
 // FIX #25: ตอบ popup — use = ใช้ Block กัน, ไม่ใช้ = ส่งคิวต่อให้ทีมถัดไปตอบ
 // FIX_LISTS #10: ถามวนจนกว่าจะมีคนกัน หรือทุกทีมที่ถือ Block ตอบว่าไม่กัน
-// FIX_LISTS #15: กันได้ = จบเลย ห้าม stack — ทีมอื่นจะเอา Block มาซ้อนกัน Block ไม่ได้
-//   (Block เป็นการ์ด counter ไม่ใช่การ์ดที่ใส่ใส่กันเป็นชั้น ๆ)
+// FIX_LISTS ชุดใหม่ #1: Block กัน Block ได้ — ซ้อนเป็นชั้น (counter-block)
+//   ทีมหนึ่งประกาศกัน → ไล่ถามทีมที่เหลือว่าจะกัน "Block ใบนั้น" ต่อไหม
+//   กันต่อได้เรื่อย ๆ จนไม่มีใครกันแล้ว ชั้นที่ค้างอยู่สุดท้ายเป็นฝ่ายชนะ
+//   ชั้นเป็นเลขคี่ = effect ถูกกันสำเร็จ, ชั้นเป็นเลขคู่ = Block ชั้นล่างสุดถูกล้ม
+//   → effect เดิมทำงาน (ตรงกับตัวอย่าง: ทีม2 กัน แล้วทีม4 กันทีม2 → ทีม2 โดน)
 function resolveBlock(state: EngineState, use: boolean): void {
   if (state.phase !== 'blocking' || !state.pendingBlock) return
   const pending = state.pendingBlock
@@ -849,15 +909,25 @@ function resolveBlock(state: EngineState, use: boolean): void {
   if (use && responder && responder.alive && responder.hand.includes('block')) {
     const bi = responder.hand.indexOf('block')
     responder.hand.splice(bi, 1)
-    state.pendingBlock = null
-    state.phase = 'cards'
-    pushLog(
-      state,
-      responder.id,
-      `${responder.name} ใช้ Block — กัน ${CARD_LABELS[pending.card]} ไว้ได้`,
-    )
-    // การ์ดถูกกัน → ทีมที่ใช้จบ turn ไปเลย (เสียการ์ดฟรี)
-    endTurn(state, { draw: false })
+    responder.stats.cardsPlayed.block += 1
+    const chain = [...pending.chain, responder.id]
+    // ชั้นล่างสุดกัน effect เดิม ชั้นถัดมากัน Block ของชั้นก่อนหน้า
+    const blockedName =
+      chain.length === 1
+        ? CARD_LABELS[pending.card]
+        : `Block ของ ${teamName(state, chain[chain.length - 2])}`
+    pushLog(state, responder.id, `${responder.name} ใช้ Block — กัน ${blockedName} ไว้ได้`)
+
+    // ถามต่อว่ามีใครจะกัน Block ใบนี้อีกไหม (ทีมที่กันไปแล้วในศึกนี้ไม่ถูกถามซ้ำ)
+    // ผู้ที่เสียประโยชน์จากชั้นนี้ได้ตอบก่อน: ชั้นแรก = คนใช้การ์ดเดิม,
+    // ชั้นถัด ๆ ไป = ทีมที่เพิ่งถูกกัน (chain ก่อนหน้า)
+    const hurtId = chain.length === 1 ? pending.sourceTeamId : chain[chain.length - 2]
+    const nextQueue = blockAskQueue(state, hurtId, responder.id, chain)
+    if (nextQueue.length > 0) {
+      state.pendingBlock = { ...pending, chain, counter: true, askQueue: nextQueue }
+      return
+    }
+    settleBlockChain(state, { ...pending, chain })
     return
   }
 
@@ -871,12 +941,50 @@ function resolveBlock(state: EngineState, use: boolean): void {
     return
   }
 
-  // ไม่มีใครกัน → effect ทำงานตามปกติ
+  // หมดคิว — ตัดสินจากจำนวนชั้นที่ค้างอยู่
+  settleBlockChain(state, pending)
+}
+
+// FIX_LISTS ชุดใหม่ #1: ปิดศึก Block — ชั้นคี่ = effect ถูกกัน, ชั้นคู่/ไม่มีชั้น = effect ทำงาน
+function settleBlockChain(state: EngineState, pending: NonNullable<EngineState['pendingBlock']>): void {
+  const blocked = pending.chain.length % 2 === 1
   state.pendingBlock = null
   state.phase = 'cards'
+
+  if (blocked) {
+    // การ์ดถูกกัน → ทีมที่ใช้จบ turn ไปเลย (เสียการ์ดฟรี)
+    // FIX_LISTS ชุดใหม่: Skip ที่ถูกกันก็จบตาเหมือนกัน (endTurn ข้างล่างนี่แหละ) —
+    // ต่างกันที่ "เสียการ์ดเปล่า" ไม่ได้บังคับให้คนใช้กลับไปเปิดป้าย เพราะ Skip
+    // ไม่มี effect ค้างให้ย้อน จึงเขียน log ให้ชัดว่าผลคือใครเสียอะไร ไม่ให้ผู้เล่นเข้าใจผิด
+    if (pending.card === 'skip') {
+      pushLog(
+        state,
+        pending.targetTeamId,
+        `${teamName(state, pending.targetTeamId)} กัน Skip ไว้ได้ — คนใช้เสียการ์ดเปล่าและจบตาไปตามเดิม`,
+        { level: 'warn' },
+      )
+    }
+    endTurn(state, { draw: false })
+    return
+  }
+
+  if (pending.chain.length > 0) {
+    // มีคนกันแต่ถูกกันซ้อนจนล้มหมด → effect เดิมทำงานตามปกติ
+    pushLog(
+      state,
+      pending.chain[0],
+      `Block ของ ${teamName(state, pending.chain[0])} ถูกกันไว้ — ${CARD_LABELS[pending.card]} ทำงานตามปกติ`,
+      { level: 'warn' },
+    )
+  }
   if (pending.card === 'attack') playAttack(state, pending.targetTeamId)
   else if (pending.card === 'reverse') applyReverse(state)
   else if (pending.card === 'shuffle') playShuffle(state)
+  else if (pending.card === 'skip') applySkip(state)
+}
+
+function teamName(state: EngineState, id: string): string {
+  return state.teams.find((t) => t.id === id)?.name ?? id
 }
 
 // ทิ้งการ์ด 1 ใบ (W5.3) — เฉพาะช่วงใช้การ์ด + ไม่ติด glitch/block
@@ -906,11 +1014,24 @@ function playScan(state: EngineState, target: number): void {
     }
   }
   state.lastCardResult = { card: 'scan', found, center: target }
+  // FIX_LISTS ชุดที่สาม #3: mark ทุกช่องในโซนที่ตรวจ ให้เห็นบนกระดานว่าเคยสแกนแล้ว
+  // ผลเป็นของ "ทั้งโซน" (สแกนบอกแค่ว่ามี/ไม่มีระเบิดในช่วง) จึงทาเท่ากันทุกช่องในช่วง
+  // ทับ mark เก่าได้ — ผลใหม่สดกว่าเสมอ (กระดานยังไม่เปลี่ยนระหว่างสองครั้งนั้น)
+  for (let n = lo; n <= hi; n++) state.scanMarks[n] = found
   pushLog(state, team.id, `${team.name} Scan ${target}: ${found ? 'มีระเบิด!' : 'ไม่มีระเบิด'}`)
 }
 
 // FIX_LISTS #10: แยก effect ของ Reverse ออกมา เพื่อให้เรียกได้ทั้งตอนใช้ทันที
 // และตอนที่ผ่านด่าน Block มาแล้ว (resolveBlock)
+// FIX_LISTS ชุดใหม่: แยก effect ของ Skip ออกมา เพื่อเรียกได้ทั้งตอนใช้ทันที
+// และตอนที่ผ่านด่าน Block มาแล้ว (settleBlockChain) — แบบเดียวกับ applyReverse
+function applySkip(state: EngineState): void {
+  const team = currentTeam(state)
+  state.lastCardResult = { card: 'skip' }
+  pushLog(state, team.id, `${team.name} ใช้ Skip — ข้าม turn`)
+  endTurn(state, { draw: false })
+}
+
 function applyReverse(state: EngineState): void {
   const team = currentTeam(state)
   state.direction = (state.direction === 1 ? -1 : 1) as 1 | -1
@@ -921,11 +1042,13 @@ function applyReverse(state: EngineState): void {
 
 // ทีมถัดไปที่ยังรอด — ใช้เป็น "เป้าหมาย" ของการ์ดที่กระทบทั้งวง (Reverse/Shuffle)
 // เพื่อให้คนที่เสียประโยชน์ที่สุดได้สิทธิ์ตอบ Block ก่อน (FIX_LISTS #10)
-function nextAliveTeamId(state: EngineState): string {
+// FIX_LISTS ชุดใหม่ #1: dir ระบุได้ — Reverse ต้องมองไปทาง "ทิศที่จะย้อนไป"
+// (ทิศตรงข้ามกับทิศปัจจุบัน) เพราะนั่นคือทีมที่ Reverse ส่งผลถึงจริง
+function nextAliveTeamId(state: EngineState, dir: 1 | -1 = state.direction): string {
   const len = state.teams.length
   let i = state.currentTeamIndex
   for (let step = 1; step < len; step++) {
-    i = (i + state.direction + len) % len
+    i = (i + dir + len) % len
     if (state.teams[i].alive) return state.teams[i].id
   }
   return currentTeam(state).id
@@ -945,6 +1068,8 @@ function playShuffle(state: EngineState): void {
     state.bombs.set(shuffled[i], bombs[i][1])
   }
   state.lastCardResult = { card: 'shuffle' }
+  // FIX_LISTS ชุดที่สาม #3: ระเบิดย้ายทั้งกระดาน — ผลสแกนเก่าใช้ไม่ได้แล้ว
+  state.scanMarks = {}
   pushLog(state, team.id, `${team.name} ใช้ Shuffle — ระเบิดย้ายตำแหน่งใหม่`)
 }
 
@@ -1018,6 +1143,8 @@ function endGameNow(state: EngineState): void {
 // หมายเหตุ: ต้องเรียกก่อน mark ช่อง (defused/glitched) เสมอ — fromCell ต้องยังเป็น hidden
 // ไม่งั้นระเบิดที่คืนกลับจะไปค้างบนช่องที่เปิดแล้ว (ระเบิดผี)
 function relocateBomb(state: EngineState, fromCell: number, kind: BombKind): boolean {
+  // FIX_LISTS ชุดที่สาม #3: ระเบิดย้ายที่แล้ว — ผลสแกนเก่าอาจไม่จริงอีกต่อไป ล้าง mark ทิ้ง
+  state.scanMarks = {}
   state.bombs.delete(fromCell)
   const candidates = hiddenCells(state).filter((c) => c !== fromCell && !state.bombs.has(c))
   if (candidates.length === 0) {
@@ -1040,6 +1167,9 @@ function enforceRealBombQuota(state: EngineState, aliveCount: number): void {
   }
   const diff = target - realCells.length
   if (diff === 0) return
+
+  // FIX_LISTS ชุดที่สาม #3: โควตาขยับ = ระเบิดถูกเติม/เก็บออก → ผลสแกนเก่าใช้ไม่ได้
+  state.scanMarks = {}
 
   if (diff > 0) {
     const hidden = hiddenCells(state)

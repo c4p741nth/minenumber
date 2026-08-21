@@ -19,7 +19,7 @@ export interface Team {
   // FIX #24: Shield ที่กาง — กันระเบิดจริง 1 ครั้ง (ใช้กับทีมตัวเองเท่านั้น)
   shieldCharges: number
   // Block ไม่มี charge — ถือการ์ดอยู่ในมือเท่านั้น ใช้ได้ตอนถูกถาม (phase blocking)
-  // ต่อเมื่อทีมอื่นใช้ Attack/Reverse/Shuffle (กัน Shield ไม่ได้)
+  // ต่อเมื่อทีมอื่นใช้ Attack/Skip/Reverse/Shuffle (กัน Shield ไม่ได้)
   // โจมตีที่ค้างอยู่ — จะโดนตอนเริ่มตาของทีมนี้ กันด้วย Block ได้ (phase 'defending')
   pendingAttacks: PendingAttack[]
   pendingOpens: number // จำนวนป้ายที่ต้องเปิดในตานี้
@@ -149,11 +149,17 @@ export interface PublicGameState {
   // FIX #25: กำลังถามทีมเป้าหมายว่าจะใช้ Block กันไหม (ไม่บอกว่ามีการ์ดอะไร)
   // FIX_LISTS #10: askQueue = ทีมที่ยังไม่ได้ตอบว่าจะกันไหม (หัวคิว = ทีมที่ถูกถามอยู่)
   // optional เพราะ snapshot เก่าไม่มี field นี้
+  // FIX_LISTS ชุดใหม่ #1: กัน Block ด้วย Block ได้ (counter-block เป็นชั้น ๆ)
+  //   chain = ลำดับทีมที่ประกาศกันไว้แล้ว (chain[0] กัน effect เดิม,
+  //   chain[1] กัน chain[0], …) — ชั้นสุดท้ายที่ไม่มีใครกันต่อคือชั้นที่ชนะ
+  //   counter = true ตอนกำลังถามว่าจะกัน "Block ของชั้นล่าสุด" ไหม
   pendingBlock: {
     targetTeamId: string
     sourceTeamId: string
     card: CardType
     askQueue?: string[]
+    chain?: string[]
+    counter?: boolean
   } | null
   lastResult: OpenResult | null
   lastCardResult: CardResult | null
@@ -167,4 +173,10 @@ export interface PublicGameState {
   // true = ทุกช่องที่เหลือเป็นระเบิดจริง และทีมนี้ไม่มีการ์ดที่เปลี่ยน turn ได้
   // optional เพราะ snapshot เก่า deserialize มาเป็น type นี้โดยไม่มี field นี้
   autoWireCut?: boolean
+  // FIX_LISTS ชุดที่สาม #3: ช่องที่เคยถูก Scan ครอบ และผลยังใช้ได้อยู่
+  //   true = โซนนั้นมีระเบิด (ขอบแดง), false = โซนนั้นปลอดภัย (ขอบเขียว)
+  //   ล้างทั้งชุดทันทีที่ระเบิดย้ายที่ (กู้สำเร็จ / Shuffle / โควตาขยับ)
+  //   ⚠️ ไม่ใช่ตำแหน่งระเบิด — เป็นผลระดับโซนที่ผู้เล่นเห็นไปแล้วจาก popup สแกน
+  // optional เพราะ snapshot เก่า deserialize มาเป็น type นี้โดยไม่มี field นี้
+  scanMarks?: Record<number, boolean>
 }

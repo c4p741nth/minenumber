@@ -19,68 +19,73 @@
 * { box-sizing: border-box; }
 /* FIX #34: กัน element ที่สั่น/ล้นขอบ ทำให้เกิด scrollbar แนวนอนชั่วขณะ */
 html, body { overflow-x: hidden; }
-body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); font-size: 17px; }
+/* FIX_LISTS ชุดใหม่ #2: ตัวคูณขนาดทั้งหน้าจอ — display.ts เขียนทับตอนสลับโหมด TV
+   ค่าตั้งต้น 1 = โหมด Laptop (ขนาดเดิมทุกประการ) ถ้า JS ยังไม่รันก็ได้ขนาดเดิม
+   utility ของ Tailwind เป็น rem จึงขยับตาม html{font-size} ที่ display.ts ตั้งให้
+   ส่วน px ที่เขียนเองในไฟล์นี้ต้องคูณ var(--mn-scale) เองทุกจุด (ดู mn-px ด้านล่าง) */
+:root { --mn-scale: 1; }
+body { margin: 0; background: var(--background); color: var(--foreground); font-family: var(--font-sans); font-size: calc(17px * var(--mn-scale)); }
 button, select, input { font-size: inherit; }
 @media (max-width: 640px) { .number-grid { gap: 5px; } .number-tile { min-height: 38px; font-size: 13px; padding: 7px 2px; } }
 button, select, input { font: inherit; }
 button { cursor: pointer; }
-.brand-mark { position: relative; display: grid; height: 44px; width: 44px; place-items: center; border-radius: 12px; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-mono); font-weight: 800; }
-.brand-mark .brand-bomb { font-size: 24px; line-height: 1; }
-.brand-mark .brand-digits { position: absolute; right: -3px; bottom: -3px; border-radius: 6px; background: var(--card); color: var(--primary); font-size: 12px; font-weight: 900; padding: 0 4px; border: 1px solid var(--primary); }
-.brand-mark-lg { height: 84px; width: 84px; border-radius: 20px; }
-.brand-mark-lg .brand-bomb { font-size: 46px; }
-.brand-mark-lg .brand-digits { font-size: 18px; padding: 0 6px; right: -5px; bottom: -5px; }
-.section-label { color: var(--muted-foreground); font-family: var(--font-sans); font-size: 13px; font-weight: 800; letter-spacing: .05em; }
-.control { border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 10px 14px; }
-.primary-button { border-radius: 8px; background: var(--primary); padding: 12px 22px; color: var(--primary-foreground); font-weight: 800; transition: transform .2s, opacity .2s; }
+.brand-mark { position: relative; display: grid; height: calc(44px * var(--mn-scale)); width: calc(44px * var(--mn-scale)); place-items: center; border-radius: calc(12px * var(--mn-scale)); background: var(--primary); color: var(--primary-foreground); font-family: var(--font-mono); font-weight: 800; }
+.brand-mark .brand-bomb { font-size: calc(24px * var(--mn-scale)); line-height: 1; }
+.brand-mark .brand-digits { position: absolute; right: calc(-3px * var(--mn-scale)); bottom: calc(-3px * var(--mn-scale)); border-radius: calc(6px * var(--mn-scale)); background: var(--card); color: var(--primary); font-size: calc(12px * var(--mn-scale)); font-weight: 900; padding: 0 calc(4px * var(--mn-scale)); border: 1px solid var(--primary); }
+.brand-mark-lg { height: calc(84px * var(--mn-scale)); width: calc(84px * var(--mn-scale)); border-radius: calc(20px * var(--mn-scale)); }
+.brand-mark-lg .brand-bomb { font-size: calc(46px * var(--mn-scale)); }
+.brand-mark-lg .brand-digits { font-size: calc(18px * var(--mn-scale)); padding: 0 calc(6px * var(--mn-scale)); right: calc(-5px * var(--mn-scale)); bottom: calc(-5px * var(--mn-scale)); }
+.section-label { color: var(--muted-foreground); font-family: var(--font-sans); font-size: calc(13px * var(--mn-scale)); font-weight: 800; letter-spacing: .05em; }
+.control { border: 1px solid var(--border); border-radius: calc(8px * var(--mn-scale)); background: var(--card); padding: calc(10px * var(--mn-scale)) calc(14px * var(--mn-scale)); }
+.primary-button { border-radius: calc(8px * var(--mn-scale)); background: var(--primary); padding: calc(12px * var(--mn-scale)) calc(22px * var(--mn-scale)); color: var(--primary-foreground); font-weight: 800; transition: transform .2s, opacity .2s; }
 .primary-button:hover { opacity: .9; transform: translateY(-1px); }
-.range-bar { height: 8px; overflow: hidden; border-radius: 99px; background: var(--secondary); }
+.range-bar { height: calc(8px * var(--mn-scale)); overflow: hidden; border-radius: calc(99px * var(--mn-scale)); background: var(--secondary); }
 /* FIX_LISTS ชุดใหม่ #11: bar โอกาสโดนระเบิดต้องเปลี่ยนสีตามระดับความเสี่ยง
    rule นี้อยู่นอก @layer จึงชนะ utility ของ Tailwind เสมอ (unlayered > layered) —
    ที่ผ่านมา background ตายตัวตรงนี้กลืน bg-emerald/yellow/orange/red ที่ส่งมาจาก JSX
    ทำให้ bar เป็นสีส้ม --primary ตลอดไม่ว่าโอกาสโดนจะเท่าไร
    ทุกที่ที่ใช้ .range-bar ส่ง class สีมาเองอยู่แล้ว จึงไม่ต้องมีสีตั้งต้นที่นี่ */
 .range-bar div { height: 100%; border-radius: inherit; transition: width .35s ease, background-color .35s ease; }
-.number-board { min-height: 300px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 18px; }
-.number-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; }
-.number-tile { min-height: 48px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 10px 6px; font-family: var(--font-mono); font-size: 16px; font-weight: 800; transition: background .2s, color .2s, transform .2s; }
+.number-board { min-height: calc(300px * var(--mn-scale)); border: 1px solid var(--border); border-radius: calc(14px * var(--mn-scale)); background: var(--card); padding: calc(18px * var(--mn-scale)); }
+.number-grid { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: calc(8px * var(--mn-scale)); }
+.number-tile { min-height: calc(48px * var(--mn-scale)); border: 1px solid var(--border); border-radius: calc(8px * var(--mn-scale)); background: var(--background); padding: calc(10px * var(--mn-scale)) calc(6px * var(--mn-scale)); font-family: var(--font-mono); font-size: calc(16px * var(--mn-scale)); font-weight: 800; transition: background .2s, color .2s, transform .2s; }
 .number-tile:hover:not(:disabled) { background: var(--primary); color: var(--primary-foreground); transform: translateY(-3px); }
 .number-disabled { cursor: not-allowed; opacity: .22; }
 .number-used { cursor: not-allowed; background: var(--secondary); color: var(--muted-foreground); text-decoration: line-through; }
-.mode-card { border: 2px solid var(--border); border-radius: 14px; background: var(--card); padding: 20px; text-align: left; transition: border-color .2s, transform .2s; }
+.mode-card { border: 2px solid var(--border); border-radius: calc(14px * var(--mn-scale)); background: var(--card); padding: calc(20px * var(--mn-scale)); text-align: left; transition: border-color .2s, transform .2s; }
 .mode-card:hover { transform: translateY(-2px); border-color: var(--primary); }
 .mode-card strong, .mode-card span { display: block; }
-.mode-card strong { font-size: 20px; }
-.mode-card span { margin-top: 8px; color: var(--muted-foreground); font-size: 15px; line-height: 1.6; }
+.mode-card strong { font-size: calc(20px * var(--mn-scale)); }
+.mode-card span { margin-top: calc(8px * var(--mn-scale)); color: var(--muted-foreground); font-size: calc(15px * var(--mn-scale)); line-height: 1.6; }
 .mode-selected { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
 .popup-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgb(32 35 34 / 65%); padding: 20px; }
 /* FIX #41: 65% จางเกินบนพื้นมืด — popup กับพื้นหลังกลืนกัน ต้องทึบขึ้น */
 .dark .popup-backdrop { background: rgb(1 4 9 / 82%); }
-.bomb-popup { width: min(100%, 440px); border: 2px solid var(--primary); border-radius: 18px; background: var(--card); padding: 34px; text-align: center; box-shadow: 0 20px 70px rgb(32 35 34 / 30%); }
+.bomb-popup { width: min(100%, calc(440px * var(--mn-scale))); border: 2px solid var(--primary); border-radius: calc(18px * var(--mn-scale)); background: var(--card); padding: calc(34px * var(--mn-scale)); text-align: center; box-shadow: 0 20px 70px rgb(32 35 34 / 30%); }
 /* FIX #41: เงาดำบนพื้นดำเป็น no-op — ใช้เส้นเรืองแสงสีเตือนภัยแทน */
 .dark .bomb-popup { box-shadow: 0 0 0 1px rgb(255 92 51 / 25%), 0 20px 70px rgb(0 0 0 / 70%); }
-.bomb-icon { display: grid; width: 72px; height: 72px; margin: 0 auto 18px; place-items: center; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-mono); font-size: 42px; font-weight: 900; }
-.bomb-popup h2 { margin: 8px 0; font-family: var(--font-serif); font-size: 48px; }
-.bomb-popup p:not(.section-label) { margin: 0 auto 24px; color: var(--muted-foreground); line-height: 1.7; }
-.choice-input { width: 120px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 12px 16px; font-family: var(--font-mono); font-size: 18px; font-weight: 700; text-align: center; }
-.status-message { display: flex; align-items: center; gap: 10px; border-radius: 8px; background: var(--secondary); padding: 13px 16px; font-size: 15px; font-weight: 600; }
-.theme-toggle { border: 1px solid var(--border); border-radius: 999px; background: var(--card); padding: 9px 14px; font-size: 14px; font-weight: 800; }
-.turn-banner { display: flex; align-items: center; gap: 14px; border: 2px solid var(--primary); border-radius: 14px; background: color-mix(in srgb, var(--primary) 12%, var(--card)); padding: 16px 20px; box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 15%, transparent); }
-.turn-banner strong { display: block; margin-top: 2px; font-size: 30px; line-height: 1.1; }
-.turn-index { margin-left: auto; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 14px; font-weight: 700; }
+.bomb-icon { display: grid; width: calc(72px * var(--mn-scale)); height: calc(72px * var(--mn-scale)); margin: 0 auto calc(18px * var(--mn-scale)); place-items: center; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-family: var(--font-mono); font-size: calc(42px * var(--mn-scale)); font-weight: 900; }
+.bomb-popup h2 { margin: calc(8px * var(--mn-scale)) 0; font-family: var(--font-serif); font-size: calc(48px * var(--mn-scale)); }
+.bomb-popup p:not(.section-label) { margin: 0 auto calc(24px * var(--mn-scale)); color: var(--muted-foreground); line-height: 1.7; }
+.choice-input { width: calc(120px * var(--mn-scale)); border: 1px solid var(--border); border-radius: calc(8px * var(--mn-scale)); background: var(--card); padding: calc(12px * var(--mn-scale)) calc(16px * var(--mn-scale)); font-family: var(--font-mono); font-size: calc(18px * var(--mn-scale)); font-weight: 700; text-align: center; }
+.status-message { display: flex; align-items: center; gap: calc(10px * var(--mn-scale)); border-radius: calc(8px * var(--mn-scale)); background: var(--secondary); padding: calc(13px * var(--mn-scale)) calc(16px * var(--mn-scale)); font-size: calc(15px * var(--mn-scale)); font-weight: 600; }
+.theme-toggle { border: 1px solid var(--border); border-radius: calc(999px * var(--mn-scale)); background: var(--card); padding: calc(9px * var(--mn-scale)) calc(14px * var(--mn-scale)); font-size: calc(14px * var(--mn-scale)); font-weight: 800; }
+.turn-banner { display: flex; align-items: center; gap: calc(14px * var(--mn-scale)); border: 2px solid var(--primary); border-radius: calc(14px * var(--mn-scale)); background: color-mix(in srgb, var(--primary) 12%, var(--card)); padding: calc(16px * var(--mn-scale)) calc(20px * var(--mn-scale)); box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 15%, transparent); }
+.turn-banner strong { display: block; margin-top: calc(2px * var(--mn-scale)); font-size: calc(30px * var(--mn-scale)); line-height: 1.1; }
+.turn-index { margin-left: auto; color: var(--muted-foreground); font-family: var(--font-mono); font-size: calc(14px * var(--mn-scale)); font-weight: 700; }
 /* FIX #41: rule นี้ตั้งค่าเดียวกับ base อยู่แล้ว — .dark สลับ --secondary ให้เอง */
-.pulse-dot, .team-dot { display: inline-block; height: 9px; width: 9px; border-radius: 50%; background: var(--primary); }
+.pulse-dot, .team-dot { display: inline-block; height: calc(9px * var(--mn-scale)); width: calc(9px * var(--mn-scale)); border-radius: 50%; background: var(--primary); }
 .pulse-dot { animation: pulse 1.7s infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
-.team-row, .history-row { display: flex; align-items: center; gap: 10px; }
-.team-row { border-bottom: 1px solid var(--border); padding: 12px 0; font-size: 14px; }
-.panel { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 18px; }
-.stat-line { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 13px 0; font-size: 13px; }
+.team-row, .history-row { display: flex; align-items: center; gap: calc(10px * var(--mn-scale)); }
+.team-row { border-bottom: 1px solid var(--border); padding: calc(12px * var(--mn-scale)) 0; font-size: calc(14px * var(--mn-scale)); }
+.panel { border: 1px solid var(--border); border-radius: calc(12px * var(--mn-scale)); background: var(--card); padding: calc(18px * var(--mn-scale)); }
+.stat-line { display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding: calc(13px * var(--mn-scale)) 0; font-size: calc(13px * var(--mn-scale)); }
 .stat-line:last-child { border-bottom: 0; padding-bottom: 0; }
-.item-button { flex: 1; border: 1px solid var(--border); border-radius: 8px; background: transparent; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; }
-.item-button span { display: block; margin-top: 3px; color: var(--muted-foreground); font-size: 10px; font-weight: 500; }
-.history-row { font-size: 12px; }
-.history-bomb, .history-safe { display: grid; height: 22px; width: 22px; place-items: center; border-radius: 50%; font-weight: 800; }
+.item-button { flex: 1; border: 1px solid var(--border); border-radius: calc(8px * var(--mn-scale)); background: transparent; padding: calc(10px * var(--mn-scale)) calc(12px * var(--mn-scale)); text-align: left; font-size: calc(12px * var(--mn-scale)); font-weight: 700; }
+.item-button span { display: block; margin-top: calc(3px * var(--mn-scale)); color: var(--muted-foreground); font-size: calc(10px * var(--mn-scale)); font-weight: 500; }
+.history-row { font-size: calc(12px * var(--mn-scale)); }
+.history-bomb, .history-safe { display: grid; height: calc(22px * var(--mn-scale)); width: calc(22px * var(--mn-scale)); place-items: center; border-radius: 50%; font-weight: 800; }
 .history-bomb { background: var(--primary); color: var(--primary-foreground); }
 /* FIX #41: เดิม hardcode #d7ebe4/#286c5d เขียวอ่อนบนพื้นมืดกลายเป็นแผลสว่าง */
 .history-safe { background: var(--safe-bg); color: var(--safe-fg); }
@@ -95,7 +100,7 @@ button { cursor: pointer; }
      ตัว overlay ยังเป็น overflow: hidden ตาม FIX #34 อยู่ — กันขอบขาวโผล่ตอนสั่น */
   display: grid; place-items: safe center;
   background: radial-gradient(ellipse, rgba(60, 10, 10, 0.55), rgba(10, 5, 5, 0.92) 70%);
-  padding: 24px;
+  padding: calc(24px * var(--mn-scale));
   animation: mn-vignette 0.9s ease-in-out infinite;
   /* FIX #34: ตอนสั่น (defuse-shake) element ถูก translate ออกไป ทำให้เห็นพื้นหลัง
      สีขาวโผล่ที่ขอบ — ขยาย element ให้ใหญ่กว่าจอทุกด้านเผื่อระยะสั่นไว้ */
@@ -169,8 +174,8 @@ button { cursor: pointer; }
    ปุ่มยืนยัน = เขียว, ปุ่มยกเลิก = เทาเข้มพอให้อ่านตัวหนังสือออก */
 .mn-swal-confirm, .mn-swal-cancel {
   font-weight: 800 !important;
-  border-radius: 8px !important;
-  padding: 11px 24px !important;
+  border-radius: calc(8px * var(--mn-scale)) !important;
+  padding: calc(11px * var(--mn-scale)) calc(24px * var(--mn-scale)) !important;
 }
 .mn-swal-cancel { color: #fff !important; }
 
@@ -182,7 +187,7 @@ button { cursor: pointer; }
    แล้วยก z-index ให้ลอยเหนือช่องอื่น ขอบจึงครบวงเสมอ */
 .cell-picked {
   outline: 3px solid color-mix(in srgb, var(--primary) 75%, transparent);
-  outline-offset: 2px;
+  outline-offset: calc(2px * var(--mn-scale));
   position: relative;
   z-index: 2;
 }
@@ -191,10 +196,50 @@ button { cursor: pointer; }
   box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.55);
 }
 
+/* FIX_LISTS ชุดที่สาม #3: ช่องที่เคยถูก Scan ครอบ — ขอบสีบอกผลของโซนนั้น
+   ไม่มี popup ซ้ำ อ่านจากสีขอบอย่างเดียว (แดง = โซนนี้มีระเบิด, เขียว = ปลอดภัย)
+   mark หายเองเมื่อระเบิดย้ายที่ (กู้สำเร็จ / Shuffle) เพราะข้อมูลเก่าเชื่อไม่ได้แล้ว
+   ใช้ box-shadow วงในเสริมสีขอบให้เห็นชัดบนจอใหญ่ — วงในจึงไม่ล้นไปโดนช่องข้าง ๆ */
+/* FIX_LISTS ชุดที่เจ็ด #4: ปลอดภัย = ฟ้า (เดิมเขียว) — คืนสีเขียว neon ให้ "กำลังสแกน"
+   ใช้สีเดียวกับ border-sky-500 / border-red-500 ที่ Board ทาไว้ */
+.cell-scanned-bomb { box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.35); }
+.cell-scanned-safe { box-shadow: inset 0 0 0 2px rgba(14, 165, 233, 0.35); }
+
+/* FIX_LISTS ชุดที่เจ็ด #3: preview โซนสแกนตอนเอาเม้าส์ไป hover บนกระดาน
+   เขียว neon = "ขอบเขตการสแกนถึงตรงนี้" — เรืองทั้งโซน center ± radius พร้อมกัน
+   ใช้ box-shadow วงนอกบาง ๆ + วงในเข้ม ให้เห็นเป็นแถบต่อเนื่องเวลาช่องเรียงติดกัน
+   (ไม่ใช้ outline เพราะหลายช่องติดกันแล้วเส้นจะซ้อนกันเป็นตาราง อ่านยากกว่าแถบเดียว) */
+.cell-scan-preview {
+  background: color-mix(in srgb, #22c55e 22%, var(--card)) !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(74, 222, 128, 0.55),
+    0 0 10px rgba(34, 197, 94, 0.55);
+  position: relative;
+  z-index: 1;
+}
+
+/* FIX_LISTS ชุดที่หก #2: เอา .card-picked (ขอบใส ๆ รอบใบที่เลือก) ออกแล้ว
+   ใบที่เปิดอยู่ไปโชว์เต็มใบที่แผงขวา จึงไม่ต้อง mark ซ้ำในแถบมือ */
+
 /* ---- FIX #20: ที่เก็บการ์ด (มือ) ---- */
+/* FIX_LISTS ชุดที่หก #4: แถบโปร่งใส — ไม่มีพื้นหลัง/เส้นขอบบน/เงา บังกระดานอีก
+   เหลือแค่ blur บาง ๆ ให้การ์ดยังอ่านออกเวลาทับกับพื้นหลังที่มีรายละเอียด */
 .hand-dock {
-  border-top: 1px solid var(--border);
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  backdrop-filter: blur(8px);
+  background: transparent;
+  backdrop-filter: blur(2px);
 }
 .hand-scroll { scrollbar-width: thin; }
+
+/* FIX_LISTS: กรอบที่ scroll ของกระดานต้องจบตรงขอบบนของแถบการ์ดในมือ (fixed ทับด้านล่าง)
+   เดิมกันที่ด้วย pb-84 (336px คงที่) ซึ่งผิดสองทาง:
+     1. padding นับเป็นความสูง "เนื้อหา" ในกรอบ → เนื้อหาสูงเกินกรอบเสมอ เกิดแถบเลื่อน
+        ทั้งที่ป้ายยังไม่ล้นขอบ (เห็นชัดสุดในโหมด TV ที่ป้ายไม่กี่แถวแต่ยังมีแถบเลื่อน)
+     2. โหมด TV แถบการ์ดโตตาม --mn-scale (~500px) แต่ 336px เท่าเดิม → กันไม่พอ
+   ใช้ margin (อยู่นอกกล่อง ไม่นับเป็นความสูงเนื้อหา) จึง "หดกรอบ" แทน "ดันเนื้อหา"
+   ค่าจริงมาจาก --mn-hand-h ที่ Hand วัดด้วย ResizeObserver แล้วประกาศไว้บน <html>
+   fallback 336px เผื่อจังหวะก่อน Hand mount / เบราว์เซอร์ไม่มี ResizeObserver
+   (เขียนใน stylesheet ไม่ใช่ inline style เพราะ jsdom ทิ้งค่า var() ใน inline style
+    ทำให้เทสมองไม่เห็น — ใน stylesheet เทสตรวจจาก class ได้ตรง ๆ) */
+.board-grid {
+  margin-bottom: var(--mn-hand-h, 336px);
+}

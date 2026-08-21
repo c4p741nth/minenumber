@@ -58,6 +58,15 @@ export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeou
     return () => clearTimeout(t)
   }, [active, remaining, duration, onTimeout])
 
+  // FIX_LISTS ชุดที่สาม #14: กดที่วงนับถอยหลัง = เริ่มจับเวลาใหม่จากเต็ม
+  // (กรรมการใช้ตอนต้องหยุดคุยกติกากลางตา แล้วอยากคืนเวลาให้ทีมนั้นเต็ม ๆ)
+  // ไม่มีเวลาให้จับ (duration = 0) → ไม่ต้องเป็นปุ่ม
+  const resettable = duration > 0
+  function reset() {
+    if (!resettable) return
+    setRemaining(duration)
+  }
+
   const { frac, label, danger } = timerDisplay(phase, duration, remaining)
   // urgent (กระพริบ) + เสียง tick ผูกกับ active ไม่ใช่ showTime — หยุดเวลาแล้ว
   // ไม่ต้องกระพริบและไม่ต้องมีเสียง แต่เลข/วงแหวน/สีแดงยังค้างอยู่
@@ -70,7 +79,21 @@ export function TimerCircle({ duration, phase, turnKey, paused = false, onTimeou
   }, [active, remaining])
 
   return (
-    <div className={`relative h-20 w-20 ${danger ? 'timer-pulse' : ''}`}>
+    <div
+      className={`relative h-20 w-20 ${danger ? 'timer-pulse' : ''} ${resettable ? 'cursor-pointer' : ''}`}
+      // ปุ่มจริง ๆ ไม่ได้ ต้องครอบ svg + ตัวเลขที่ซ้อนกันอยู่ — ใช้ role/keyboard เอง
+      role={resettable ? 'button' : undefined}
+      tabIndex={resettable ? 0 : undefined}
+      onClick={reset}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          reset()
+        }
+      }}
+      title={resettable ? 'กดเพื่อเริ่มจับเวลาใหม่' : undefined}
+      aria-label={resettable ? 'เริ่มจับเวลาใหม่' : undefined}
+    >
       <svg viewBox="0 0 64 64" className="h-full w-full">
         <circle cx="32" cy="32" r={R} stroke="var(--secondary)" strokeWidth="7" fill="none" />
         <circle

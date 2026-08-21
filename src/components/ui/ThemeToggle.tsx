@@ -19,7 +19,9 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="theme-toggle fixed right-3 top-3 z-50"
+      // FIX_LISTS ชุดใหม่ #2: DisplayModeToggle จองมุมขวาบนแล้ว — ปุ่มธีมมาเป็นตัวแรก
+      // ในแถวเดียวกันแทน (App เรนเดอร์ทั้งสองไว้ใน bar เดียว) ไม่ต้อง fixed เอง
+      className="theme-toggle"
       title={theme === 'dark' ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'}
       aria-label="สลับธีมสว่าง/มืด"
     >

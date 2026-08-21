@@ -16,6 +16,8 @@ import { createRng, randomSeed, shuffle } from '@/lib/game/rng'
 import type { GameSettings } from '@/lib/game/types'
 import { RulesPanel } from './RulesPanel'
 import { confirmDialog } from '@/components/ui/alert'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { DisplayModeToggle } from '@/components/ui/DisplayModeToggle'
 import { CARD_DECK_SIZE } from '@/lib/game/cards'
 
 interface Props {
@@ -195,21 +197,55 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
   )
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6 sm:py-8">
-      <header className="flex items-center gap-3 pb-6">
+    // FIX_LISTS ชุดที่สิบ #3: หน้าตั้งค่าต้องเลื่อนได้เสมอ ไม่ใช่เฉพาะตอนกางกติกา
+    //   เดิมใช้ min-h-screen (=100vh) เฉย ๆ — พอเนื้อหาสูงกว่าจอนิดเดียว (ทีมเยอะ,
+    //   โหมด TV ที่ตัวอักษรคูณ 1.5) บางเบราว์เซอร์/บนมือถือที่แถบ URL ซ่อน-โผล่
+    //   จะคำนวณ 100vh ไม่ตรงกับพื้นที่จริง เลยเลื่อนไม่ได้ทั้งที่เนื้อหาล้น
+    //   h-dvh = สูงเท่าพื้นที่จริงที่มองเห็น (ขยับตามแถบ URL ที่ซ่อน-โผล่)
+    //   + overflow-y-auto ที่ตัว root = มีตัว scroll ของตัวเองเสมอเมื่อเนื้อหาเกิน
+    //   ต้องเป็น h-dvh ไม่ใช่ min-h-dvh — min-h ปล่อยให้กล่องยืดตามเนื้อหา
+    //   กล่องเลยไม่เคย "ล้น" ตัวเอง แล้ว overflow-y-auto ก็ไม่ทำอะไรเลย
+    // FIX_LISTS ชุดที่สิบเอ็ด #1: แถบเลื่อนโผล่ทั้งที่เนื้อหาไม่ล้น
+    //   เดิม h-dvh (สูงเท่าจอเป๊ะ) + py-6/py-8 → padding บวกเข้าไปในความสูงเนื้อหา
+    //   กล่องเลยล้นตัวเองเกินมานิดเดียวทุกครั้ง overflow-y-auto จึงขึ้นแถบเลื่อนตลอด
+    //   ทั้งที่ไม่มีอะไรให้เลื่อนจริง ๆ
+    //   max-h-dvh แทน h-dvh = สูงได้ไม่เกินจอ แต่ถ้าเนื้อหาสั้นกว่าก็หดตาม
+    //   เนื้อหาพอดีจอ → ไม่ล้น → ไม่มีแถบเลื่อน; เนื้อหายาว (ทีมเยอะ/โหมด TV) →
+    //   ชนเพดาน dvh แล้วเลื่อนได้เหมือนเดิม
+    <div className="mx-auto flex max-h-dvh w-full max-w-5xl flex-col overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+      {/* FIX_LISTS ชุดที่สิบเอ็ด #3: หัวเว็บหน้าตั้งค่าใช้ pattern เดียวกับหน้าเล่นเกม
+          (GameHeader) — โลโก้ซ้าย, ปุ่มหลักดันไปขวาด้วย ml-auto, แล้วต่อด้วยปุ่ม
+          ธีม/โหมดจอ ในแถวเดียวกัน
+          ปุ่มลอยมุมขวาบน (แถบ fixed ใน App) ไม่เรนเดอร์ในหน้านี้แล้ว — เดิมมันลอย
+          ทับหัวเว็บอยู่คนละระดับกับปุ่ม "กลับเมนู" ทำให้สองหน้าดูคนละแบบ
+          ตอนนี้ปุ่มทุกตัวอยู่บน top nav เส้นเดียวกันทั้งสองหน้า */}
+      <header className="mb-4 flex w-full flex-wrap items-center gap-3">
         <BombMark />
-        <div>
-          <h1 className="font-serif text-3xl font-bold">Minenumber — ตั้งค่า</h1>
+        <div className="min-w-0">
+          <h1 className="truncate font-serif text-3xl font-bold leading-tight">
+            Minenumber — ตั้งค่า
+          </h1>
           <p className="section-label">เลขระเบิด</p>
         </div>
         <button
           onClick={onBack}
-          className="ml-auto rounded-lg border border-border px-4 py-2 text-base font-bold"
+          title="กลับไปหน้าเมนูหลัก"
+          aria-label="กลับไปหน้าเมนูหลัก"
+          className={
+            'ml-auto flex shrink-0 items-center gap-2 rounded-lg border border-border bg-card ' +
+            'px-3 py-2 text-sm font-bold shadow transition hover:border-primary'
+          }
         >
-          ← กลับเมนู
+          <span aria-hidden="true">←</span>
+          <span className="hidden sm:inline">กลับเมนู</span>
         </button>
+        <ThemeToggle />
+        <DisplayModeToggle />
       </header>
 
+      {/* FIX_LISTS ชุดที่เก้า #2: เอาการ์ดเลือกโหมดจอออกจากหน้าตั้งค่า
+          ปุ่มสลับ Laptop/TV อยู่มุมขวาบนทุกหน้าอยู่แล้ว (DisplayModeToggle)
+          มีสองที่ให้ตั้งค่าเดียวกันทำให้สับสน — เหลือที่เดียวคือปุ่มมุมขวาบน */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* ทีม */}
         <section className="panel">
@@ -381,10 +417,10 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
             {!canStart && (
               <p className="mt-2 text-center text-sm font-semibold text-destructive">
                 {/* FIX_LISTS ชุดใหม่ #4: ขั้นต่ำไม่ใช่ "เท่าระเบิดจริง" อีกแล้ว — มันรวม
-                    glitch กับการ์ดที่เปิดอยู่ด้วย ข้อความเดิมจึงบอกเลขที่ไม่ตรงกับเหตุผล */}
-                ช่องน้อยไป: ต้องมีอย่างน้อย {minCells} ช่อง (ระเบิดจริง {quota}
-                {autoGlitch > 0 ? ` + glitch ${autoGlitch}` : ''}
-                {deckSize > 0 ? ` + การ์ด ${deckSize}` : ''}) — ตอนนี้ {cells}
+                    glitch กับการ์ดที่เปิดอยู่ด้วย ข้อความเดิมจึงบอกเลขที่ไม่ตรงกับเหตุผล
+                    FIX_LISTS ชุดที่สิบเอ็ด #3: ตัดส่วนแยกย่อย (ระเบิดจริง/glitch/การ์ด)
+                    กับ "ตอนนี้ x" ออก — จบที่จำนวนช่องขั้นต่ำพอ ข้อความจะสั้นอ่านจบในตาเดียว */}
+                ช่องน้อยไป: ต้องมีอย่างน้อย {minCells} ช่อง
               </p>
             )}
           </div>

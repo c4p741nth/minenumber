@@ -6,6 +6,7 @@ import { LeaderboardScreen } from '@/components/leaderboard/LeaderboardScreen'
 import { MainMenu } from '@/components/menu/MainMenu'
 import { SetupScreen } from '@/components/setup/SetupScreen'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { DisplayModeToggle } from '@/components/ui/DisplayModeToggle'
 import { createGame, createGameFromState, type GameHandle } from '@/lib/game/engine'
 import { defaultSettings } from '@/lib/game/config'
 import { randomSeed } from '@/lib/game/rng'
@@ -60,10 +61,24 @@ export default function Page() {
 
   // FIX #41: ปุ่มสลับธีมต้องอยู่ทุกหน้า — switch ด้านล่าง return ตรงจากทุก branch
   // จึงย้ายเข้า renderScreen() แล้วห่อด้วย fragment ที่นี่ครั้งเดียว
+  // FIX_LISTS ชุดใหม่ #2: ปุ่มโหมดจอ (Laptop/TV) + เต็มจอ อยู่แถวเดียวกับปุ่มธีม
+  //
+  // FIX_LISTS ชุดที่แปด #2: หน้าเล่นเกมไม่ใช้แถบลอยมุมขวาบนแล้ว — ปุ่มทั้งสาม
+  //   (ธีม/เต็มจอ/โหมดจอ) ไปอยู่บน top nav bar ระดับเดียวกับระดับเสียงและปุ่มออกห้อง
+  //   (GameHeader เรนเดอร์ให้เอง) หน้าอื่นที่ไม่มี header ยังใช้แถบลอยเหมือนเดิม
+  //
+  // FIX_LISTS ชุดที่สิบเอ็ด #3: หน้าตั้งค่าก็มี top nav เป็นของตัวเองแล้ว (pattern
+  //   เดียวกับหน้าเล่นเกม) จึงตัดออกจากแถบลอยด้วย ไม่งั้นปุ่มธีม/โหมดจอจะซ้ำสองชุด
+  //   เหลือแค่หน้าเมนูหลักกับหน้าอันดับที่ยังใช้แถบลอย
   return (
     <>
       {renderScreen()}
-      <ThemeToggle />
+      {screen !== 'game' && screen !== 'setup' && (
+        <div className="fixed right-3 top-3 z-50 flex items-center gap-2">
+          <ThemeToggle />
+          <DisplayModeToggle />
+        </div>
+      )}
     </>
   )
 

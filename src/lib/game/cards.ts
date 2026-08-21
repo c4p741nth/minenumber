@@ -2,6 +2,7 @@ import { CARD_WEIGHTS } from './config'
 import { weightedPick } from './rng'
 import type { CardType } from './types'
 import cardAttack from '@/assets/cards/Card-ATTACK.png'
+import cardBack from '@/assets/cards/Card-BACK.svg'
 import cardBlock from '@/assets/cards/Card-BLOCK.png'
 import cardReverse from '@/assets/cards/Card-REVERSE.png'
 import cardScan from '@/assets/cards/Card-SCAN.png'
@@ -52,6 +53,14 @@ export const CARD_ART: Record<CardType, string> = {
   attack: cardAttack,
 }
 
+// FIX_LISTS ชุดที่ห้า #1: หลังการ์ด (ใบคว่ำ) — เดิมใช้ emoji 🃏 ซึ่ง "เต็มกรอบ" ไม่ได้
+// เพราะ glyph ของ Segoe UI Emoji วาด joker ไว้กลาง em box โดยมีขอบว่างในตัวราว 20-25%
+// ต่อให้ดัน font-size เท่ากับความสูงช่อง ภาพก็ยังเล็กกว่ากรอบเสมอ และดันชนกรอบตอนย่อ
+// จึงเปลี่ยนเป็นภาพจริงแบบเดียวกับใบหงาย (CARD_ART) — ใช้ SVG เพราะคมทุกขนาด
+// (ช่อง 52px บน laptop ถึง ~450px บนแผงเปิดการ์ดโหมด TV) และไฟล์เล็กกว่า PNG 1.7MB มาก
+// อัตราส่วน viewBox 1288x1848 = เท่ากับ PNG ของใบหงาย ใบคว่ำ/ใบหงายจึงสูงเท่ากันเป๊ะ
+export const CARD_BACK: string = cardBack
+
 // derived — เก็บไว้เพื่อไม่ให้ที่อื่นพัง (เดิมใช้ label แบบรวม)
 export const CARD_LABELS: Record<CardType, string> = Object.fromEntries(
   (Object.keys(CARD_META) as CardType[]).map((c) => [c, `${CARD_META[c].emoji} ${CARD_META[c].name}`]),
@@ -73,11 +82,11 @@ export const CARD_COLORS: Record<CardType, string> = {
 
 export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   scan: 'เลือกเลข → ตรวจช่วงเลขซ้าย–ขวารอบเลขนั้น (±R) เช่น เลือก 20 รัศมี 3 = ตรวจ 17–23 รวม 7 ช่อง บอกแค่มี/ไม่มีระเบิด',
-  skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด)',
+  skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด) — ทีมถัดไปรับเคราะห์แทน จึงมีสิทธิ์เอา Block มากันก่อน',
   shield: 'กางโล่ให้ทีมตัวเอง — ถ้าเหยียบระเบิดจะรอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น (ใช้กับทีมตัวเองเท่านั้น กันได้เฉพาะระเบิด)',
-  block: 'ใช้เล่นตรง ๆ ไม่ได้ — โดนโจมตีแล้วจะถูกถามตอนเริ่มตาตัวเองว่าจะกันกี่ใบ (เลือกได้ 1 ใบต่อ 1 การ์ดโจมตี) หรือกัน Reverse / Shuffle ได้ทันทีตอนทีมอื่นใช้ กัน Shield ไม่ได้',
-  reverse: 'สลับทิศทาง + จบ turn ทันที',
-  shuffle: 'สุ่มย้ายตำแหน่งระเบิดทั้งหมดใหม่',
+  block: 'ใช้เล่นตรง ๆ ไม่ได้ — โดนโจมตีแล้วจะถูกถามตอนเริ่มตาตัวเองว่าจะกันกี่ใบ (เลือกได้ 1 ใบต่อ 1 การ์ดโจมตี) หรือกัน Skip / Reverse / Shuffle ได้ทันทีตอนทีมอื่นใช้ กัน Shield ไม่ได้ · กัน Block ด้วย Block ได้ (ซ้อนเป็นชั้น — ชั้นคี่ = กันสำเร็จ ชั้นคู่ = effect ทำงาน)',
+  reverse: 'สลับทิศทาง + จบ turn ทันที — ทีมที่อยู่ในทิศที่กำลังจะย้อนกลับไปได้สิทธิ์เอา Block มากันก่อนเป็นคนแรก',
+  shuffle: 'สุ่มย้ายตำแหน่งระเบิดทั้งหมดใหม่ — ผลสแกนเก่าใช้ไม่ได้อีก ทีมถัดไปจึงมีสิทธิ์เอา Block มากัน',
   attack: 'ทีมเป้าหมายโดนคิวโจมตี — ต้องเปิดเพิ่ม +1 ตอนถึงตาตัวเอง (โอนกองต่อได้) กันด้วย Block ได้ก่อน',
 }
 
@@ -102,8 +111,13 @@ export function cardEndsTurn(card: CardType): boolean {
 // Attack ใส่ทีมอื่นตรง ๆ, Reverse สลับลำดับของทั้งวง, Shuffle ย้ายระเบิดทั้งกระดาน
 // Shield/Block เป็นการ์ดตั้งรับของทีมตัวเอง ไม่กระทบใคร จึงกันไม่ได้
 // (Shield กันไม่ได้ด้วย — ใช้กับทีมตัวเองเท่านั้น ไม่มีเป้าหมายให้กัน)
-// Skip แค่จบตาตัวเอง ไม่ได้บังคับใคร จึงกันไม่ได้เช่นกัน
-// FIX_LISTS #15: Block เองอยู่นอกรายการนี้ — ใช้เล่นตรง ๆ ไม่ได้ด้วยซ้ำ (ห้าม stack)
+// FIX_LISTS ชุดใหม่: Skip กันได้แล้ว — เดิมมองว่า "แค่จบตาตัวเอง" แต่จริง ๆ เป็นเกม
+//   เชิงรุก: ผู้ใช้โยนเคราะห์ให้ทีมถัดไปรับแทน (ตัวเองไม่ต้องเปิดป้าย ทีมถัดไปเปิดแทน)
+//   คนที่เสียประโยชน์คือทีมถัดไปในทิศ จึงให้ทีมนั้นเป็นเป้าหมายที่มีสิทธิ์กัน
+// FIX_LISTS #15: Block เองอยู่นอกรายการนี้ — ใช้เล่นตรง ๆ ไม่ได้ด้วยซ้ำ
+// FIX_LISTS ชุดใหม่ #1: "กัน Block ด้วย Block" มีแล้ว แต่ไม่ได้ผ่านทางนี้ —
+// Block ไม่เคยถูก "เล่น" เป็นการ์ดที่ต้องหาคนกัน มันถูกประกาศตอนถูกถามใน phase
+// 'blocking' เท่านั้น การถามชั้นถัดไปจึงอยู่ใน resolveBlock (chain) ไม่ใช่ที่นี่
 export function cardIsBlockable(card: CardType): boolean {
-  return card === 'attack' || card === 'reverse' || card === 'shuffle'
+  return card === 'attack' || card === 'reverse' || card === 'shuffle' || card === 'skip'
 }

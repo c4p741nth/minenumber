@@ -4,10 +4,10 @@ import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
 
 // FIX_LISTS #3: 'exploded' = ตัดไม่ทันเวลา → ระเบิดทันที (ข้าม stage 'cutting')
-type Stage = 'choosing' | 'cutting' | 'result' | 'exploded'
+// FIX_LISTS ชุดที่สาม #15: ตัด stage 'cutting' ออก — กดสายแล้วรู้ผลทันที ไม่มีช่วงลุ้น
+// (ผู้เล่นรออยู่แล้วตอนเลือกสี การหน่วงอีก 2.5 วิ ทำให้จังหวะเกมสะดุด)
+type Stage = 'choosing' | 'result' | 'exploded'
 type Wire = 'red' | 'blue'
-
-const SUSPENSE_MS = 2500
 
 // FIX: สายปลอดภัยถูกสุ่มตอนเข้าเซสชัน (engine) — สีที่เลือกมีผลจริง
 // CHOOSE_WIRE ส่งตอนเลือกสี → เอนจินคำนวณผล (defuseResult) แต่ยังไม่จบ turn
@@ -35,13 +35,6 @@ export function DefuseModal() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  // FIX_LISTS #5: เสียง bomb timer ดังทุก 1 วินาทีตอนช่วงลุ้น (ตัดสาย)
-  useEffect(() => {
-    if (stage !== 'cutting') return
-    const t = window.setInterval(() => sfx.bombTimer(), 1000)
-    return () => window.clearInterval(t)
-  }, [stage])
-
   // FIX #29: ห้ามดัง 2 ครั้ง — เสียงต้องมาจากที่เดียว
   // FIX_LISTS #11: ตอนพลาดต้องดัง "ตอนเฉลยผล" ที่นี่ ไม่ใช่รอ GameEffects
   // ซึ่งยิงตอน state ทีมตกรอบ = ตอนกด "รับทราบ" (ช้ากว่าภาพระเบิดหลายวินาที
@@ -63,10 +56,10 @@ export function DefuseModal() {
     if (stage !== 'choosing') return
     setChosen(color)
     sfx.wireCut() // FIX_LISTS #6
-    setStage('cutting')
     // FIX: ส่งสีทันทีที่เลือก — ผลถูกผูกกับสายปลอดภัยของเซสชันนี้
     dispatch({ type: 'CHOOSE_WIRE', wire: color })
-    window.setTimeout(() => setStage('result'), SUSPENSE_MS)
+    // FIX_LISTS ชุดที่สาม #15: เฉลยผลทันที ไม่หน่วงรอ animation
+    setStage('result')
   }
 
   // FIX #27 + FIX_LISTS #3/#5: นับถอยหลัง + เสียง bomb timer ทุกวินาทีระหว่างเลือกสาย
@@ -135,13 +128,6 @@ export function DefuseModal() {
           </>
         )}
 
-        {stage === 'cutting' && (
-          <>
-            <h2 className="font-serif text-4xl font-bold sm:text-6xl">กำลังตัดสาย…</h2>
-            <p className="text-base text-white/70 sm:text-xl">ลุ้นเลย</p>
-          </>
-        )}
-
         {stage === 'result' && survived && (
           <>
             <h2 className="font-serif text-4xl font-bold text-emerald-300 sm:text-6xl">กู้สำเร็จ!</h2>
@@ -199,7 +185,9 @@ function Wires({
       >
         <svg viewBox="0 0 120 220" className="h-36 w-20 sm:h-56 sm:w-28">
           <path d={d} stroke={stroke} strokeWidth="10" fill="none" strokeLinecap="round" />
-          {picked && stage === 'cutting' && (
+          {/* FIX_LISTS ชุดที่สาม #15: กรรไกรค้างอยู่บนสายที่ตัด — เห็นว่าตัดสายไหนไปแล้ว
+              (เดิมโชว์เฉพาะช่วง 'cutting' ที่ถูกตัดออกไปแล้ว) */}
+          {picked && (
             <text x="60" y="120" textAnchor="middle" className="text-3xl">
               ✂
             </text>

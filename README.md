@@ -19,8 +19,9 @@
    - **ไพ่คว่ำหน้า** — กดเปิดดูทีละใบ แล้วเลือก ใช้ หรือ ทิ้ง
    - 🔍 Scan: มี/ไม่มีระเบิดใน**ช่วงซ้าย–ขวา** ±R
    - ⏭ Skip: จบ turn ทันที (ไม่ได้จั่ว)
-   - 🛡 Block: เป้าหมายใช้การ์ดไม่ได้ในตาถัดไป (ซ้อนชั้นได้)
-   - 🔄 Reverse: สลับทิศทาง + จบ turn
+   - 🛡 Block: การ์ดตั้งรับ — ถูกถามตอนมีทีมใช้ Attack/Reverse/Shuffle
+     **กัน Block ด้วย Block ได้** ซ้อนเป็นชั้น (ชั้นคี่ = กันสำเร็จ, ชั้นคู่ = effect ทำงาน)
+   - 🔄 Reverse: สลับทิศทาง + จบ turn — ทีมในทิศที่จะย้อนกลับไปได้สิทธิ์กันก่อน
    - 🎲 Shuffle: สุ่มย้ายระเบิดทั้งหมด
    - ⚔ Attack: เป้าหมายต้องเปิดเพิ่ม +1 — โอนกองต่อได้ (ใส่คนอื่น รับกองทั้งหมด)
 4. **จบเกม** — เหลือ 1 ทีม = ชนะ ทีมที่ตายทีหลังได้อันดับดีกว่า (podium 1-2-3)
@@ -49,6 +50,18 @@ Stack: **Bun + Vite + React + Tailwind** (ไม่ใช้ pnpm/Next อีก
   ใช้ YouTube IFrame Player API ฝัง player ซ่อน (ไม่ download ไฟล์) — ถ้า API โหลดไม่ได้จะซ่อน UI เพลง
   หมายเหตุ: ถ้าจะเพิ่ม CSP ในอนาคตต้องเปิดให้ `youtube.com` / `ytimg.com` (ตอนนี้ยังไม่มี CSP header)
 
+## โหมดการแสดงผล (Laptop / TV)
+
+ปุ่มมุมขวาบนสลับได้ทุกหน้า (และเลือกไว้ล่วงหน้าได้ในหน้าตั้งค่า) — จำค่าไว้ใน localStorage
+
+- **Laptop** — ขนาดปกติ สำหรับนั่งดูหน้าจอใกล้ ๆ
+- **TV** — ขยายทุกอย่าง 1.5 เท่า สำหรับต่อ HDMI ขึ้นจอ 43" แล้วกด F11 เต็มจอ
+  (มีปุ่ม ⛶ ให้กดเต็มจอด้วยเมาส์ ไม่ต้องเอื้อมไปกด F11)
+
+ทำงานผ่านตัวคูณ `--mn-scale` ตัวเดียว: utility ของ Tailwind เป็น rem จึงขยับตาม
+`html { font-size }` ส่วน class ที่เขียนเองใน `globals.css` คูณ `var(--mn-scale)` ตรง ๆ
+ไม่ใช้ browser zoom เพราะ zoom จะทำให้ breakpoint (`lg:`) เพี้ยนจน panel ขวาตกลงล่าง
+
 ## หมายเหตุ (anti-cheat)
 
 - ตำแหน่งระเบิดถูกเก็บใน private state ของ engine (อยู่นอก React tree)
@@ -69,6 +82,7 @@ Stack: **Bun + Vite + React + Tailwind** (ไม่ใช้ pnpm/Next อีก
 src/lib/game/        engine บริสุทธิ์ (types, rng, config, engine, setup, cards, balance)
 src/lib/storage/     crypto + session + leaderboard (save/load/clear snapshot, settings)
 src/lib/audio/       sfx (ไฟล์ + WebAudio fallback) + music (YouTube ID parser) + MusicPlayer
+src/lib/display.ts   โหมดจอ Laptop/TV (ตัวคูณ --mn-scale) — คู่กับ theme.ts
 src/components/      menu, setup, board, game, defuse, cards, effects, gameover, rules
 src/App.tsx          สลับหน้าเมนู/ตั้งค่า/กติกา/leaderboard/เกม
 ```
