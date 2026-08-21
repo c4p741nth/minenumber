@@ -450,6 +450,7 @@ describe('smoke', () => {
       const s = h.getState()
       if (s.phase === 'defusing') {
         h.dispatch({ type: 'CHOOSE_WIRE', wire: Math.random() < 0.5 ? 'red' : 'blue' })
+        h.dispatch({ type: 'ACK_DEFUSE' })
       } else if (s.phase === 'blocking') {
         // FIX #25: ถูกถามว่าจะใช้ Block กันไหม — ต้องตอบ ไม่งั้นเกมค้างที่ phase นี้
         h.dispatch({ type: 'RESOLVE_BLOCK', use: Math.random() < 0.5 })

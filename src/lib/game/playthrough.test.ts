@@ -71,6 +71,8 @@ function hiddenCells(h: GameHandle): number[] {
 function randomAction(h: GameHandle, rng: () => number): GameAction {
   const s = h.getState()
   if (s.phase === 'defusing') {
+    // เลือกสีก่อน → ต้อง ACK_DEFUSE ถึงจบ turn (สองเฟส)
+    if (s.defuseResult) return { type: 'ACK_DEFUSE' }
     return { type: 'CHOOSE_WIRE', wire: rng() < 0.5 ? 'red' : 'blue' }
   }
   // FIX #25: ถูกถามว่าจะใช้ Block กันไหม — ตอบสุ่ม

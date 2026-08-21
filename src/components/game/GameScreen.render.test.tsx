@@ -96,6 +96,7 @@ test('FIX #38: bronze medal shows mid-game for the team that placed 3rd', () => 
   const bombCell = Number(Object.keys(secret).find((k) => secret[Number(k)] === 'real'))
   handle.dispatch({ type: 'OPEN_CELL', cell: bombCell })
   handle.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+  handle.dispatch({ type: 'ACK_DEFUSE' })
 
   // ยืนยันว่า setup ไปถึงสถานะที่ต้องการจริง ไม่ใช่เทสผ่านเพราะไม่มีอะไรเกิดขึ้น
   const st = handle.getState()
@@ -202,6 +203,7 @@ test('ชุดใหม่ #10: เกมจบเองตามกติก�
   const bombCell = Number(Object.keys(secret).find((k) => secret[Number(k)] === 'real'))
   handle.dispatch({ type: 'OPEN_CELL', cell: bombCell })
   handle.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+  handle.dispatch({ type: 'ACK_DEFUSE' })
 
   const st = handle.getState()
   // 2 ทีม ตัดสายพลาด 1 → จบเกมโดยไม่ได้กดยุติ

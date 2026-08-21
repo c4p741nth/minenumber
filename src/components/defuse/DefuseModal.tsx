@@ -9,8 +9,9 @@ type Wire = 'red' | 'blue'
 
 const SUSPENSE_MS = 2500
 
-// ผลถูกตัดสินไว้แล้วจาก engine ตอน OPEN_CELL (state.lastResult.survived)
-// สีที่เลือกไม่มีผลต่อผลลัพธ์ — modal แค่แสดงผล ห้ามไปตัดสินใจเอง
+// FIX: สายปลอดภัยถูกสุ่มตอนเข้าเซสชัน (engine) — สีที่เลือกมีผลจริง
+// CHOOSE_WIRE ส่งตอนเลือกสี → เอนจินคำนวณผล (defuseResult) แต่ยังไม่จบ turn
+// โหมดนี้แค่แสดงผล — ห้ามไปตัดสินใจเอง ผลมาจากเอนจินเท่านั้น
 export function DefuseModal() {
   const { state, dispatch } = useGame()
   const [chosen, setChosen] = useState<Wire | null>(null)
@@ -18,7 +19,7 @@ export function DefuseModal() {
   const [reducedMotion, setReducedMotion] = useState(false)
 
   const current = state.teams[state.currentTeamIndex]
-  const survived = state.lastResult?.kind === 'real' ? state.lastResult.survived : false
+  const survived = state.defuseResult?.survived ?? false
   // FIX_LISTS #3: จอแดง/สั่น ทั้งตอนตัดพลาดและตอนตัดไม่ทันเวลา
   const boom = stage === 'exploded' || (stage === 'result' && !survived)
 
@@ -63,13 +64,16 @@ export function DefuseModal() {
     setChosen(color)
     sfx.wireCut() // FIX_LISTS #6
     setStage('cutting')
+    // FIX: ส่งสีทันทีที่เลือก — ผลถูกผูกกับสายปลอดภัยของเซสชันนี้
+    dispatch({ type: 'CHOOSE_WIRE', wire: color })
     window.setTimeout(() => setStage('result'), SUSPENSE_MS)
   }
 
   // FIX #27 + FIX_LISTS #3/#5: นับถอยหลัง + เสียง bomb timer ทุกวินาทีระหว่างเลือกสาย
   // หมดเวลา → ระเบิดทันที (เดิมตัดสายให้อัตโนมัติ ทำให้ยังมีโอกาสรอด 50%)
+  // ถ้าเลือกสีไปแล้ว (defuseResult ถูกตั้ง) → ผลถูกผูกแล้ว ไม่มี timeout อีก
   useEffect(() => {
-    if (stage !== 'choosing' || limit <= 0) return
+    if (stage !== 'choosing' || limit <= 0 || state.defuseResult) return
     if (left <= 0) {
       setStage('exploded')
       return
@@ -77,15 +81,15 @@ export function DefuseModal() {
     sfx.bombTimer()
     const t = window.setTimeout(() => setLeft((n) => n - 1), 1000)
     return () => window.clearTimeout(t)
-  }, [stage, left, limit])
+  }, [stage, left, limit, state.defuseResult])
 
   function acknowledge() {
-    // FIX_LISTS #3: ตัดไม่ทัน → ระเบิดทันที ไม่ใช่ผลที่สุ่มไว้ตอน OPEN_CELL
+    // FIX_LISTS #3: ตัดไม่ทัน → ระเบิดทันที ไม่ใช่ผลที่เลือกสีไว้
     if (stage === 'exploded') {
       dispatch({ type: 'DEFUSE_TIMEOUT' })
       return
     }
-    dispatch({ type: 'CHOOSE_WIRE', wire: chosen ?? 'red' })
+    dispatch({ type: 'ACK_DEFUSE' })
   }
 
   // Space ยืนยันตอนเฉลยผล

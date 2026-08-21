@@ -42,9 +42,9 @@ interface EngineState {
   log: LogEntry[]
   nextLogId: number
   eliminations: number
-  pendingDefuse: { cell: number } | null
-  // ตัดสินไว้ตอน OPEN_CELL (§5) — สีที่เลือกไม่มีผล
-  pendingDefuseSurvived: boolean
+  pendingDefuse: { cell: number; safeWire: 'red' | 'blue' } | null
+  // FIX: ผลตัดสายที่คำนวณไว้ตอน CHOOSE_WIRE — รอ ACK_DEFUSE เพื่อจบ turn
+  defuseResult: { survived: boolean } | null
   // FIX #25: การ์ดที่ค้างรอคำตอบว่าจะมีใครใช้ Block กันไหม
   // FIX_LISTS #10/#15: ถามทีละทีมจนกว่าจะมีคนกัน หรือทุกทีมที่มี Block ตอบว่าไม่กัน
   //   askQueue = คิวทีมที่ยังไม่ได้ตอบ (ทีมแรกในคิวคือทีมที่กำลังถูกถามอยู่)
@@ -86,6 +86,12 @@ function zeroStats(): TeamStats {
       attack: 0,
     },
   }
+}
+
+// สายปลอดภัยของเซสชันตัดสาย — สุ่มตอนเข้าโหมด (§5)
+// สีที่เลือกจึงมีผลจริง: เลือกตรงสายปลอดภัย = รอด, เลือกผิด = ระเบิด
+function rollSafeWire(rng: () => number): 'red' | 'blue' {
+  return rng() < 0.5 ? 'red' : 'blue'
 }
 
 export function createGame(settings: GameSettings, seed: number): GameHandle {
@@ -139,7 +145,7 @@ export function createGame(settings: GameSettings, seed: number): GameHandle {
     nextLogId: 0,
     eliminations: 0,
     pendingDefuse: null,
-    pendingDefuseSurvived: false,
+    defuseResult: null,
     pendingBlock: null,
     lastResult: null,
     lastCardResult: null,
@@ -162,10 +168,11 @@ export function createGameFromState(
   for (const [n, kind] of Object.entries(secret)) bombs.set(Number(n), kind)
   const nextLogId = state.log.reduce((m, l) => Math.max(m, l.id + 1), 0)
   const eliminations = state.teams.reduce((m, t) => Math.max(m, t.eliminatedAt ?? 0), 0)
+  const rng = createRng(seed)
 
   const restored: EngineState = {
     settings: state.settings,
-    rng: createRng(seed),
+    rng,
     bombs,
     cells: { ...state.cells },
     cardCells: { ...(state.cardCells ?? {}) },
@@ -189,9 +196,16 @@ export function createGameFromState(
     log: state.log.map((l) => ({ ...l })),
     nextLogId,
     eliminations,
-    pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
-    pendingDefuseSurvived:
-      state.lastResult?.kind === 'real' ? state.lastResult.survived : false,
+    // FIX: snapshot ไม่มี safeWire (เป็น secret) — ถ้ายังไม่เลือกสี (defuseResult null)
+    // ให้สุ่มสายปลอดภัยใหม่ตอนกู้เกม (resume ใช้ seed ใหม่ → ความสุ่มไม่เหมือนเดิมอยู่แล้ว)
+    // ถ้าเลือกสีไปแล้ว defuseResult มีผลครบ → สี placeholder ไหนก็ไม่ถูกใช้
+    pendingDefuse: state.pendingDefuse
+      ? {
+          cell: state.pendingDefuse.cell,
+          safeWire: state.defuseResult ? 'red' : rollSafeWire(rng),
+        }
+      : null,
+    defuseResult: state.defuseResult ? { ...state.defuseResult } : null,
     // FIX_LISTS #10: snapshot เก่าไม่มี askQueue — สร้างคิวขึ้นใหม่จากทีมที่ถือ Block อยู่
     // (ถ้าไม่เติม คิวจะเป็น undefined แล้ว resolveBlock หาหัวคิวไม่เจอ = ตอบ popup ไม่ได้)
     pendingBlock: state.pendingBlock
@@ -281,7 +295,9 @@ function buildPublic(state: EngineState): PublicGameState {
     turnNumber: state.turnNumber,
     startedAt: state.startedAt,
     log: state.log.map((l) => ({ ...l })),
-    pendingDefuse: state.pendingDefuse ? { ...state.pendingDefuse } : null,
+    // อย่า spread pendingDefuse ทั้งก้อน — ข้างในมี safeWire (secret) ห้ามรั่ว
+    pendingDefuse: state.pendingDefuse ? { cell: state.pendingDefuse.cell } : null,
+    defuseResult: state.defuseResult ? { ...state.defuseResult } : null,
     pendingBlock: state.pendingBlock ? { ...state.pendingBlock } : null,
     lastResult: state.lastResult ? { ...state.lastResult } : null,
     lastCardResult: state.lastCardResult ? { ...state.lastCardResult } : null,
@@ -300,6 +316,9 @@ function dispatchAction(state: EngineState, action: GameAction): void {
       break
     case 'CHOOSE_WIRE':
       chooseWire(state, action.wire)
+      break
+    case 'ACK_DEFUSE':
+      ackDefuse(state)
       break
     case 'DEFUSE_TIMEOUT':
       defuseTimeout(state)
@@ -409,12 +428,12 @@ function openCell(state: EngineState, cell: number): void {
       endTurn(state)
       return
     }
-    // สุ่มผลล่วงหน้า ไม่ใช่สุ่มสี (§5)
-    const survived = state.rng() < 0.5
-    state.pendingDefuse = { cell }
-    state.pendingDefuseSurvived = survived
+    // FIX: สุ่ม "สายปลอดภัย" ตอนเข้าเซสชันตัดสาย — สีที่เลือกมีผลจริง
+    // (เดิมสุ่มผลล่วงหน้าแล้วไม่สนสี — เลือกแดง/น้ำเงินเหมือนกันหมด)
+    state.pendingDefuse = { cell, safeWire: rollSafeWire(state.rng) }
     state.phase = 'defusing'
-    state.lastResult = { kind: 'real', survived }
+    // ยังไม่รู้ผลจนกว่าจะเลือกสี — ไม่ set lastResult ไว้ล่วงหน้า
+    state.lastResult = null
     pushLog(state, team.id, `${team.name} เจอระเบิด ต้องตัดสาย`, { level: 'warn' })
     return
   }
@@ -460,9 +479,10 @@ export const DEFUSE_TIMEOUT_LOG = 'ตัดสายไม่ทันเวล
 export const DEFUSE_FAILED_LOG = 'กู้ระเบิดพลาด ถูกคัดออก'
 
 // FIX_LISTS #3: ตัดสายไม่ทันเวลา → ระเบิดทันที
-// ผลที่สุ่มไว้ตอน OPEN_CELL ถูกทิ้ง เพราะ "ไม่ตัด" ไม่ใช่ "ตัดแล้วเดาถูก"
+// ถ้าเลือกสีไปแล้ว (defuseResult ถูกตั้ง) ผลถูกผูกกับสีนั้นแล้ว — timeout ไม่มีผล
 function defuseTimeout(state: EngineState): void {
   if (state.phase !== 'defusing' || !state.pendingDefuse) return
+  if (state.defuseResult) return
   const cell = state.pendingDefuse.cell
   const team = currentTeam(state)
   state.pendingDefuse = null
@@ -479,12 +499,22 @@ function detonate(state: EngineState, team: Team, cell: number, message: string)
   endTurn(state)
 }
 
-function chooseWire(state: EngineState, _wire: 'red' | 'blue'): void {
+// เลือกสี → คำนวณผลจากสายปลอดภัยที่สุ่มไว้ตอนเข้าเซสชัน (§5)
+// ยังไม่จบ turn — UI โชว์ผลก่อน แล้ว ACK_DEFUSE ค่อยลงมือจริง
+function chooseWire(state: EngineState, wire: 'red' | 'blue'): void {
   if (state.phase !== 'defusing' || !state.pendingDefuse) return
+  if (state.defuseResult) return // idempotent — เลือกแล้วเลือกซ้ำไม่มีผล
+  state.defuseResult = { survived: wire === state.pendingDefuse.safeWire }
+}
+
+// กด "รับทราบ" หลังเห็นผล → ลงมือจริง (กู้/ตูม) แล้วจบ turn
+function ackDefuse(state: EngineState): void {
+  if (state.phase !== 'defusing' || !state.pendingDefuse || !state.defuseResult) return
   const cell = state.pendingDefuse.cell
   const team = currentTeam(state)
-  const survived = state.pendingDefuseSurvived
+  const survived = state.defuseResult.survived
   state.pendingDefuse = null
+  state.defuseResult = null
 
   if (survived) {
     state.cells[cell] = 'defused'
@@ -903,7 +933,7 @@ function endGameNow(state: EngineState): void {
   state.phase = 'gameover'
   // เคลียร์ของค้าง ไม่งั้น modal ตัดสาย/Block จะเรนเดอร์ทับหน้าสรุปอันดับ
   state.pendingDefuse = null
-  state.pendingDefuseSurvived = false
+  state.defuseResult = null
   state.pendingBlock = null
   // ห้ามเรียก endTurn — มันจะจั่ว/เลื่อนทีม แล้วเขียน phase ทับกลับเป็น 'cards'
   pushLog(state, null, USER_ENDED_LOG, { level: 'warn' })

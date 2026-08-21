@@ -68,7 +68,7 @@ export type LogEntry = {
 }
 
 // ผลของการเปิดช่องหนึ่งช่อง
-// survived ตัดสินล่วงหน้าตอน OPEN_CELL (§5)
+// survived รู้ผลตอน CHOOSE_WIRE — สายปลอดภัยสุ่มตอนเข้าโหมดตัดสาย (§5)
 export type OpenResult =
   | { kind: 'safe' }
   | { kind: 'real'; survived: boolean }
@@ -104,6 +104,9 @@ export type GameAction =
   // FIX_LISTS ชุดใหม่ #2: เข้าโหมดตัดสายทันทีโดยไม่ต้องเลือกช่อง
   // (ใช้ได้เฉพาะตอนทุกช่องที่เหลือเป็นระเบิดจริง — เอนจินตรวจเงื่อนไขเองอีกชั้น)
   | { type: 'START_WIRE_CUT' }
+  // FIX: ตัดสายเลือกสีแล้ว → เอนจินคำนวณผล (defuseResult) แต่ยังไม่จบ turn
+  // UI แสดงผลก่อน แล้วกด "รับทราบ" เพื่อจบ (ACK_DEFUSE) — ผลขึ้นกับสีที่เลือกจริง ๆ
+  | { type: 'ACK_DEFUSE' }
 // สถานะที่ปลอดภัยสำหรับ UI — ห้ามมีตำแหน่งระเบิดเด็ดขาด
 export interface PublicGameState {
   phase: Phase
@@ -127,6 +130,9 @@ export interface PublicGameState {
   startedAt?: number
   log: LogEntry[]
   pendingDefuse: { cell: number } | null
+  // FIX: ผลการตัดสายเมื่อเลือกสีแล้ว (ยังไม่จบ turn — รอ ACK_DEFUSE)
+  // ไม่มี safeWire ตรงนี้ — รู้ผลได้เฉพาะตอนเลือกสีแล้วเท่านั้น (ห้ามรั่ว)
+  defuseResult: { survived: boolean } | null
   // FIX #25: กำลังถามทีมเป้าหมายว่าจะใช้ Block กันไหม (ไม่บอกว่ามีการ์ดอะไร)
   // FIX_LISTS #10: askQueue = ทีมที่ยังไม่ได้ตอบว่าจะกันไหม (หัวคิว = ทีมที่ถูกถามอยู่)
   // optional เพราะ snapshot เก่าไม่มี field นี้

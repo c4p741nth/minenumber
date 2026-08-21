@@ -63,6 +63,7 @@ function findDefuseSeed(settings: GameSettings, desiredSurvived: boolean): numbe
     h.dispatch({ type: 'OPEN_CELL', cell })
     if (h.getState().phase !== 'defusing') continue
     h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    h.dispatch({ type: 'ACK_DEFUSE' })
     if (h.getState().teams[openerId].alive === desiredSurvived) return seed
   }
   throw new Error('no seed found for defuse outcome')
@@ -187,12 +188,14 @@ describe('defuse', () => {
     const cell = bombCellOf(h, 'real')
     const before = h.getState().bombsRemaining
     h.dispatch({ type: 'OPEN_CELL', cell })
-    const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' })
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    const state = h.dispatch({ type: 'ACK_DEFUSE' })
     expect(state.cells[cell]).toBe('defused')
     expect(state.bombsRemaining).toBe(before) // ย้าย ไม่หาย
     expect(state.lastResult).toEqual({ kind: 'real', survived: true })
     expect(state.phase).toBe('opening')
     expect(state.pendingDefuse).toBeNull()
+    expect(state.defuseResult).toBeNull()
   })
 
   it('defuse ล้มเหลว → ทีมตาย, bombsRemaining ลด 1', () => {
@@ -203,7 +206,8 @@ describe('defuse', () => {
     const openerId = h.getState().currentTeamIndex
     const before = h.getState().bombsRemaining
     h.dispatch({ type: 'OPEN_CELL', cell })
-    const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    const state = h.dispatch({ type: 'ACK_DEFUSE' })
     expect(state.cells[cell]).toBe('detonated')
     expect(state.teams[openerId].alive).toBe(false)
     expect(state.teams[openerId].eliminatedAt).toBe(1)
@@ -224,7 +228,8 @@ describe('defuse', () => {
       for (const c of safe) h.dispatch({ type: 'OPEN_CELL', cell: c })
       h.dispatch({ type: 'OPEN_CELL', cell })
       if (h.getState().phase !== 'defusing') continue
-      const after = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      const after = h.dispatch({ type: 'ACK_DEFUSE' })
       if (after.teams[0].alive) {
         seed = s
         break
@@ -237,7 +242,8 @@ describe('defuse', () => {
     for (const c of safe) h.dispatch({ type: 'OPEN_CELL', cell: c })
     const before = h.getState().bombsRemaining
     h.dispatch({ type: 'OPEN_CELL', cell })
-    const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    const state = h.dispatch({ type: 'ACK_DEFUSE' })
     expect(state.teams[0].alive).toBe(true)
     expect(before).toBeGreaterThan(0)
     // ยังเหลือ 2 ทีม → ห้ามจบเกม ต้องเดินต่อเป็นการแข่งตัดสาย
@@ -251,22 +257,32 @@ describe('defuse', () => {
     expect(Object.keys(secret).length).toBeGreaterThan(0)
   })
 
-  it('ผลไม่ขึ้นกับสีที่เลือก — แดงกับน้ำเงินให้ผลเท่ากัน (ตัดสินไว้ก่อนแล้ว)', () => {
+  it('ผลขึ้นกับสีที่เลือกจริง — สายปลอดภัยสุ่มต่อเซสชัน แดงกับน้ำเงินให้ผลตรงข้าม', () => {
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
+    let redWonCount = 0
     for (let seed = 0; seed < 50; seed++) {
       const h1 = createGame(settings, seed)
       const h2 = createGame(settings, seed)
       const cell = bombCellOf(h1, 'real')
       h1.dispatch({ type: 'OPEN_CELL', cell })
       h2.dispatch({ type: 'OPEN_CELL', cell })
-      const s1 = h1.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
-      const s2 = h2.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' })
-      expect(s1.teams[0].alive).toBe(s2.teams[0].alive)
-      expect(s1.cells[cell]).toBe(s2.cells[cell])
+      h1.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      h2.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' })
+      const s1 = h1.dispatch({ type: 'ACK_DEFUSE' })
+      const s2 = h2.dispatch({ type: 'ACK_DEFUSE' })
+      // เซสชันเดียวกันมีสายปลอดภัยสีเดียว → เลือกถูกคนหนึ่งรอด อีกคนตายเสมอ
+      expect(s1.teams[0].alive).not.toBe(s2.teams[0].alive)
+      const redWon = s1.teams[0].alive
+      expect(s1.cells[cell]).toBe(redWon ? 'defused' : 'detonated')
+      expect(s2.cells[cell]).toBe(redWon ? 'detonated' : 'defused')
+      if (redWon) redWonCount++
     }
+    // สายปลอดภัยสุ่มจริง — แดงชนะประมาณครึ่งหนึ่ง (ไม่ใช่สีเดิมซ้ำทุกเซสชัน)
+    expect(redWonCount).toBeGreaterThan(10)
+    expect(redWonCount).toBeLessThan(40)
   })
 
-  it('defuse ประมาณ 50/50 และสีไม่มีผลเลย (DoD Task 6, 100 เกม)', () => {
+  it('defuse ประมาณ 50/50 ต่อสี (DoD Task 6, 100 เกม)', () => {
     const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     const total = 100
     let redSurvived = 0
@@ -276,14 +292,39 @@ describe('defuse', () => {
       const hBlue = createGame(settings, seed)
       hRed.dispatch({ type: 'OPEN_CELL', cell: bombCellOf(hRed, 'real') })
       hBlue.dispatch({ type: 'OPEN_CELL', cell: bombCellOf(hBlue, 'real') })
-      if (hRed.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' }).teams[0].alive) redSurvived++
-      if (hBlue.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' }).teams[0].alive) blueSurvived++
+      hRed.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      hBlue.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' })
+      if (hRed.dispatch({ type: 'ACK_DEFUSE' }).teams[0].alive) redSurvived++
+      if (hBlue.dispatch({ type: 'ACK_DEFUSE' }).teams[0].alive) blueSurvived++
     }
-    // ~50/50 (rng < 0.5) — จาก 100 ควรอยู่ในช่วง 30–70
+    // สายปลอดภัยสุ่ม 50/50 ต่อเซสชัน → แต่ละสีรอด ~50% (จาก 100 ควรอยู่ในช่วง 30–70)
     expect(redSurvived).toBeGreaterThan(30)
     expect(redSurvived).toBeLessThan(70)
-    // seed เดียวกัน → ผลเดียวกัน ทั้งที่เลือกสีต่างกัน (พิสูจน์ว่าสีไม่มีผล)
-    expect(redSurvived).toBe(blueSurvived)
+    expect(blueSurvived).toBeGreaterThan(30)
+    expect(blueSurvived).toBeLessThan(70)
+    // ทุกเซสชันมีสายปลอดภัยสีเดียวพอดี → รวมทั้งสองสีต้องได้ 100 พอดี
+    expect(redSurvived + blueSurvived).toBe(total)
+  })
+
+  it('CHOOSE_WIRE ยังไม่จบ turn — รอ ACK_DEFUSE (สองเฟส)', () => {
+    const settings = baseSettings({ teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
+    const seed = findDefuseSeed(settings, true)
+    const h = createGame(settings, seed)
+    const cell = bombCellOf(h, 'real')
+    h.dispatch({ type: 'OPEN_CELL', cell })
+    const mid = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    // ผลถูกคำนวณแล้ว แต่ยังไม่ลงมือ — ทีมยังรอด phase ยังเป็น defusing
+    expect(mid.defuseResult).not.toBeNull()
+    expect(mid.phase).toBe('defusing')
+    expect(mid.teams[0].alive).toBe(true)
+    expect(mid.cells[cell]).toBeUndefined()
+    // เลือกซ้ำ → ไม่มีผล (idempotent)
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'blue' })
+    expect(h.getState().defuseResult).toEqual(mid.defuseResult)
+    const after = h.dispatch({ type: 'ACK_DEFUSE' })
+    expect(after.defuseResult).toBeNull()
+    expect(after.pendingDefuse).toBeNull()
+    expect(after.cells[cell]).toBe('defused')
   })
 })
 
@@ -308,7 +349,8 @@ describe('end conditions', () => {
     const cell = bombCellOf(h, 'real')
     const openerId = h.getState().currentTeamIndex
     h.dispatch({ type: 'OPEN_CELL', cell })
-    const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    const state = h.dispatch({ type: 'ACK_DEFUSE' })
     expect(state.phase).toBe('gameover')
     expect(state.teams[openerId].eliminatedAt).toBe(1)
     const winner = state.teams.find((t) => t.alive)
@@ -332,7 +374,8 @@ describe('end conditions', () => {
     expect(h.getState().phase).toBe('opening')
     // เปิดช่องระเบิด → กู้สำเร็จ → ไม่มี hidden ให้ย้าย → เปิดสนามใหม่แทนการเสมอ
     h.dispatch({ type: 'OPEN_CELL', cell: bombCell })
-    const state = h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    const state = h.dispatch({ type: 'ACK_DEFUSE' })
     expect(state.phase).not.toBe('gameover')
     expect(state.log.some((l) => l.message.includes('เสมอ'))).toBe(false)
     expect(state.log.some((l) => l.message.includes('สนามตัดสายรอบใหม่'))).toBe(true)
@@ -357,6 +400,7 @@ describe('end conditions', () => {
       if (st.phase === 'gameover') break
       if (st.phase === 'defusing') {
         h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+        h.dispatch({ type: 'ACK_DEFUSE' })
         continue
       }
       if (st.phase === 'blocking') {
@@ -435,6 +479,7 @@ function openAndDefuseFail(h: GameHandle): boolean {
   h.dispatch({ type: 'OPEN_CELL', cell: realBomb })
   if (h.getState().phase !== 'defusing') return false
   h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+  h.dispatch({ type: 'ACK_DEFUSE' })
   return !h.getState().teams[opener].alive
 }
 
@@ -484,6 +529,7 @@ describe('maxHandSize / startingHand', () => {
         const s = h.getState()
         if (s.phase === 'defusing') {
           h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+          h.dispatch({ type: 'ACK_DEFUSE' })
         } else {
           const hidden: number[] = []
           for (let n = s.rangeMin; n <= s.rangeMax; n++) {
@@ -915,7 +961,10 @@ describe('log ordering', () => {
     const g = createGame(defaultSettings(), 999)
     let st = g.getState()
     for (let c = 1; c <= 5; c++) {
-      if (st.phase === 'defusing') st = g.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      if (st.phase === 'defusing') {
+        st = g.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+        st = g.dispatch({ type: 'ACK_DEFUSE' })
+      }
       if (st.phase === 'gameover') break
       st = g.dispatch({ type: 'OPEN_CELL', cell: c })
     }
@@ -1073,26 +1122,32 @@ describe('startedAt (FIX #36)', () => {
 
 // ── FIX_LISTS #3: ตัดสายไม่ทันเวลา → ระเบิดทันที ──────────────────────────────
 describe('FIX_LISTS #3: DEFUSE_TIMEOUT', () => {
-  // หา seed ที่ "สุ่มว่ารอด" ให้ได้ เพื่อพิสูจน์ว่า timeout ชนะผลที่สุ่มไว้
-  function gameWhereDefuseWouldSurvive(): { h: GameHandle; cell: number } | null {
+  // หา seed ที่ "เลือกแดงแล้วรอด" เพื่อพิสูจน์ว่า timeout ชนะแม้สายที่ถูกมีจริง
+  function gameWhereRedWouldSurvive(): { h: GameHandle; cell: number } | null {
     for (let seed = 1; seed < 200; seed++) {
       const h = createGame(baseSettings(), seed)
       const cell = bombCellOf(h, 'real')
-      const st = h.dispatch({ type: 'OPEN_CELL', cell })
-      if (st.phase === 'defusing' && st.lastResult?.kind === 'real' && st.lastResult.survived) {
-        return { h, cell }
+      h.dispatch({ type: 'OPEN_CELL', cell })
+      if (h.getState().phase !== 'defusing') continue
+      h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+      h.dispatch({ type: 'ACK_DEFUSE' })
+      if (h.getState().teams[0].alive) {
+        // คืนเกมใหม่ seed เดียวกันที่ยังไม่ทันตัดสาย
+        const fresh = createGame(baseSettings(), seed)
+        return { h: fresh, cell: bombCellOf(fresh, 'real') }
       }
     }
     return null
   }
 
-  it('หมดเวลา → ทีมตกรอบ แม้ผลที่สุ่มไว้คือ "รอด"', () => {
-    const found = gameWhereDefuseWouldSurvive()
+  it('หมดเวลา → ทีมตกรอบ แม้มีสายที่เลือกแล้วรอดอยู่จริง', () => {
+    const found = gameWhereRedWouldSurvive()
     // ยืนยันว่าหา setup ที่ต้องการเจอจริง ไม่ใช่เทสผ่านแบบว่างเปล่า
     expect(found).not.toBeNull()
     const { h, cell } = found!
     const before = h.getState()
     const actingId = before.teams[before.currentTeamIndex].id
+    h.dispatch({ type: 'OPEN_CELL', cell })
 
     const after = h.dispatch({ type: 'DEFUSE_TIMEOUT' })
 
@@ -1100,6 +1155,18 @@ describe('FIX_LISTS #3: DEFUSE_TIMEOUT', () => {
     expect(after.cells[cell]).toBe('detonated')
     expect(after.pendingDefuse).toBeNull()
     expect(after.phase).not.toBe('defusing')
+  })
+
+  it('เลือกสีไปแล้ว (defuseResult ตั้งแล้ว) → timeout ไม่มีผล ผลถูกผูกกับสีนั้นแล้ว', () => {
+    const found = gameWhereRedWouldSurvive()
+    expect(found).not.toBeNull()
+    const { h } = found!
+    h.dispatch({ type: 'OPEN_CELL', cell: found!.cell })
+    h.dispatch({ type: 'CHOOSE_WIRE', wire: 'red' })
+    const after = h.dispatch({ type: 'DEFUSE_TIMEOUT' })
+    expect(after.phase).toBe('defusing')
+    expect(after.defuseResult).not.toBeNull()
+    expect(after.teams.every((t) => t.alive)).toBe(true)
   })
 
   it('ไม่ได้อยู่ใน phase defusing → DEFUSE_TIMEOUT ไม่มีผล', () => {
