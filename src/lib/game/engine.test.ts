@@ -1591,3 +1591,163 @@ describe('ชุดที่สิบสาม: Skip กับการโจม
     expect(st.log.some((l) => l.message.includes('ใช้ Skip — ข้าม turn'))).toBe(true)
   })
 })
+
+// FIX_LISTS ชุดที่สิบห้า #1: Reverse กระทบสองฝั่ง — ทั้งคู่กันได้
+//   ฝั่งที่ 1 = ทีมในทิศที่จะย้อนไป (ถูกลากกลับมาเล่นทั้งที่เพิ่งจบตาไป) — ได้ตอบก่อน
+//   ฝั่งที่ 2 = ทีมถัดไปในทิศเดิม (เสียตาที่ควรได้เล่นไปเลย) — เดิมกันไม่ได้ ทั้งที่เสียประโยชน์
+describe('ชุดที่สิบห้า #1: Reverse — ทั้งสองฝั่งของทิศทางกันได้', () => {
+  function gameWithHands(hands: Record<string, CardType[]>, seed = 1): GameHandle {
+    const h = createGame(baseSettings({ cardsEnabled: true, startingHand: 0 }), seed)
+    const before = h.getState()
+    const patched: PublicGameState = {
+      ...before,
+      teams: before.teams.map((t) => ({ ...t, hand: hands[t.id] ?? [] })),
+    }
+    return createGameFromState(patched, h.serializeSecret(), seed)
+  }
+
+  // ทีม 0 เล่นอยู่ ทิศ +1 → ฝั่งย้อน = ทีม 3, ฝั่งเดิม = ทีม 1
+  it('ทีมในทิศที่จะย้อนไปได้ตอบก่อน แล้วต่อด้วยทีมถัดไปในทิศเดิม', () => {
+    const h = gameWithHands({ '0': ['reverse'], '1': ['block'], '3': ['block'] })
+    let st = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.card).toBe('reverse')
+    // คิวมี 2 ทีม — ฝั่งย้อน (3) มาก่อน ฝั่งเดิม (1) ตามหลัง
+    expect(st.pendingBlock?.askQueue).toEqual(['3', '1'])
+
+    // ทีม 3 ไม่กัน → ตกมาที่ทีม 1 (ฝั่งทิศเดิม) ซึ่งเดิมไม่เคยถูกถามเลย
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.askQueue?.[0]).toBe('1')
+  })
+
+  it('ทีมถัดไปในทิศเดิมกัน Reverse ได้จริง — ทิศไม่พลิก', () => {
+    // ฝั่งย้อน (ทีม 3) ไม่มี Block → คิวเหลือทีม 1 ฝั่งเดียว
+    const h = gameWithHands({ '0': ['reverse'], '1': ['block'] })
+    let st = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    expect(st.pendingBlock?.askQueue).toEqual(['1'])
+    // targetTeamId ต้องชี้ทีมที่ถูกถามจริง ไม่ใช่ทีม 3 ที่ถูกกรองทิ้ง
+    expect(st.pendingBlock?.targetTeamId).toBe('1')
+
+    const dirBefore = st.direction
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    expect(st.phase).not.toBe('blocking')
+    expect(st.direction).toBe(dirBefore) // กันติด = ทิศไม่พลิก
+    expect(st.teams[1].hand).not.toContain('block')
+  })
+
+  it('ไม่มีใครกัน → Reverse ทำงาน ทิศพลิก', () => {
+    const h = gameWithHands({ '0': ['reverse'], '1': ['block'], '3': ['block'] })
+    const dirBefore = h.getState().direction
+    h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
+    const st = h.dispatch({ type: 'RESOLVE_BLOCK', use: false })
+    expect(st.phase).not.toBe('blocking')
+    expect(st.direction).toBe(-dirBefore as 1 | -1)
+  })
+
+  it('เหลือ 2 ทีม → ทั้งสองทิศชี้ทีมเดียวกัน ถามครั้งเดียวไม่ซ้ำ', () => {
+    const h0 = createGame(baseSettings({ cardsEnabled: true, startingHand: 0 }), 1)
+    const before = h0.getState()
+    const patched: PublicGameState = {
+      ...before,
+      teams: before.teams.map((t) => {
+        if (t.id === '0') return { ...t, hand: ['reverse' as CardType] }
+        if (t.id === '1') return { ...t, hand: ['block' as CardType] }
+        // ทีม 2/3 ตกรอบไปแล้ว
+        return { ...t, alive: false, eliminatedAt: Number(t.id), hand: [] }
+      }),
+    }
+    const h = createGameFromState(patched, h0.serializeSecret(), 1)
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    expect(st.pendingBlock?.askQueue).toEqual(['1'])
+  })
+
+  it('ฝั่งย้อนกัน → คนใช้ Reverse counter-block ล้มกลับได้ตามกติกาชั้น', () => {
+    const h = gameWithHands({ '0': ['reverse', 'block'], '3': ['block'] })
+    const dirBefore = h.getState().direction
+    let st = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    expect(st.pendingBlock?.askQueue).toEqual(['3'])
+
+    // ทีม 3 กัน → คนใช้ (ทีม 0) ได้สิทธิ์ล้มกลับ
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    expect(st.pendingBlock?.counter).toBe(true)
+    expect(st.pendingBlock?.askQueue?.[0]).toBe('0')
+
+    // ล้มสำเร็จ = 2 ชั้น (เลขคู่) → Reverse ทำงาน ทิศพลิก
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    expect(st.phase).not.toBe('blocking')
+    expect(st.direction).toBe(-dirBefore as 1 | -1)
+  })
+})
+
+// FIX_LISTS ชุดที่สิบห้า #2: เข้ารอบบังคับตัดสาย → Shield ที่ค้างอยู่เป็นโมฆะทั้งวง
+describe('ชุดที่สิบห้า #2: Shield เป็นโมฆะในรอบบังคับตัดสาย', () => {
+  // สร้างกระดานที่ "ช่องที่เหลือทั้งหมดเป็นระเบิดจริง" = เข้ารอบบังคับตัดสาย
+  // ทีม 0 กับ 1 ยังรอด (ระเบิดจริง 1 ลูก = ทีมรอด − 1 ตามโควตา)
+  function forcedBoard(handsAndShields: {
+    hands?: Record<string, CardType[]>
+    shields?: Record<string, number>
+  }): GameHandle {
+    const settings = baseSettings({ cardsEnabled: true, startingHand: 0, rangeMax: 5 })
+    const h0 = createGame(settings, 1)
+    const before = h0.getState()
+    // เปิดทุกช่องทิ้งให้เหลือช่องเดียว แล้ววางระเบิดจริงไว้ที่ช่องนั้น
+    const lastCell = before.rangeMax
+    const cells: Record<number, CellState> = {}
+    for (let n = before.rangeMin; n < lastCell; n++) cells[n] = 'safe'
+    const patched: PublicGameState = {
+      ...before,
+      cells,
+      teams: before.teams.map((t) => {
+        const alive = t.id === '0' || t.id === '1'
+        return {
+          ...t,
+          alive,
+          eliminatedAt: alive ? null : Number(t.id),
+          hand: handsAndShields.hands?.[t.id] ?? [],
+          shieldCharges: handsAndShields.shields?.[t.id] ?? 0,
+        }
+      }),
+    }
+    return createGameFromState(patched, { [lastCell]: 'real' }, 1)
+  }
+
+  it('กระดานเข้ารอบบังคับตัดสาย → forcedWireCut = true', () => {
+    const h = forcedBoard({})
+    expect(h.getState().forcedWireCut).toBe(true)
+  })
+
+  it('Shield ที่ค้างอยู่ถูกล้างทุกทีมตอนขึ้นตาใหม่ในรอบบังคับตัดสาย', () => {
+    // ทีม 0 ถือ skip เพื่อกดจบตาให้เดินไปทีม 1 (ไม่โดนลากเข้าตัดสายอัตโนมัติ)
+    const h = forcedBoard({ hands: { '0': ['skip'] }, shields: { '0': 2, '1': 3 } })
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    expect(st.teams[0].shieldCharges).toBe(0)
+    expect(st.teams[1].shieldCharges).toBe(0)
+    expect(st.log.some((l) => l.message.includes('Shield เป็นโมฆะ'))).toBe(true)
+  })
+
+  it('กาง Shield ใหม่กลางรอบบังคับตัดสายไม่ได้ — การ์ดยังอยู่ในมือ', () => {
+    const h = forcedBoard({ hands: { '0': ['shield'] } })
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'shield' })
+    expect(st.teams[0].shieldCharges).toBe(0)
+    expect(st.teams[0].hand).toContain('shield') // ไม่เสียการ์ดฟรี
+    expect(st.teams[0].stats.cardsPlayed.shield).toBe(0)
+  })
+
+  it('กระดานปกติ (ยังมีช่องปลอดภัยเหลือ) → Shield ยังกางได้และไม่ถูกล้าง', () => {
+    const h = createGame(baseSettings({ cardsEnabled: true, startingHand: 0 }), 1)
+    const before = h.getState()
+    expect(before.forcedWireCut).toBe(false)
+    const patched: PublicGameState = {
+      ...before,
+      teams: before.teams.map((t) =>
+        t.id === '0' ? { ...t, hand: ['shield' as CardType] } : t,
+      ),
+    }
+    const h2 = createGameFromState(patched, h.serializeSecret(), 1)
+    const st = h2.dispatch({ type: 'PLAY_CARD', card: 'shield' })
+    expect(st.teams[0].shieldCharges).toBe(1)
+  })
+})

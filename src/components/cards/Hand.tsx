@@ -186,7 +186,10 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
   // Block เล่นตรง ๆ ไม่ได้ — ต้องรอถูกถามตอนทีมอื่นใช้ effect ใส่เรา
   // FIX_LISTS ชุดที่หก #6: การ์ดที่ต้องเลือกเป้าหมายก็มีปุ่ม ✓ ด้วย (กดแล้วค่อยเปิด modal เลือก)
   //   ต่างจากเดิมที่ !needsTeam && !needsCell ตัดปุ่ม ✓ ทิ้งไปเลย
-  const playable = revealedCard !== null && revealedCard !== 'block'
+  // FIX_LISTS ชุดที่สิบห้า #2: เข้ารอบบังคับตัดสายแล้ว Shield เป็นโมฆะทั้งวง กางใหม่ไม่ได้
+  //   (engine ปฏิเสธ PLAY_CARD อยู่แล้ว — ตรงนี้ตัดปุ่ม ✓ ทิ้งเพื่อไม่ให้กดแล้วเงียบ)
+  const shieldVoided = state.forcedWireCut === true && revealedCard === 'shield'
+  const playable = revealedCard !== null && revealedCard !== 'block' && !shieldVoided
   // กด ✓ แล้ว: การ์ดที่เลือก "ทีม" → เปิด modal ข้างการ์ดเหมือนเดิม
   //   การ์ดที่เลือก "ช่องบนกระดาน" (Scan) → ยกให้ GameScreen คุม (ชุดที่เจ็ด #2)
   //   การ์ดอื่น → ใช้เลย
@@ -306,8 +309,10 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
                   ✓
                 </button>
               )}
-              {/* FIX #43: การ์ดที่หงายอยู่แล้ว (Block) เก็บกลับเข้ามือได้ ไม่ถูกบังคับใช้/ทิ้ง */}
-              {canKeepInHand(revealedCard) && (
+              {/* FIX #43: การ์ดที่หงายอยู่แล้ว (Block) เก็บกลับเข้ามือได้ ไม่ถูกบังคับใช้/ทิ้ง
+                  FIX_LISTS ชุดที่สิบห้า #2: Shield ที่เป็นโมฆะก็เก็บกลับได้เหมือนกัน —
+                  ใช้ไม่ได้แล้วจะบังคับให้ทิ้งอย่างเดียวไม่แฟร์ (ไม่ใช่ความผิดของคนถือ) */}
+              {(canKeepInHand(revealedCard) || shieldVoided) && (
                 <button
                   onClick={() => {
                     setRevealed(null)
@@ -356,6 +361,12 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
                 <p className="text-sm leading-5 text-muted-foreground">
                   {CARD_DESCRIPTIONS[revealedCard]}
                 </p>
+                {/* FIX_LISTS ชุดที่สิบห้า #2: บอกเหตุผลที่ปุ่ม ✓ หายไป ไม่ใช่ปล่อยให้งง */}
+                {shieldVoided && (
+                  <p className="mt-2 text-sm font-bold leading-5 text-amber-600 dark:text-amber-400">
+                    เข้ารอบบังคับตัดสายแล้ว — Shield เป็นโมฆะ กางใหม่ไม่ได้
+                  </p>
+                )}
               </div>
             )}
             {/* FIX_LISTS ชุดที่หก #6: เป้าหมาย (ทีมของ Attack / เลขช่องของ Scan) เป็น modal

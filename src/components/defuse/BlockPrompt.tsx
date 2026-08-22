@@ -40,7 +40,12 @@ export function BlockPrompt() {
   // FIX_LISTS ชุดที่สาม #2: กันได้เฉพาะ effect ที่ลงกับทีมตัวเอง — คิวจึงมีทีมเดียวเสมอ
   // ไม่มีเคส "กันแทนทีมอื่น" (defendingOther) และไม่มีทีมรอถามต่ออีก (waiting)
 
-  // FIX_LISTS ชุดใหม่ #9: กลางจอแนวตั้งจริง และเลื่อนอ่านได้ถ้ากล่องสูงเกินจอ
+  // FIX: จัดหน้าตาให้เป็นชุดเดียวกับ AttackPrompt — เดิมสองจอนี้เป็นจังหวะตัดสินใจ
+  //   แบบเดียวกัน (modal เต็มจอ + การ์ดหงาย + ปุ่มยืนยัน) แต่หน้าตาคนละแบบ:
+  //   AttackPrompt มีแถบ chip สรุปสถานะบนหัว + กล่องสรุปผลก่อนกด + เงาใต้กล่อง
+  //   ส่วนอันนี้เป็นกล่องเปล่า ๆ ขอบเทา ตัวหนังสือกลาง ๆ
+  //   ยกโครงเดียวกันมาใช้: ขอบสีตามบริบท + shadow เดียวกัน + แถว chip + กล่องสรุป
+  //   ⚠️ เนื้อหา/ปุ่ม/ข้อความ ไม่เปลี่ยน — เปลี่ยนแค่การจัดวางกับสี
   return (
     <div
       className="fixed inset-0 z-30 flex overflow-y-auto bg-black/80 p-6"
@@ -50,16 +55,38 @@ export function BlockPrompt() {
       <div
         className={
           // FIX_LISTS ชุดที่สิบสอง #4: ขยายจาก max-w-lg — การ์ดสองใบวางคู่กันแล้วแคบไป
-          'm-auto w-full max-w-xl rounded-2xl border-2 bg-card p-8 text-center ' +
+          // max-w-3xl + shadow ชุดเดียวกับ AttackPrompt
+          'm-auto w-full max-w-3xl rounded-2xl border-2 bg-card p-6 text-center ' +
+          'shadow-[0_12px_40px_rgba(0,0,0,0.45)] ' +
           (isCounter ? 'border-amber-500' : 'border-slate-500')
         }
       >
-        <p className="section-label">
-          {isCounter
-            ? `ชั้นที่ ${chain.length + 1} — มีทีมประกาศ Block`
-            : `${sourceName} ใช้ ${CARD_META[pending.card].name} ใส่คุณ`}
-        </p>
-        <h2 className="mt-2 font-serif text-4xl font-bold">{responder.name}</h2>
+        {/* แถวหัวแบบ AttackPrompt: ป้ายบอกจังหวะ + chip สรุปของที่มีในมือ */}
+        <div className="flex flex-wrap items-center gap-3 text-left">
+          <p className="section-label">
+            {isCounter
+              ? `ชั้นที่ ${chain.length + 1} — มีทีมประกาศ Block`
+              : `${sourceName} ใช้ ${CARD_META[pending.card].name} ใส่คุณ`}
+          </p>
+          {/* chip นับ Block คงเหลือ — ทรงเดียวกับ chip ของ AttackPrompt
+              (ที่นั่นนับ "ใช้ไป N/M" เพราะเลือกได้หลายใบ ที่นี่ตัดสินใจใบเดียว
+               จึงบอกยอดคงเหลือแทน) */}
+          <span
+            className={
+              'ml-auto rounded-full border-2 px-3 py-1 font-mono text-base font-black ' +
+              (blocksLeft > 0
+                ? 'border-(--confirm) text-(--confirm)'
+                : 'border-border text-muted-foreground')
+            }
+            aria-live="polite"
+          >
+            🚫 Block {blocksLeft}
+          </span>
+        </div>
+
+        <h2 className="mt-2 text-left font-serif text-3xl font-bold leading-tight">
+          {responder.name}
+        </h2>
 
         {/* FIX_LISTS ชุดที่สิบสอง #4: การ์ดคู่ที่กำลังปะทะกัน — ใบซ้าย = ของอีกฝ่าย
             (หงายแล้วตั้งแต่ชุดที่สิบสี่ #2), ใบขวา = Block ที่เรากำลังจะตัดสินใจใช้ */}
@@ -72,7 +99,7 @@ export function BlockPrompt() {
                   ? `${CARD_META.block.name} ของ ${lastBlocker?.name ?? 'อีกทีม'}`
                   : `${CARD_META[pending.card].name} ที่ ${sourceName} ใช้ใส่คุณ`
               }
-              className="h-40 w-auto rounded-xl shadow-lg"
+              className="h-44 w-auto rounded-xl shadow-lg"
               draggable={false}
             />
             <figcaption className="mt-1.5 text-xs font-bold text-muted-foreground">
@@ -90,7 +117,7 @@ export function BlockPrompt() {
             <img
               src={CARD_ART.block}
               alt={`${CARD_META.block.name} ในมือของ ${responder.name}`}
-              className="h-40 w-auto rounded-xl shadow-lg ring-2 ring-(--confirm)"
+              className="h-44 w-auto rounded-xl shadow-lg ring-4 ring-(--confirm)"
               draggable={false}
             />
             <figcaption className="mt-1.5 text-xs font-bold text-(--confirm)">
@@ -99,29 +126,33 @@ export function BlockPrompt() {
           </figure>
         </div>
 
-        {isCounter && lastBlocker ? (
-          <>
-            <p className="mt-4 text-lg leading-7">
-              <b>{lastBlocker.name}</b> ประกาศใช้ <b>🚫 Block</b> — จะใช้ Block ของคุณ
-              <br />
-              เพื่อ <b className="text-amber-600 dark:text-amber-400">ล้ม Block ใบนั้น</b> ไหม?
-            </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              ถ้าล้มสำเร็จ และ {lastBlocker.name} ไม่มี Block เหลือ — effect เดิมจะทำงานตามปกติ
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-4 text-lg leading-7">
-              <b>{sourceName}</b> ใช้ <b>{CARD_META[pending.card].name}</b> ใส่คุณ
-              <br />
-              จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
-            </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              (เหลือ Block อยู่ {blocksLeft} ใบ)
-            </p>
-          </>
-        )}
+        {/* กล่องสรุปก่อนตัดสินใจ — ทรงเดียวกับกล่อง "ป้องกันไว้/ต้องเปิดเพิ่ม" ของ AttackPrompt
+            (rounded-lg bg-secondary p-3) ให้สองจอนี้อ่านเป็นชุดเดียวกัน */}
+        <div className="mt-4 rounded-lg bg-secondary p-3 text-left text-base">
+          {isCounter && lastBlocker ? (
+            <>
+              <p className="text-lg leading-7">
+                <b>{lastBlocker.name}</b> ประกาศใช้ <b>🚫 Block</b> — จะใช้ Block ของคุณ
+                <br />
+                เพื่อ <b className="text-amber-600 dark:text-amber-400">ล้ม Block ใบนั้น</b> ไหม?
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                ถ้าล้มสำเร็จ และ {lastBlocker.name} ไม่มี Block เหลือ — effect เดิมจะทำงานตามปกติ
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg leading-7">
+                <b>{sourceName}</b> ใช้ <b>{CARD_META[pending.card].name}</b> ใส่คุณ
+                <br />
+                จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                (เหลือ Block อยู่ {blocksLeft} ใบ)
+              </p>
+            </>
+          )}
+        </div>
 
         {/* FIX_LISTS ชุดใหม่ #1: เห็นภาพว่าตอนนี้กันซ้อนกันมากี่ชั้นแล้ว */}
         {chain.length > 0 && (
@@ -146,7 +177,7 @@ export function BlockPrompt() {
           </p>
         )}
 
-        <div className="mt-6 flex justify-center gap-3">
+        <div className="mt-4 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => dispatch({ type: 'RESOLVE_BLOCK', use: true })}
             className="rounded-lg bg-(--confirm) px-6 py-3 text-lg font-black text-white"

@@ -333,6 +333,10 @@ function buildPublic(state: EngineState): PublicGameState {
     currentBlocked: state.currentBlocked,
     // FIX_LISTS ชุดใหม่ #2: UI ใช้ค่านี้เข้าโหมดตัดสายเลย ไม่ต้องให้เลือกช่อง
     autoWireCut: shouldAutoWireCut(state),
+    // FIX_LISTS ชุดที่สิบห้า #2: กระดานเข้ารอบบังคับตัดสายแล้วหรือยัง (สภาพกระดานล้วน ๆ)
+    //   ต่างจาก autoWireCut ที่ยัง false ถ้าทีมนั้นถือ Skip/Reverse/Attack อยู่ —
+    //   UI ใช้ค่านี้เทาการ์ด Shield เพราะ Shield เป็นโมฆะทั้งรอบไม่ว่ามีการ์ดอื่นในมือไหม
+    forcedWireCut: isForcedWireCut(countRealBombs(state), hiddenCells(state).length),
     // FIX_LISTS ชุดที่สาม #3: โซนที่สแกนไปแล้วและผลยังใช้ได้อยู่
     scanMarks: { ...state.scanMarks },
   }
@@ -687,9 +691,26 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
   beginTeamTurn(state)
 }
 
+// FIX_LISTS ชุดที่สิบห้า #2: เข้ารอบ "บังคับตัดสาย" แล้ว Shield ที่ค้างอยู่เป็นโมฆะทั้งวง
+//   รอบบังคับตัดสาย = ทุกช่องที่เหลือเป็นระเบิดจริง เปิดช่องไหนก็ต้องตัดสายเหมือนกัน
+//   ถ้า Shield ยังกันได้อยู่ ทีมที่บังเอิญกางไว้ก่อนจะข้ามด่านตัดสายไปฟรี ๆ 1 รอบเต็ม
+//   ทั้งที่รอบนี้ตั้งใจให้ทุกทีมเสี่ยงเท่ากัน — จึงล้างทิ้งทั้งกระดาน ไม่ใช่เฉพาะทีมที่เล่นอยู่
+//   เช็ค "สภาพกระดาน" ตรง ๆ ไม่ใช่ shouldAutoWireCut (อันนั้นขึ้นกับการ์ดในมือด้วย
+//   ทีมที่ถือ Skip/Reverse/Attack จะไม่เข้าเงื่อนไข → Shield รอดไปทั้งที่บอร์ดเข้ารอบแล้ว)
+//   เรียกทุกครั้งที่ขึ้นตาใหม่ จึงครอบคลุมทีมที่เพิ่งกาง Shield หลังเข้ารอบไปแล้วด้วย
+function voidShieldsOnForcedWireCut(state: EngineState): void {
+  if (!isForcedWireCut(countRealBombs(state), hiddenCells(state).length)) return
+  for (const t of state.teams) {
+    if (!t.alive || t.shieldCharges <= 0) continue
+    t.shieldCharges = 0
+    pushLog(state, t.id, `${t.name} เข้ารอบบังคับตัดสาย — Shield เป็นโมฆะ`, { level: 'warn' })
+  }
+}
+
 // เริ่มตาของทีมถัดไป — ถ้ามีโจมตีค้างอยู่ ต้องแก้ด้วย Block ก่อน (phase 'defending')
 // ถ้าไม่มี Block (หรือติด glitch/block ใช้การ์ดไม่ได้) → โดนโจมตีไปโดยปริยาย
 function beginTeamTurn(state: EngineState): void {
+  voidShieldsOnForcedWireCut(state)
   const team = currentTeam(state)
   const canUseCards =
     state.settings.cardsEnabled && !state.currentGlitched && !state.currentBlocked
@@ -845,6 +866,13 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
         return
       }
       break
+    case 'shield':
+      // FIX_LISTS ชุดที่สิบห้า #2: เข้ารอบบังคับตัดสายแล้ว กาง Shield ใหม่ไม่ได้
+      //   ไม่งั้นทีมที่ยังไม่เคยกางจะกางกลางรอบเพื่อข้ามด่านตัดสาย ซึ่งขัดกับกติกา
+      //   ที่เพิ่งล้าง Shield ของทุกทีมทิ้งไปตอนเข้ารอบ (ดู voidShieldsOnForcedWireCut)
+      //   คืนไปเฉย ๆ = ไม่เสียการ์ด ยังถือไว้ในมือได้ (เกมนี้จบก่อนได้ใช้ก็ช่างมัน)
+      if (isForcedWireCut(countRealBombs(state), hiddenCells(state).length)) return
+      break
     case 'attack':
       // FIX #23: Attack ใช้กับทีมตัวเองไม่ได้
       if (
@@ -887,7 +915,17 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       // FIX_LISTS ชุดใหม่ #1: คนที่ได้ตอบก่อนคือ "ทีมที่อยู่ในทิศที่กำลังจะย้อนไป"
       //   คือทีมที่จะได้เล่นต่อถ้า Reverse ติด (เช่น ทีม2จบตา ทีม3ใช้ Reverse →
       //   ทิศพลิกกลับไปหาทีม2 ทีม2 จึงเป็นคนที่ถูกถามก่อน) ไม่ใช่ทีมถัดไปในทิศเดิม
-      if (!offerBlock(state, nextAliveTeamId(state, -state.direction as 1 | -1), 'reverse')) {
+      // FIX_LISTS ชุดที่สิบห้า #1: Reverse กระทบ "สองฝั่ง" พร้อมกัน จึงกันได้ทั้งคู่
+      //   1. ทีมในทิศที่จะย้อนไป — ถูกลากกลับมาเล่นทั้งที่เพิ่งจบตาไป (ได้ตอบก่อน)
+      //   2. ทีมถัดไปในทิศเดิม — เสียตาที่ควรได้เล่นไปเลย (เดิมกันไม่ได้ ทั้งที่เสียประโยชน์)
+      //   ถ้าเหลือ 2 ทีม ทั้งสองทิศชี้ทีมเดียวกัน → blockAskQueue กันซ้ำให้แล้ว
+      if (
+        !offerBlock(
+          state,
+          [nextAliveTeamId(state, -state.direction as 1 | -1), nextAliveTeamId(state)],
+          'reverse',
+        )
+      ) {
         applyReverse(state)
       }
       break
@@ -910,19 +948,22 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
 //   จนกว่าจะมีคนกัน หรือหมดคนที่ยังถือ Block อยู่
 // FIX_LISTS #15: ทีมที่ใช้การ์ด (sourceTeam) กัน effect ของตัวเองไม่ได้ — ไม่เข้าคิว
 // คืน true ถ้าต้องรอ (การ์ดยังไม่ resolve), false ถ้าเล่นต่อได้เลย
+// FIX_LISTS ชุดที่สิบห้า #1: targetIds รับได้หลายทีม (Reverse กระทบสองฝั่ง)
+//   targetTeamId ที่เก็บลง pendingBlock = ทีมแรกในคิวที่มีสิทธิ์จริง เพื่อให้ log/UI
+//   ชี้ไปที่คนที่กำลังถูกถามอยู่ ไม่ใช่ทีมที่ถูกกรองทิ้งไปแล้ว
 function offerBlock(
   state: EngineState,
-  targetId: string,
+  targetIds: string | string[],
   card: CardType,
   opts?: { fromDefending?: boolean },
 ): boolean {
   // FIX_LISTS #15: การ์ดที่กันไม่ได้ (รวมถึง Block เอง) ไม่ต้องเปิด phase ถามเลย
   if (!cardIsBlockable(card)) return false
   const sourceId = currentTeam(state).id
-  const queue = blockAskQueue(state, targetId, sourceId)
+  const queue = blockAskQueue(state, targetIds, sourceId)
   if (queue.length === 0) return false
   state.pendingBlock = {
-    targetTeamId: targetId,
+    targetTeamId: queue[0],
     sourceTeamId: sourceId,
     card,
     askQueue: queue,
@@ -936,23 +977,35 @@ function offerBlock(
 
 // FIX_LISTS ชุดที่สาม #2: กันได้เฉพาะ effect ที่จะเกิดกับทีมตัวเองเท่านั้น
 //   เดิมทุกทีมที่ถือ Block เข้ามากันแทนคนอื่นได้ (FIX_LISTS #10) — กติกาใหม่ตัดออก
-//   คิวจึงมีได้อย่างมาก 1 ทีม คือทีมที่ effect กำลังจะลง (targetId) และต้อง
+//   คิวจึงมีเฉพาะทีมที่ effect กำลังจะลง (targetIds) และต้อง
 //   ยังรอด + ถือ Block จริง + ไม่ใช่คนใช้การ์ดเอง
 // FIX_LISTS ชุดใหม่ #1: exclude = ทีมที่ประกาศกันไปแล้วในศึกนี้ (chain) — ห้ามกันซ้อนตัวเอง
+// FIX_LISTS ชุดที่สิบห้า #1: รับหลายทีมได้ — Reverse กระทบสองฝั่งพร้อมกัน
+//   (ทีมในทิศที่จะย้อนไป + ทีมถัดไปในทิศเดิมที่เสียตาไป) ทั้งคู่จึงมีสิทธิ์กัน
+//   ใบเดียวเรียกด้วย string ตามเดิมได้ ไม่ต้องแก้ call site อื่น
 export function blockAskQueue(
   state: { teams: Team[] },
-  targetId: string,
+  targetIds: string | string[],
   sourceId: string,
   exclude: string[] = [],
 ): string[] {
-  const target = state.teams.find((t) => t.id === targetId)
-  if (!target) return []
-  const eligible =
-    target.alive &&
-    target.hand.includes('block') &&
-    target.id !== sourceId &&
-    !exclude.includes(target.id)
-  return eligible ? [target.id] : []
+  const ids = Array.isArray(targetIds) ? targetIds : [targetIds]
+  const queue: string[] = []
+  for (const id of ids) {
+    // ทีมเดียวกันอาจถูกส่งมาซ้ำ (เช่นเหลือ 2 ทีม ทิศไหนก็ทีมเดิม) — ถามครั้งเดียวพอ
+    if (queue.includes(id)) continue
+    const target = state.teams.find((t) => t.id === id)
+    if (!target) continue
+    if (
+      target.alive &&
+      target.hand.includes('block') &&
+      target.id !== sourceId &&
+      !exclude.includes(target.id)
+    ) {
+      queue.push(target.id)
+    }
+  }
+  return queue
 }
 
 // FIX #25: ตอบ popup — use = ใช้ Block กัน, ไม่ใช้ = ส่งคิวต่อให้ทีมถัดไปตอบ
