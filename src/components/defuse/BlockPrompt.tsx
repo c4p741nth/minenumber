@@ -143,12 +143,8 @@ export function BlockPrompt() {
           ) : (
             <>
               <p className="text-lg leading-7">
-                <b>{sourceName}</b> ใช้ <b>{CARD_META[pending.card].name}</b> ใส่คุณ
-                <br />
-                จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                (เหลือ Block อยู่ {blocksLeft} ใบ)
+                <b>{sourceName}</b> ใช้ <b>{CARD_META[pending.card].name}</b> ใส่คุณ — จะใช้การ์ด{' '}
+                <b>🚫 Block</b> เพื่อกันไว้ไหม?
               </p>
             </>
           )}

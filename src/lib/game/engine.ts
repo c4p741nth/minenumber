@@ -273,8 +273,7 @@ function makeHandle(state: EngineState): GameHandle {
 // — กรณีนั้นต้องปล่อยให้ทีมตัดสินใจใช้การ์ดก่อน ห้ามลากเข้าโหมดตัดสายอัตโนมัติ
 function shouldAutoWireCut(state: EngineState): boolean {
   if (state.phase !== 'cards' && state.phase !== 'opening') return false
-  const hidden = hiddenCells(state)
-  if (!isForcedWireCut(countRealBombs(state), hidden.length)) return false
+  if (!forcedWireCutNow(state)) return false
   const team = currentTeam(state)
   if (!team?.alive) return false
   // ติด glitch = ใช้การ์ดไม่ได้อยู่แล้ว → การ์ด turn ในมือไม่มีผล เริ่มตัดสายได้เลย
@@ -283,11 +282,16 @@ function shouldAutoWireCut(state: EngineState): boolean {
   return true
 }
 
-// ช่องที่จะถูกเปิดอัตโนมัติเมื่อเข้าโหมดตัดสาย — ทุกช่องเป็นระเบิดเหมือนกันหมด
+// ช่องที่จะถูกเปิดอัตโนมัติเมื่อเข้าโหมดตัดสาย
 // เลือกช่องแรกเพื่อให้ผลลัพธ์ deterministic (ทดสอบซ้ำได้ ไม่กิน rng)
+// FIX_LISTS: ต้องเป็น "ระเบิดจริง" เท่านั้น — ตอนนี้เงื่อนไขบังคับตัดสายเป็นจริงได้
+//   ทั้งที่ยังมีช่อง glitch ค้างอยู่ (ดู forcedWireCutNow) ถ้าเลือก hidden[0] ตรง ๆ
+//   แล้วบังเอิญไปโดนช่อง glitch จะกลายเป็น "ติดกลิตช์เสียตา" แทนที่จะได้ตัดสาย
+//   ซึ่งคือบั๊กเดิมที่ต้องไล่เหยียบ glitch ให้หมดก่อนนั่นเอง
 function autoWireCutCell(state: EngineState): number | null {
   const hidden = hiddenCells(state)
-  return hidden.length > 0 ? hidden[0] : null
+  const real = hidden.find((c) => state.bombs.get(c) === 'real')
+  return real ?? null
 }
 
 // FIX_LISTS ชุดใหม่ #2: เริ่มตัดสายเลยโดยไม่ต้องให้ทีมเลือกช่อง
@@ -336,7 +340,7 @@ function buildPublic(state: EngineState): PublicGameState {
     // FIX_LISTS ชุดที่สิบห้า #2: กระดานเข้ารอบบังคับตัดสายแล้วหรือยัง (สภาพกระดานล้วน ๆ)
     //   ต่างจาก autoWireCut ที่ยัง false ถ้าทีมนั้นถือ Skip/Reverse/Attack อยู่ —
     //   UI ใช้ค่านี้เทาการ์ด Shield เพราะ Shield เป็นโมฆะทั้งรอบไม่ว่ามีการ์ดอื่นในมือไหม
-    forcedWireCut: isForcedWireCut(countRealBombs(state), hiddenCells(state).length),
+    forcedWireCut: forcedWireCutNow(state),
     // FIX_LISTS ชุดที่สาม #3: โซนที่สแกนไปแล้วและผลยังใช้ได้อยู่
     scanMarks: { ...state.scanMarks },
   }
@@ -422,6 +426,21 @@ function countRealBombs(state: EngineState): number {
     if (kind === 'real') n += 1
   }
   return n
+}
+
+// FIX_LISTS: กระดานเข้า "รอบบังคับตัดสาย" หรือยัง
+//   เดิมเทียบระเบิดจริงกับช่อง hidden ทั้งหมด ซึ่งนับช่อง glitch เป็นช่องที่ยังเดินได้
+//   แต่ตอนช่องที่เหลือ = ระเบิดจริง + glitch ล้วน ๆ การเดินเหยียบ glitch ไม่พาไปไหนเลย:
+//   ไม่มีช่องว่างให้ relocateBomb ย้ายไปแล้ว ระเบิด glitch จึงถูกลบทิ้ง ทีมเสียตาไปเปล่า ๆ
+//   ต้องไล่เหยียบ glitch ให้ครบทุกลูกก่อน เงื่อนไขบังคับตัดสายถึงจะเป็นจริง — ซึ่งแปลก
+//   เพราะจังหวะนั้น "ไม่มีช่องปลอดภัยเหลือแล้ว" ตั้งแต่แรก
+//   เกณฑ์ที่ถูกคือ "ไม่มีช่องปลอดภัยให้เปิดอีกแล้ว" = ทุกช่อง hidden มีระเบิด (จริงหรือ glitch)
+//   จึงเทียบระเบิดจริงกับ "ช่อง hidden ที่ไม่ใช่ glitch" แทน
+//   (glitch ไม่นับเป็นช่องปลอดภัย และไม่นับเป็นระเบิดจริงเหมือนเดิม — ดู countRealBombs)
+function forcedWireCutNow(state: EngineState): boolean {
+  const hidden = hiddenCells(state)
+  const nonGlitch = hidden.filter((c) => state.bombs.get(c) !== 'glitch')
+  return isForcedWireCut(countRealBombs(state), nonGlitch.length)
 }
 
 function hiddenCells(state: EngineState): number[] {
@@ -699,7 +718,7 @@ function endTurn(state: EngineState, opts?: { draw?: boolean }): void {
 //   ทีมที่ถือ Skip/Reverse/Attack จะไม่เข้าเงื่อนไข → Shield รอดไปทั้งที่บอร์ดเข้ารอบแล้ว)
 //   เรียกทุกครั้งที่ขึ้นตาใหม่ จึงครอบคลุมทีมที่เพิ่งกาง Shield หลังเข้ารอบไปแล้วด้วย
 function voidShieldsOnForcedWireCut(state: EngineState): void {
-  if (!isForcedWireCut(countRealBombs(state), hiddenCells(state).length)) return
+  if (!forcedWireCutNow(state)) return
   for (const t of state.teams) {
     if (!t.alive || t.shieldCharges <= 0) continue
     t.shieldCharges = 0
@@ -871,7 +890,7 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       //   ไม่งั้นทีมที่ยังไม่เคยกางจะกางกลางรอบเพื่อข้ามด่านตัดสาย ซึ่งขัดกับกติกา
       //   ที่เพิ่งล้าง Shield ของทุกทีมทิ้งไปตอนเข้ารอบ (ดู voidShieldsOnForcedWireCut)
       //   คืนไปเฉย ๆ = ไม่เสียการ์ด ยังถือไว้ในมือได้ (เกมนี้จบก่อนได้ใช้ก็ช่างมัน)
-      if (isForcedWireCut(countRealBombs(state), hiddenCells(state).length)) return
+      if (forcedWireCutNow(state)) return
       break
     case 'attack':
       // FIX #23: Attack ใช้กับทีมตัวเองไม่ได้

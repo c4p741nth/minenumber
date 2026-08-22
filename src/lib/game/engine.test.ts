@@ -1719,6 +1719,30 @@ describe('ชุดที่สิบห้า #2: Shield เป็นโมฆ�
     expect(h.getState().forcedWireCut).toBe(true)
   })
 
+  // FIX_LISTS: ช่องที่เหลือ = ระเบิดจริง + glitch (ไม่มีช่องปลอดภัยเลย) ต้องบังคับตัดสายทันที
+  //   บั๊กเดิม: isForcedWireCut นับช่อง glitch เป็นช่องที่ยังเดินได้ → เงื่อนไขไม่เป็นจริง
+  //   ทีมต้องไล่เหยียบ glitch ให้ครบทุกลูกก่อน (เสียตาไปเปล่า ๆ เพราะย้ายระเบิดไปไหนไม่ได้แล้ว)
+  //   ถึงจะเข้าโหมดตัดสาย
+  it('ช่องที่เหลือเป็นระเบิดจริง + glitch ล้วน → บังคับตัดสายทันที ไม่ต้องไล่เหยียบ glitch', () => {
+    const settings = baseSettings({ cardsEnabled: true, startingHand: 0, rangeMax: 5 })
+    const h0 = createGame(settings, 1)
+    const before = h0.getState()
+    const realCell = before.rangeMax // ช่องสุดท้าย = ระเบิดจริง
+    const glitchCell = before.rangeMax - 1 // ช่องรองสุดท้าย = glitch
+    const cells: Record<number, CellState> = {}
+    for (let n = before.rangeMin; n < glitchCell; n++) cells[n] = 'safe'
+    const patched: PublicGameState = {
+      ...before,
+      cells,
+      teams: before.teams.map((t) => {
+        const alive = t.id === '0' || t.id === '1'
+        return { ...t, alive, eliminatedAt: alive ? null : Number(t.id), hand: [], shieldCharges: 0 }
+      }),
+    }
+    const h = createGameFromState(patched, { [realCell]: 'real', [glitchCell]: 'glitch' }, 1)
+    expect(h.getState().forcedWireCut).toBe(true)
+  })
+
   it('Shield ที่ค้างอยู่ถูกล้างทุกทีมตอนขึ้นตาใหม่ในรอบบังคับตัดสาย', () => {
     // ทีม 0 ถือ skip เพื่อกดจบตาให้เดินไปทีม 1 (ไม่โดนลากเข้าตัดสายอัตโนมัติ)
     const h = forcedBoard({ hands: { '0': ['skip'] }, shields: { '0': 2, '1': 3 } })

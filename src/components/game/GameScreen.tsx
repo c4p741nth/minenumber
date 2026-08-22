@@ -90,12 +90,15 @@ export function GameScreen({ onExit }: Props) {
   }, [state.turnNumber, state.currentTeamIndex, state.phase])
 
   const inCards = state.phase === 'cards'
-  // FIX_LISTS #14: ช่องที่เหลือ = ระเบิดจริง → เปิดช่องไหนก็เจอ (โอกาส 100%)
+  // FIX_LISTS #14: ไม่มีช่องปลอดภัยเหลือแล้ว → เปิดช่องไหนก็เจอระเบิด (โอกาส 100%)
   // เกมกลายเป็น "แข่งกันตัดสาย" สลับทีมไปมาจนจบ — การ์ดที่เกี่ยวกับ turn ยังใช้ได้ก่อน
-  const forcedWireCut = isForcedWireCut(
-    state.realBombsRemaining ?? state.bombsRemaining,
-    hiddenCellCount(state),
-  )
+  // FIX_LISTS: ใช้ค่าที่เอนจินคิดมาให้ ไม่คิดเองซ้ำ — เกณฑ์ที่ถูกต้องต้องรู้ว่าช่อง hidden
+  //   ช่องไหนเป็น glitch (ดู forcedWireCutNow ใน engine.ts) ซึ่ง UI ไม่มีข้อมูลนั้น
+  //   และไม่ควรมีด้วย (รู้ตำแหน่ง glitch = รู้ล่วงหน้าว่าช่องไหนมีระเบิด)
+  //   fallback เป็นสูตรเดิมไว้เผื่อ snapshot เก่าที่ยังไม่มี field นี้
+  const forcedWireCut =
+    state.forcedWireCut ??
+    isForcedWireCut(state.realBombsRemaining ?? state.bombsRemaining, hiddenCellCount(state))
   // FIX_LISTS ชุดใหม่ #2: บังคับตัดสายแล้วไม่ต้องเลือกช่อง — เข้าโหมดตัดสายเลย
   // เอนจินบอกมาว่าทีมนี้ไม่มี item ที่เกี่ยวกับ turn (Skip/Reverse/Attack) เหลืออยู่
   // ถ้ายังมี ต้องปล่อยให้เลือกใช้การ์ดก่อน (autoWireCut จะเป็น false)

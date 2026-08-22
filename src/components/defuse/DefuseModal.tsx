@@ -130,10 +130,13 @@ export function DefuseModal() {
   //   (ถ้าผูกกับ ms คาบจะเปลี่ยนทุกเฟรม = อนิเมชันถูกรีสตาร์ตรัว ๆ จนดูเหมือนค้าง)
   //   ระหว่างเฉลยผลไม่ต้องเต้นตามเวลาแล้ว — คืนค่าคาบเดิม 0.9s
   const pulse = stage === 'choosing' && limit > 0 ? pulsePeriod(left) : 0.9
+  // FIX_LISTS: กู้สำเร็จ → ฉากหลังหยุดกระพริบแดงและเปลี่ยนเป็นเขียวจาง (.defuse-safe)
+  //   ตรงข้ามกับ boom ที่เป็นแดง/สั่น — ระหว่าง 'choosing' ยังกระพริบเตือนเหมือนเดิม
+  const defusedSafe = stage === 'result' && survived
 
   return (
     <div
-      className={`defuse-vignette ${boom ? 'defuse-shake' : ''}`}
+      className={`defuse-vignette ${boom ? 'defuse-shake' : ''} ${defusedSafe ? 'defuse-safe' : ''}`}
       style={{ '--mn-pulse': `${pulse}s` } as CSSProperties}
       role="dialog"
       aria-modal="true"

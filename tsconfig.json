@@ -12,6 +12,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
+    // เทสทั้งโปรเจกต์ import จาก 'bun:test' (ไม่ได้ใช้ vitest) — ชนิดของมันมาจาก
+    // @types/bun ที่เป็นแค่ /// <reference types="bun-types" /> ต่อไปยัง bun-types อีกที
+    // ปล่อยให้ TS สแกน node_modules/@types เองได้ผลไม่เหมือนกันในแต่ละ language server
+    // (tsc CLI ผ่าน แต่ TS server ใน VS Code ฟ้อง "Cannot find module 'bun:test'")
+    // ระบุ types ตรง ๆ จึงชัวร์กว่า และยังพา @types/node ที่ vite.config.ts ต้องใช้มาด้วย
+    "types": ["bun-types", "node"],
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -34,7 +34,11 @@ interface Props {
 
 const OPENED_STYLES: Record<Exclude<CellState, 'hidden'>, { cls: string; label: string }> = {
   safe: { cls: 'bg-secondary text-muted-foreground opacity-70', label: '✓' },
-  detonated: { cls: 'bg-red-600 text-white', label: '💥' },
+  // FIX_LISTS: ช่องที่ระเบิดเป็น "ช่องสีดำ" ไม่ใช่แดง — emoji 💥 เป็นสีส้ม/แดงในตัวมันเอง
+  // วางบน bg-red-600 แล้วสีชนกันจนแทบมองไม่เห็นว่าช่องไหนระเบิด
+  // พื้นดำ (โหมดสว่างและมืดเหมือนกัน) ทำให้ 💥 เด้งออกมาชัดที่สุด และยังต่างจาก
+  // ช่องที่จบแล้วอื่น ๆ (safe/defused/glitched ที่เป็นเทาจาง) อย่างเห็นได้ทันที
+  detonated: { cls: 'bg-black text-white', label: '💥' },
   // ช่องที่กู้ระเบิดสำเร็จเป็น "ช่องที่จบแล้ว" เหมือนช่องปลอดภัย — ไม่ควรเขียวสดค้างอยู่
   // ตลอดเกม (เดิม bg-emerald-500 ไม่จางเลย ช่องเดียวสว่างแย่งสายตาไปจากช่องที่ยังไม่เปิด)
   // จางเป็นสีเทาแบบเดียวกับช่องปลอดภัย แต่คงไอคอน 🔧 กับโทนเขียวจาง ๆ ไว้ให้ยังแยกออกว่า
@@ -129,6 +133,42 @@ export function Board({
     gridRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }, [disabled])
 
+  // FIX_LISTS: กันที่ให้แถบการ์ดในมือ "เฉพาะตอนที่ป้ายล้นกรอบจริง ๆ" เท่านั้น
+  //   ที่ผ่านมาลองกันที่ล่วงหน้าด้วย CSS มาสามรอบแล้วผิดทุกรอบ (pb-84 คงที่ /
+  //   margin-bottom / padding-bottom จาก --mn-hand-h) เพราะ "ที่ที่กันไว้" นับเป็น
+  //   ความสูงที่ต้องเลื่อนผ่านเสมอ → กางการ์ดทีไรก็มีแถบเลื่อนโผล่ทั้งที่ป้ายไม่ได้ล้น
+  //   และหุบการ์ดแล้วแถบเลื่อนก็หายไป (อาการที่ผู้ใช้เจอ)
+  //   CSS ไม่มีเงื่อนไข "ถ้าล้นแล้วค่อยกันที่" จึงต้องวัดเอง:
+  //     ป้ายล้นกรอบ → กันที่เท่าความสูงแถบการ์ด (เลื่อนลงไปดูแถวท้ายที่ถูกทับได้)
+  //     ป้ายไม่ล้น  → ไม่กันเลย (ไม่มีแถบเลื่อน แถบการ์ดโปร่งใสลอยทับที่ว่างด้านล่าง)
+  const [dockPad, setDockPad] = useState(0)
+  useEffect(() => {
+    const el = gridRef.current
+    const root = globalThis.document?.documentElement
+    if (!el || !root) return
+    const sync = () => {
+      const dock = Number.parseFloat(
+        globalThis.getComputedStyle(root).getPropertyValue('--mn-hand-h'),
+      )
+      const reserve = Number.isFinite(dock) ? dock : 0
+      // เทียบความสูงเนื้อหา "ที่ยังไม่รวมที่กันไว้" กับกรอบ — ไม่งั้นที่กันไว้รอบก่อน
+      // จะทำให้ยังล้นอยู่เสมอ แล้วค้างอยู่แบบนั้นตลอด (feedback loop)
+      const content = el.scrollHeight - dockPad
+      setDockPad(content > el.clientHeight + 1 ? reserve : 0)
+    }
+    sync()
+    if (typeof ResizeObserver === 'undefined') return
+    const obs = new ResizeObserver(sync)
+    obs.observe(el)
+    // แถบการ์ดกาง/หุบ → --mn-hand-h เปลี่ยน แต่ตัวกระดานไม่ได้ resize จึงต้องดูที่ <html>
+    const mo = new MutationObserver(sync)
+    mo.observe(root, { attributes: true, attributeFilter: ['style'] })
+    return () => {
+      obs.disconnect()
+      mo.disconnect()
+    }
+  }, [dockPad, rangeMin, rangeMax, scale])
+
   // FIX_LISTS ชุดที่เจ็ด #2: เข้า/ออกโหมดเลือกช่องสแกน → ล้างสถานะค้างของอีกโหมด
   //   (ช่องที่เลือกไว้รอเปิดป้าย และช่องที่ hover ไว้ตอนสแกน)
   useEffect(() => {
@@ -190,11 +230,12 @@ export function Board({
         //     1. padding เป็นส่วนหนึ่งของความสูงเนื้อหา → เนื้อหาสูงเกินกรอบเสมอ
         //        เกิดแถบเลื่อนทั้งที่ป้ายยังไม่ล้นขอบ (เห็นชัดสุดในโหมด TV ที่ป้ายไม่กี่แถว)
         //     2. โหมด TV แถบการ์ดโตตาม --mn-scale (~500px) แต่ 336px เท่าเดิม → กันไม่พอ
-        //   แก้เป็น "หดกรอบที่ scroll ให้สั้นลง" แทนการดันเนื้อหา — ดูคลาส .board-grid
-        //   ใน globals.css (margin-bottom จาก --mn-hand-h ที่ Hand วัดความสูงจริงไว้)
-        //   ป้ายสั้น = ไม่ล้นกรอบ = ไม่มีแถบเลื่อน / ป้ายยาว = เลื่อนสุดแล้วแถวท้ายอยู่เหนือแถบ
+        //   FIX_LISTS ล่าสุด: ไม่กันที่ให้แถบการ์ดแล้ว — แถบโปร่งใสและ "ลอยทับ" ป้ายด้านล่าง
+        //   (เดิมหดกรอบด้วย margin-bottom ซึ่งดันป้ายขึ้นไปจนเกิดแถบเลื่อนทั้งที่จอยังว่าง)
+        //   เหลือแค่ padding-bottom = --mn-hand-h ใน .board-grid (globals.css) ไว้เป็น
+        //   "ที่ให้เลื่อนต่อ" เฉพาะตอนป้ายยาวจนล้นจริง — ป้ายสั้นจึงไม่มีแถบเลื่อน
         className="board-grid grid min-h-0 flex-1 content-start justify-center gap-1.5 overflow-y-auto p-1.5 sm:gap-2"
-        style={{ gridTemplateColumns: `repeat(auto-fill, ${size}px)` }}
+        style={{ gridTemplateColumns: `repeat(auto-fill, ${size}px)`, paddingBottom: dockPad || undefined }}
       >
         {numbers.map((n) => {
           const state = cells[n] ?? 'hidden'

@@ -59,15 +59,16 @@ test('Board grid template uses the computed cell size (B8)', () => {
 //
 //   และค่าต้องมาจาก --mn-hand-h ที่ Hand วัดความสูงจริง ไม่ใช่ px คงที่ (pb-84 = 336px)
 //   เพราะโหมด TV แถบการ์ดโตตาม --mn-scale จนเลข 336px กันไม่พอ
-test('board reserves the hand-bar strip via margin from the measured height, not fixed padding', () => {
+test('board defers the hand-bar strip to .board-grid, never to a fixed pb-84', () => {
   const grid = renderBoard(200).querySelector('[style*="grid-template-columns"]')
   const style = grid?.getAttribute('style') ?? ''
 
-  // หดกรอบด้วย .board-grid (margin-bottom: var(--mn-hand-h, 336px) ใน globals.css)
+  // ที่ว่างใต้กระดานถูกจัดการใน .board-grid (globals.css) ด้วย --mn-hand-h ที่ Hand
+  // วัดความสูงจริงไว้ ไม่ใช่ตัวเลข px คงที่ใน JSX
   // เขียนเป็นคลาสเพราะ jsdom ทิ้งค่า var() ใน inline style — เทสจึงตรวจจาก class
   expect(grid?.className).toContain('board-grid')
 
-  // ห้ามกลับไปดันเนื้อหาด้วย padding ล่างก้อนใหญ่ ไม่ว่าจะเป็น class หรือ inline
+  // ห้ามกลับไปดันเนื้อหาด้วย padding ล่างก้อนใหญ่ตายตัว ไม่ว่าจะเป็น class หรือ inline
   expect(grid?.className).not.toContain('pb-84')
   expect(style).not.toContain('padding-bottom')
 })
