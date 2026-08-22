@@ -1,6 +1,6 @@
 import { CARD_WEIGHTS } from './config'
 import { weightedPick } from './rng'
-import type { CardType } from './types'
+import type { CardType, Team } from './types'
 import cardAttack from '@/assets/cards/Card-ATTACK.png'
 import cardBack from '@/assets/cards/Card-BACK.svg'
 import cardBlock from '@/assets/cards/Card-BLOCK.png'
@@ -85,7 +85,7 @@ export const CARD_DESCRIPTIONS: Record<CardType, string> = {
   skip: 'จบ turn ทันที ไม่ต้องเปิดป้าย (ไม่ได้จั่วการ์ด) — ใช้ตอนโดนโจมตีได้ด้วย (Phase ป้องกัน) เพื่อข้ามการเปิดป้ายทั้งตา หนี้โจมตีไม่โอนต่อให้ทีมถัดไป · ทีมถัดไปมีสิทธิ์เอา Block มากันก่อน',
   shield: 'กางโล่ให้ทีมตัวเอง — ถ้าเหยียบระเบิดจะรอดทันที ไม่ต้องตัดสาย ระเบิดย้ายไปช่องอื่น (ใช้กับทีมตัวเองเท่านั้น กันได้เฉพาะระเบิด)',
   block: 'ใช้เล่นตรง ๆ ไม่ได้ — โดนโจมตีแล้วจะถูกถามตอนเริ่มตาตัวเองว่าจะกันกี่ใบ (เลือกได้ 1 ใบต่อ 1 การ์ดโจมตี) หรือกัน Skip / Reverse / Shuffle ได้ทันทีตอนทีมอื่นใช้ กัน Shield ไม่ได้ · กัน Block ด้วย Block ได้ (ซ้อนเป็นชั้น — ชั้นคี่ = กันสำเร็จ ชั้นคู่ = effect ทำงาน)',
-  reverse: 'สลับทิศทาง + จบ turn ทันที — ทีมที่อยู่ในทิศที่กำลังจะย้อนกลับไปได้สิทธิ์เอา Block มากันก่อนเป็นคนแรก',
+  reverse: 'สลับทิศทาง + จบ turn ทันที — ทีมที่อยู่ในทิศที่กำลังจะย้อนกลับไปได้สิทธิ์เอา Block มากันก่อนเป็นคนแรก · ใช้ตอนกำลังโดนโจมตีไม่ได้ (หนี้เปิดป้ายยังค้าง) ต้องเคลียร์หนี้ก่อนถึงใช้ได้',
   shuffle: 'สุ่มย้ายตำแหน่งระเบิดทั้งหมดใหม่ — ผลสแกนเก่าใช้ไม่ได้อีก ทีมถัดไปจึงมีสิทธิ์เอา Block มากัน',
   attack: 'ทีมเป้าหมายโดนคิวโจมตี — ต้องเปิดเพิ่ม +1 ตอนถึงตาตัวเอง (โอนกองต่อได้) กันด้วย Block ได้ก่อน',
 }
@@ -105,6 +105,17 @@ export function cardNeedsCellTarget(card: CardType): boolean {
 
 export function cardEndsTurn(card: CardType): boolean {
   return card === 'skip' || card === 'reverse' || card === 'attack'
+}
+
+// FIX_LISTS ชุดที่สิบหก: "ทีมนี้กำลังโดนโจมตีอยู่ไหม" — เกณฑ์เดียวที่ engine กับ UI ใช้ร่วมกัน
+//   ระหว่างนี้ห้ามใช้ Reverse: Reverse จบ turn ทันที ซึ่งรีเซ็ต pendingOpens = 1
+//   ทีมที่ติดหนี้เปิดป้ายจาก Attack จึงสะบัดทิศหนีหนี้ได้ฟรี (Attack ไร้โทษ)
+//   ต่างจาก Skip ที่จ่ายด้วยการ์ดหนึ่งใบเพื่อเคลียร์หนี้อย่างชัดเจน (applySkip)
+//   หนี้มีสองก้อน — ต้องหมดทั้งคู่ถึงจะกลับมาใช้ Reverse ได้ตามปกติ:
+//     - pendingAttacks = คิวที่โดนใส่ไว้ ยังไม่ถึงตา (กันด้วย Block ได้)
+//     - pendingOpens > 1 = หนี้ที่ลงมาแล้ว ยังเปิดป้ายไม่ครบ
+export function teamIsUnderAttack(team: Pick<Team, 'pendingAttacks' | 'pendingOpens'>): boolean {
+  return (team.pendingAttacks?.length ?? 0) > 0 || team.pendingOpens > 1
 }
 
 // FIX_LISTS #10: การ์ดที่ "ส่งผลกับทีมอื่น" → ทีมอื่นมีสิทธิ์เอา Block มากันได้

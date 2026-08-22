@@ -725,6 +725,11 @@ function TeamList() {
         // เหรียญต้องมาก่อน branch ตาย ไม่งั้นทีมที่ได้ทองแดงจะถูกหรี่จนมองไม่เห็น
         // ทุก branch มี border-2 (branch ที่ไม่มีเหรียญใช้ border-transparent)
         // เพื่อให้ความสูงแถวไม่ขยับตอนเหรียญโผล่ — ดู FIX #26 เรื่อง layout นิ่ง
+        // FIX_LISTS ชุดที่สิบหก: stack โจมตีที่ค้างคิวอยู่ที่ทีมนี้ (ยังไม่ถึงตา)
+        //   queuedAttacks = จำนวน "ใบ" ที่โดนใส่ไว้ (เท่ากับจำนวน Block ที่ต้องใช้กัน)
+        //   queuedOpens   = ป้ายที่ต้องเปิดจริงถ้าไม่กันเลย (แต่ละใบพก opens ของตัวเอง)
+        const queuedAttacks = t.pendingAttacks?.length ?? 0
+        const queuedOpens = t.pendingAttacks?.reduce((sum, a) => sum + a.opens, 0) ?? 0
         const rowClass =
           i === currentIdx && !isGameover
             ? 'border-primary bg-primary/10 font-bold'
@@ -759,6 +764,19 @@ function TeamList() {
               title="กาง Shield — กันระเบิดได้"
             >
               🛡{t.shieldCharges}
+            </span>
+          )}
+          {/* FIX_LISTS ชุดที่สิบหก: โจมตีที่ "ค้างคิวอยู่" — โดนใส่ไว้แล้วแต่ยังไม่ถึงตา
+              เดิม panel เห็นแค่หนี้ที่ลงไปแล้ว (pendingOpens) ทีมที่เพิ่งโดน Attack ใส่
+              จึงดูเหมือนปกติจนกว่าจะถึงตาตัวเอง — คนดู/กรรมการมองไม่ออกว่าใครกำลัง
+              ตกเป็นเป้า ตอนนี้โชว์ทั้ง "กี่ใบ" (stack) และ "รวมกี่ป้าย" ตลอดเวลา */}
+          {queuedAttacks > 0 && (
+            <span
+              className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white"
+              title={`โดนโจมตีค้างอยู่ ${queuedAttacks} ใบ — ต้องเปิดเพิ่ม ${queuedOpens} ป้ายเมื่อถึงตา (กันด้วย Block ได้)`}
+            >
+              ⚔×{queuedAttacks}
+              {queuedOpens !== queuedAttacks && ` (+${queuedOpens})`}
             </span>
           )}
           {t.pendingOpens > 1 && (

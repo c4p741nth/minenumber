@@ -10,6 +10,7 @@ import {
   CARD_META,
   cardNeedsCellTarget,
   cardNeedsTeamTarget,
+  teamIsUnderAttack,
 } from '@/lib/game/cards'
 import type { DisplayMode } from '@/lib/display'
 import type { CardType } from '@/lib/game/types'
@@ -189,7 +190,13 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
   // FIX_LISTS ชุดที่สิบห้า #2: เข้ารอบบังคับตัดสายแล้ว Shield เป็นโมฆะทั้งวง กางใหม่ไม่ได้
   //   (engine ปฏิเสธ PLAY_CARD อยู่แล้ว — ตรงนี้ตัดปุ่ม ✓ ทิ้งเพื่อไม่ให้กดแล้วเงียบ)
   const shieldVoided = state.forcedWireCut === true && revealedCard === 'shield'
-  const playable = revealedCard !== null && revealedCard !== 'block' && !shieldVoided
+  // FIX_LISTS ชุดที่สิบหก: กำลังโดนโจมตีอยู่ → Reverse ใช้ไม่ได้ (engine ปฏิเสธอยู่แล้ว)
+  //   Reverse จบ turn ทันที ถ้าใช้ได้ตอนติดหนี้เปิดป้าย = สะบัดทิศหนีหนี้ฟรี
+  //   ตัดปุ่ม ✓ ทิ้งเพื่อไม่ให้กดแล้วเงียบ — เหลือแค่ปุ่มทิ้ง (ไม่มี ↩ เก็บกลับ)
+  //   เพราะการ์ดคว่ำหน้า ถ้าเปิดเจอแล้วเก็บกลับได้ = เปิดดูฟรี (ดู FIX #43 ที่ปุ่ม ↩)
+  const reverseLocked = revealedCard === 'reverse' && teamIsUnderAttack(current)
+  const playable =
+    revealedCard !== null && revealedCard !== 'block' && !shieldVoided && !reverseLocked
   // กด ✓ แล้ว: การ์ดที่เลือก "ทีม" → เปิด modal ข้างการ์ดเหมือนเดิม
   //   การ์ดที่เลือก "ช่องบนกระดาน" (Scan) → ยกให้ GameScreen คุม (ชุดที่เจ็ด #2)
   //   การ์ดอื่น → ใช้เลย
@@ -311,7 +318,13 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
               )}
               {/* FIX #43: การ์ดที่หงายอยู่แล้ว (Block) เก็บกลับเข้ามือได้ ไม่ถูกบังคับใช้/ทิ้ง
                   FIX_LISTS ชุดที่สิบห้า #2: Shield ที่เป็นโมฆะก็เก็บกลับได้เหมือนกัน —
-                  ใช้ไม่ได้แล้วจะบังคับให้ทิ้งอย่างเดียวไม่แฟร์ (ไม่ใช่ความผิดของคนถือ) */}
+                  ใช้ไม่ได้แล้วจะบังคับให้ทิ้งอย่างเดียวไม่แฟร์ (ไม่ใช่ความผิดของคนถือ)
+                  FIX_LISTS ชุดที่สิบหก: Reverse ที่ถูกล็อก "ไม่" เข้าข้อยกเว้นนี้ — ต้องทิ้งอย่างเดียว
+                    การ์ดในมือคว่ำหน้า ผู้เล่นไม่รู้ว่าใบไหนคือใบไหนจนกว่าจะเปิด ถ้าเปิดเจอ Reverse
+                    ตอนติดหนี้แล้วเก็บกลับได้ = เปิดดูฟรี รู้ว่ามี Reverse อยู่ในมือโดยไม่เสียอะไร
+                    ซึ่งเป็นข้อมูลรั่วแบบเดียวกับที่ FIX #43 ตั้งใจกัน
+                  ต่างจาก Shield โมฆะที่การ์ด "ตายถาวรทั้งเกม" (เข้ารอบบังคับตัดสายแล้วย้อนไม่ได้)
+                    บังคับทิ้งจึงไม่แฟร์ — ส่วน Reverse แค่ล็อกชั่วคราว คนละสถานการณ์กัน */}
               {(canKeepInHand(revealedCard) || shieldVoided) && (
                 <button
                   onClick={() => {
@@ -365,6 +378,12 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
                 {shieldVoided && (
                   <p className="mt-2 text-sm font-bold leading-5 text-amber-600 dark:text-amber-400">
                     เข้ารอบบังคับตัดสายแล้ว — Shield เป็นโมฆะ กางใหม่ไม่ได้
+                  </p>
+                )}
+                {/* FIX_LISTS ชุดที่สิบหก: บอกว่าล็อกชั่วคราว ไม่ใช่การ์ดเสีย */}
+                {reverseLocked && (
+                  <p className="mt-2 text-sm font-bold leading-5 text-red-600 dark:text-red-400">
+                    กำลังโดนโจมตีอยู่ — ใช้ Reverse หนีไม่ได้ เปิดขึ้นมาแล้วต้องทิ้งอย่างเดียว
                   </p>
                 )}
               </div>

@@ -1,4 +1,10 @@
-import { CARD_LABELS, cardEndsTurn, cardIsBlockable, drawRandomCard } from './cards'
+import {
+  CARD_LABELS,
+  cardEndsTurn,
+  cardIsBlockable,
+  drawRandomCard,
+  teamIsUnderAttack,
+} from './cards'
 import { createRng, pickRandom, shuffle } from './rng'
 import { setupBombs } from './setup'
 import { DEFAULTS, maxScanRadiusFor } from './config'
@@ -884,6 +890,15 @@ function playCard(state: EngineState, action: Extract<GameAction, { type: 'PLAY_
       ) {
         return
       }
+      break
+    case 'reverse':
+      // FIX_LISTS ชุดที่สิบหก: กำลังโดนโจมตีอยู่ — ใช้ Reverse ไม่ได้
+      //   Reverse จบ turn ทันที (endTurn) ซึ่งรีเซ็ต pendingOpens = 1 — ทีมที่ติดหนี้
+      //   เปิดป้ายจาก Attack จึงสะบัดทิศแล้วหนีหนี้ได้ฟรี — Attack กลายเป็นของเล่นไม่มีโทษ
+      //   (เทียบกับ Skip ที่เคลียร์หนีทิ้งอย่างชัดเจนใน applySkip — จ่ายด้วยการ์ดหนึ่งใบ)
+      //   พอหนีหมด (เปิดป้ายครบ/โดนกันด้วย Block) → ใช้ Reverse ได้ตามปกติ
+      //   คืนไปเฉย ๆ = ไม่เสียการ์ด ยังถือไว้ในมือได้ (แบบเดียวกับ Shield โมฆะ)
+      if (teamIsUnderAttack(team)) return
       break
     case 'shield':
       // FIX_LISTS ชุดที่สิบห้า #2: เข้ารอบบังคับตัดสายแล้ว กาง Shield ใหม่ไม่ได้

@@ -1165,3 +1165,125 @@ describe('ชุดที่สิบเอ็ด #2: TIMEOUT ระหว่า
     expect(h2.getState().currentTeamIndex).not.toBe(1)
   })
 })
+
+// FIX_LISTS ชุดที่สิบหก: Reverse ใช้หนีหนี้ Attack ไม่ได้
+// Reverse จบ turn ทันที (endTurn รีเซ็ต pendingOpens = 1) — ถ้าใช้ได้ตอนติดหนี้เปิดป้าย
+// ทีมที่โดนโจมตีก็แค่สะบัดทิศแล้วหนี้หายฟรี ทำให้ Attack ไร้โทษ
+describe('Reverse ตอนโดนโจมตี', () => {
+  it('มีคิวโจมตีค้าง (phase defending) → PLAY_CARD reverse ไม่ทำงาน การ์ดยังอยู่ในมือ', () => {
+    // startingHand 3 — B ต้องถือทั้ง Block (เพื่อเข้า phase defending) และ Reverse
+    const settings = cardSettings({ teamNames: ['A', 'B'], startingHand: 3 })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return (
+        st.teams[0].hand.includes('attack') &&
+        st.teams[1].hand.includes('block') &&
+        st.teams[1].hand.includes('reverse')
+      )
+    })
+    const h = createGame(settings, seed)
+
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(st.phase).toBe('defending')
+    expect(st.teams[1].pendingAttacks).toHaveLength(1)
+
+    const dir = st.direction
+    const after = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    // ไม่มีอะไรขยับเลย — ทิศเดิม ยังเป็นตา B ยังอยู่ defending และการ์ดไม่ถูกหัก
+    expect(after.direction).toBe(dir)
+    expect(after.phase).toBe('defending')
+    expect(after.currentTeamIndex).toBe(1)
+    expect(after.teams[1].hand).toContain('reverse')
+    expect(after.teams[1].pendingAttacks).toHaveLength(1)
+    expect(after.teams[1].stats.cardsPlayed.reverse).toBe(0)
+  })
+
+  it('รับโจมตีมาแล้วยังเปิดป้ายไม่ครบ (pendingOpens > 1) → ใช้ Reverse หนีหนี้ไม่ได้', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'], startingHand: 2 })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return (
+        st.teams[0].hand.includes('attack') &&
+        !st.teams[1].hand.includes('block') &&
+        st.teams[1].hand.includes('reverse')
+      )
+    })
+    const h = createGame(settings, seed)
+
+    // B ไม่มี Block → โจมตีลงทันทีตอนถึงตา หนี้อยู่ที่ pendingOpens
+    const st = h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(st.currentTeamIndex).toBe(1)
+    expect(st.teams[1].pendingAttacks).toHaveLength(0)
+    expect(st.teams[1].pendingOpens).toBeGreaterThan(1)
+    expect(st.phase).toBe('cards')
+
+    const dir = st.direction
+    const after = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    expect(after.direction).toBe(dir)
+    expect(after.currentTeamIndex).toBe(1) // ยังไม่จบตา — หนี้ไม่หาย
+    expect(after.teams[1].pendingOpens).toBeGreaterThan(1)
+    expect(after.teams[1].hand).toContain('reverse')
+  })
+
+  it('กันโจมตีด้วย Block จนหมด → กลับมาใช้ Reverse ได้ตามปกติ', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B', 'C'], startingHand: 3 })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return (
+        st.teams[0].hand.includes('attack') &&
+        st.teams[1].hand.includes('block') &&
+        st.teams[1].hand.includes('reverse')
+      )
+    })
+    const h = createGame(settings, seed)
+
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    const blocked = h.dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: 1 })
+    // หนี้หมดทั้งสองก้อนแล้ว
+    expect(blocked.teams[1].pendingAttacks).toHaveLength(0)
+    expect(blocked.teams[1].pendingOpens).toBe(1)
+    expect(blocked.phase).toBe('cards')
+
+    const dir = blocked.direction
+    const after = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+    // Reverse ทำงานได้แล้ว — ถ้ามีทีมอื่นถือ Block จะเข้า phase blocking ก่อน
+    // ทั้งสองทางถือว่า "การ์ดถูกใช้" (ต่างจากตอนถูกล็อกที่ไม่มีอะไรขยับเลย)
+    expect(after.teams[1].hand).not.toContain('reverse')
+    if (after.phase !== 'blocking') expect(after.direction).toBe((-dir) as 1 | -1)
+  })
+
+  it('เปิดป้ายใช้หนี้จนครบ → ใช้ Reverse ได้ตามปกติ', () => {
+    const settings = cardSettings({ teamNames: ['A', 'B'], startingHand: 2 })
+    const seed = findSeed(settings, (h) => {
+      const st = h.getState()
+      return (
+        st.teams[0].hand.includes('attack') &&
+        !st.teams[1].hand.includes('block') &&
+        st.teams[1].hand.includes('reverse')
+      )
+    })
+    const h = createGame(settings, seed)
+    h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(h.getState().teams[1].pendingOpens).toBeGreaterThan(1)
+
+    // เปิดป้ายปลอดภัยจนหนี้เหลือใบสุดท้าย (ยังเป็นตา B อยู่)
+    const map = secretMap(h)
+    let guard = 0
+    while (h.getState().teams[1].pendingOpens > 1 && guard++ < 30) {
+      const st = h.getState()
+      if (st.currentTeamIndex !== 1) break
+      const safe = Object.keys(st.cells)
+        .map(Number)
+        .find((c) => st.cells[c] === 'hidden' && map[c] === undefined)
+      if (safe === undefined) break
+      h.dispatch({ type: 'OPEN_CELL', cell: safe })
+    }
+    const st = h.getState()
+    if (st.currentTeamIndex === 1 && st.teams[1].pendingOpens === 1 && st.phase === 'cards') {
+      const dir = st.direction
+      const after = h.dispatch({ type: 'PLAY_CARD', card: 'reverse' })
+      expect(after.teams[1].hand).not.toContain('reverse')
+      if (after.phase !== 'blocking') expect(after.direction).toBe((-dir) as 1 | -1)
+    }
+  })
+})
