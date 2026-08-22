@@ -212,15 +212,26 @@ button { cursor: pointer; }
 }
 
 /* ---- Scan effect (W6.3) ---- */
+/* FIX: เอฟเฟกต์สแกนต้อง "วาบแล้วจบ" ไม่ทิ้งพื้นหลังส้ม-แดงค้างไว้
+   เดิมใช้ animation ... forwards + keyframe ปลายทางที่ยังผสม --primary (#e34d32)
+   อยู่ 40% พอ scanning ค้างจนถึงตาถัดไป ช่องที่ปลอดภัยเลยมีพื้นแดงจาง ๆ ทับ
+   กรอบฟ้าของ .cell-scanned-safe ตอนนี้ให้ทุกอย่างวิ่งกลับสู่ค่าเดิม (โปร่งใส)
+   เมื่อ animation จบ เหลือแค่กรอบ mark ฟ้า/แดงตามผลสแกนอย่างเดียว */
 .cell-scan {
-  border-color: color-mix(in srgb, var(--primary) 80%, transparent) !important;
-  color: var(--primary-foreground) !important;
-  animation: mn-scan 0.6s ease-out forwards;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 55%, transparent);
+  animation: mn-scan 0.6s ease-out;
 }
 @keyframes mn-scan {
-  0% { background: var(--primary); transform: scale(1.1); }
-  100% { background: color-mix(in srgb, var(--primary) 40%, var(--card)); }
+  0% {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    transform: scale(1.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+  100% {
+    background: transparent;
+    transform: scale(1);
+    box-shadow: 0 0 0 3px transparent;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .cell-scan { animation: none !important; }

@@ -42,7 +42,9 @@ test('ชุดที่สาม #15: กดตัดสายแล้วเ�
       <DefuseModal />
     </GameProvider>,
   )
-  expect(screen.getByText('ตัดสาย')).toBeDefined()
+  // หัวเรื่องเป็น <h2> สองบรรทัด: ชื่อทีม <br> ตัดสาย — getByText('ตัดสาย') แบบ exact
+  // จับไม่ได้เพราะ textContent ของ h2 คือ 'ทีม xตัดสาย' จึงเช็คที่ role heading แทน
+  expect(screen.getByRole('heading').textContent).toContain('ตัดสาย')
 
   fireEvent.click(screen.getByLabelText('ตัดสายแดง'))
 

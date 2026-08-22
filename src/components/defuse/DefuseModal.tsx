@@ -26,6 +26,10 @@ export function DefuseModal() {
   // FIX #27: นับถอยหลังตอนเลือกสาย (ตั้งค่าได้ 0 = ไม่จับเวลา)
   const limit = state.settings.defuseSeconds
   const [left, setLeft] = useState(limit)
+  // นาฬิกาความละเอียดมิลลิวินาที — โชว์ `SS:mmm` ให้รู้สึกลุ้นกว่าตัวเลขวินาทีเดี่ยว ๆ
+  //   `left` (วินาทีเต็ม) ยังเป็นตัวคุมเสียง bombTimer + จังหวะระเบิดเหมือนเดิม
+  //   ตัวนี้ทำหน้าที่ "แสดงผล" อย่างเดียว จึงไม่แตะ logic หมดเวลา
+  const [msLeft, setMsLeft] = useState(limit * 1000)
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -85,6 +89,21 @@ export function DefuseModal() {
     return () => window.clearTimeout(t)
   }, [stage, left, limit, state.defuseResult])
 
+  // นาฬิกามิลลิวินาที: ตั้ง deadline ครั้งเดียวตอนเข้าโหมดเลือกสาย แล้วให้ rAF
+  //   วาดส่วนที่เหลือทุกเฟรม (ไม่ใช้ setInterval 10ms — มันหลุด sync กับการวาดจอ
+  //   แล้วตัวเลขจะกระตุก) หยุดทันทีที่ออกจาก 'choosing' หรือผลถูกผูกแล้ว
+  useEffect(() => {
+    if (stage !== 'choosing' || limit <= 0 || state.defuseResult) return
+    const deadline = performance.now() + limit * 1000
+    let raf = 0
+    const tick = () => {
+      setMsLeft(Math.max(0, deadline - performance.now()))
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [stage, limit, state.defuseResult])
+
   function acknowledge() {
     // FIX_LISTS #3: ตัดไม่ทัน → ระเบิดทันที ไม่ใช่ผลที่เลือกสีไว้
     if (stage === 'exploded') {
@@ -127,20 +146,23 @@ export function DefuseModal() {
         <div className="defuse-head flex min-h-52 flex-col items-center justify-center gap-4 sm:gap-6">
           {stage === 'choosing' && (
             <>
-              <p className="section-label text-red-300">ระเบิดจริง!</p>
-              <h2 className="font-serif text-4xl font-bold sm:text-6xl">ตัดสาย</h2>
-              <p className="text-base text-white/70 sm:text-xl">
-                {current.name} เลือกสายหนึ่งเพื่อกู้ระเบิด
-              </p>
-              {/* FIX #27: นับถอยหลัง */}
+              {/* ชื่อทีมขึ้นบรรทัดบน "ตัดสาย" อยู่บรรทัดล่าง — เหลือเท่านี้พอ
+                  ("ระเบิดจริง!" กับ "<ทีม> เลือกสายหนึ่งเพื่อกู้ระเบิด" ถูกตัดออก
+                  เพราะซ้ำกับสิ่งที่จอบอกอยู่แล้ว และทำให้สายตาไขว้เขว) */}
+              <h2 className="font-serif text-4xl leading-tight font-bold sm:text-6xl">
+                {current.name}
+                <br />
+                ตัดสาย
+              </h2>
+              {/* FIX #27: นับถอยหลัง — ระดับมิลลิวินาที ตัวเลขสีแดงตลอด */}
               {limit > 0 && (
                 <p
-                  className={`font-mono text-5xl font-black sm:text-6xl ${
-                    left <= 5 ? 'text-red-400 timer-urgent' : 'text-white'
+                  className={`font-mono text-5xl font-black text-red-400 sm:text-6xl ${
+                    left <= 5 ? 'timer-urgent' : ''
                   }`}
                   aria-live="polite"
                 >
-                  {Math.max(left, 0)}
+                  {formatMs(msLeft)}
                 </p>
               )}
             </>
@@ -183,6 +205,16 @@ export function DefuseModal() {
       </div>
     </div>
   )
+}
+
+// `SS:mmm` — วินาทีที่เหลือ : เศษมิลลิวินาที (เช่น 10:243)
+//   ปัดลงเสมอ (Math.floor) ไม่ใช่ปัดใกล้สุด — เลข "0:000" ต้องโผล่ตอนหมดเวลาจริง ๆ
+//   ไม่ใช่ก่อนหน้านั้นครึ่งมิลลิวินาที
+function formatMs(ms: number): string {
+  const clamped = Math.max(0, ms)
+  const s = Math.floor(clamped / 1000)
+  const rest = Math.floor(clamped % 1000)
+  return `${s}:${String(rest).padStart(3, '0')}`
 }
 
 function Wires({
