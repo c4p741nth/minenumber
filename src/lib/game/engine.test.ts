@@ -1485,6 +1485,35 @@ describe('ชุดที่สิบสาม: Skip กับการโจม
     expect(st.log.some((l) => l.message.includes('หนี้โจมตีไม่โอนต่อ'))).toBe(true)
   })
 
+  it('Shield กันระเบิดตอนโดน Attack → ไม่ล้างหนี้ ยังต้องเปิดป้ายที่เหลือต่อ', () => {
+    // A โจมตี B (B ไม่มี Block → หนี้ลงทันที เปิด 2 ป้าย) แล้วให้ B มีโล่ 1 ชั้น
+    const h = gameWithHands({ '0': ['attack'], '1': [] })
+    const before = h.getState()
+    const seeded = createGameFromState(
+      {
+        ...before,
+        teams: before.teams.map((t) => (t.id === '1' ? { ...t, shieldCharges: 1 } : t)),
+      },
+      h.serializeSecret(),
+      1,
+    )
+    seeded.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })
+    expect(seeded.getState().teams[1].pendingOpens).toBe(2)
+
+    // เปิดป้ายแรกโดนระเบิดจริง → โล่กันไว้ ไม่ต้องเข้าจอตัดสาย
+    const bomb = bombCellOf(seeded, 'real')
+    const st = seeded.dispatch({ type: 'OPEN_CELL', cell: bomb })
+    expect(st.phase).not.toBe('defusing')
+    expect(st.teams[1].shieldCharges).toBe(0)
+    // หัวใจของเทสนี้: โล่กันระเบิดได้ แต่หนี้จาก Attack ไม่หายฟรี ยังเป็นตาของ B อยู่
+    expect(st.currentTeamIndex).toBe(1)
+    expect(st.teams[1].pendingOpens).toBe(1)
+
+    // เปิดป้ายที่สองครบหนี้ → ค่อยจบตา
+    const after = seeded.dispatch({ type: 'OPEN_CELL', cell: safeCellOf(seeded) })
+    expect(after.currentTeamIndex).not.toBe(1)
+  })
+
   it('#3: Skip ตอน defending ล้างคิวโจมตีที่ยังไม่ลง — ไม่ไปโผล่ที่ทีมอื่น', () => {
     const h = gameWithHands({ '0': ['attack'], '1': ['block', 'skip'] })
     h.dispatch({ type: 'PLAY_CARD', card: 'attack', targetTeamId: '1' })

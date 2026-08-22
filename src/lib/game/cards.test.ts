@@ -1119,7 +1119,7 @@ describe('ชุดที่สิบเอ็ด #2: TIMEOUT ระหว่า
     expect(after.turnNumber).toBe(before.turnNumber + 1)
   })
 
-  it('เปิดโดนระเบิด → เข้า flow กู้ปกติ และกู้สำเร็จแล้วจบตาเลย หนี้ที่เหลือไม่มีผล', () => {
+  it('เปิดโดนระเบิด → เข้า flow กู้ปกติ และกู้สำเร็จแล้วยังต้องเปิดหนี้ที่เหลือต่อ', () => {
     const settings = cardSettings({ teamNames: ['A', 'B'], startingHand: 1 })
     const seed = findSeed(settings, (h) => {
       const st = h.getState()
@@ -1148,9 +1148,15 @@ describe('ชุดที่สิบเอ็ด #2: TIMEOUT ระหว่า
       expect(blue.defuseResult?.survived).toBe(true)
     }
 
-    // กู้สำเร็จ → จบตาทันที (§3.4.2) แม้ pendingOpens จะยังเหลือ ไปทีมถัดไปเลย
+    // กู้สำเร็จ → หักหนี้หนึ่งใบ แต่ "ไม่ล้างหนี้" ที่เหลือ ยังเป็นตาของทีม 1 ต่อ
+    // และ phase ต้องกลับมาเป็น 'opening' ไม่ค้างที่ 'defusing' (ไม่งั้นกดเปิดป้ายต่อไม่ได้)
     const done = h2.dispatch({ type: 'ACK_DEFUSE' })
-    expect(done.currentTeamIndex).not.toBe(1)
+    expect(done.currentTeamIndex).toBe(1)
     expect(done.teams[1].pendingOpens).toBe(1)
+    expect(done.phase).toBe('opening')
+
+    // เปิดป้ายที่เหลือให้ครบ → ค่อยจบตาไปทีมถัดไป
+    openSafeCell(h2)
+    expect(h2.getState().currentTeamIndex).not.toBe(1)
   })
 })

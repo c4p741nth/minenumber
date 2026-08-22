@@ -464,7 +464,14 @@ function openCell(state: EngineState, cell: number): void {
           : `${team.name} มี Shield — รอดจากระเบิด แต่ไม่มีที่ว่างให้ย้าย ระเบิดยังอยู่ที่เดิม`,
         { level: 'good' },
       )
-      endTurn(state)
+      // FIX: Shield กันระเบิดได้ แต่ "ไม่ล้างหนี้เปิดป้าย" ที่ค้างจากการ์ด Attack
+      //   เดิมเรียก endTurn() ตรง ๆ ซึ่งรีเซ็ต pendingOpens = 1 → ทีมที่โดน Attack ให้เปิด 2 ป้าย
+      //   พอเปิดป้ายแรกเจอระเบิดแล้วมีโล่ ก็จบตาทันที ไม่ต้องเปิดป้ายที่ 2 = หนี้หายฟรี
+      //   ทำให้ Shield แข็งกว่า Block ในการกัน Attack (Block กันได้ 1 ใบ แต่ Shield
+      //   กันระเบิด + ล้างหนี้ทั้งก้อน + ได้ช่องเขียว ในใบเดียว)
+      //   ตอนนี้หักหนี้ทีละป้ายเหมือนเส้นทางช่องปลอดภัย — ยังมีหนี้เหลือ = เปิดต่อในตาเดิม
+      team.pendingOpens -= 1
+      if (team.pendingOpens <= 0) endTurn(state)
       return
     }
     // FIX: สุ่ม "สายปลอดภัย" ตอนเข้าเซสชันตัดสาย — สีที่เลือกมีผลจริง
@@ -587,8 +594,20 @@ function ackDefuse(state: EngineState): void {
         : `${team.name} กู้สำเร็จ! แต่ไม่มีที่ว่างให้ย้ายระเบิด — ระเบิดยังอยู่ที่เดิม`,
       { level: 'good' },
     )
-    // จบ turn ทันที ไม่ต้องเปิดต่อแม้ pendingOpens ยังเหลือ (§3.4.2)
-    endTurn(state)
+    // FIX: ตัดสายรอดแล้ว "ไม่ล้างหนี้เปิดป้าย" ที่ค้างจากการ์ด Attack
+    //   เดิมจบ turn ทันทีแม้ pendingOpens ยังเหลือ (อ้าง §3.4.2) แต่เจตนาของกฎนั้นคือ
+    //   "ตาปกติเจอระเบิดถือว่าโหดพอแล้ว ไม่ซ้ำเติม" ไม่ได้ครอบคลุมหนี้ที่ทีมอื่นยัดมาให้
+    //   ถ้ายังมี Attack ค้างอยู่ก็ต้องเปิดป้ายต่อจนครบ ไม่งั้นการ์ด Attack ถูกลบล้างฟรี
+    //   หักทีละป้ายเหมือนเส้นทางช่องปลอดภัยและเส้นทาง Shield
+    team.pendingOpens -= 1
+    if (team.pendingOpens <= 0) {
+      endTurn(state)
+    } else {
+      // ยังมีหนี้เหลือ → ต้องดึง phase ออกจาก 'defusing' กลับไป 'opening' เอง
+      // (endTurn เป็นคนตั้ง phase ให้ตามปกติ แต่รอบนี้เราไม่ได้เรียกมัน)
+      // ไม่ทำ = openCell() เด้งออกทุกครั้งเพราะ phase ยังเป็น 'defusing' → เกมค้างกดอะไรไม่ได้
+      state.phase = 'opening'
+    }
   } else {
     detonate(state, team, cell, `${team.name} ${DEFUSE_FAILED_LOG}`)
   }
@@ -743,8 +762,8 @@ function advanceToNext(state: EngineState): void {
 //   การโดน Attack จะกลายเป็นของฟรี (อยู่เงียบ ๆ ให้หมดเวลาแล้วหนี้หายทั้งก้อน)
 //   ตอนนี้ระบบสุ่มเปิดป้ายให้แทน "ทีละอัน" ต่อการหมดเวลาหนึ่งครั้ง แล้วปล่อยให้
 //   flow ปกติทำงานต่อ:
-//     - เจอระเบิด → เข้า phase 'defusing' กู้ตาม flow ปกติ และถ้ากู้สำเร็จ
-//       ackDefuse() จบ turn ทันที (§3.4.2) → หนี้ attack ที่เหลือไม่มีผล ไปทีมถัดไปเลย
+//     - เจอระเบิด → เข้า phase 'defusing' กู้ตาม flow ปกติ ถ้ากู้สำเร็จ ackDefuse()
+//       หัก pendingOpens หนึ่งใบแล้วกลับไป 'opening' ต่อ ถ้ายังมีหนี้เหลือ (ไม่ล้างหนี้แล้ว)
 //     - ปลอดภัย/glitch → openCell() หัก pendingOpens แล้วจบ turn เองเมื่อหมดหนี้
 //   หนี้ก้อนสุดท้าย (pendingOpens === 1) ไม่เข้าเงื่อนไขนี้ — เป็นตาปกติ ใช้ FIX #18 เดิม
 function timeout(state: EngineState): void {
