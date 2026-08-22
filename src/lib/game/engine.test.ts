@@ -1428,11 +1428,35 @@ describe('ชุดที่สิบสาม: Skip กับการโจม
     expect(st.pendingBlock?.card).toBe('skip')
     expect(st.pendingBlock?.targetTeamId).toBe('1')
 
-    // B กัน → Skip ล้ม, A เสียการ์ดเปล่าและจบตาไปตามเดิม
+    // B กัน → Skip ล้ม
+    // FIX_LISTS ชุดที่สิบสี่ #1: A **ไม่จบตา** — ต้องกลับมาเล่นตาตัวเองตามปกติ
     st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
-    expect(st.phase).not.toBe('blocking')
+    expect(st.phase).toBe('cards')
     expect(st.teams[1].hand).not.toContain('block')
     expect(st.log.some((l) => l.message.includes('กัน Skip ไว้ได้'))).toBe(true)
+    // ยังเป็นตาของ A (คนใช้ Skip) และ A ยังต้องเปิดป้าย 1 ป้าย
+    expect(st.teams[st.currentTeamIndex].id).toBe('0')
+    expect(st.teams[0].pendingOpens).toBe(1)
+  })
+
+  // FIX_LISTS ชุดที่สิบสี่ #1: Skip ธรรมดาถูกกัน → คนใช้กลับมาเล่นตาตัวเอง
+  //   และยัง counter-block ต่อได้ (กลับไปกลับมาจนกว่าจะไม่มีใครกัน)
+  it('#1b: Skip ถูกกัน → คนใช้ counter-block ล้มกลับได้ ตาจึงเดินต่อตาม effect เดิม', () => {
+    const h = gameWithHands({ '0': ['skip', 'block'], '1': ['block'] })
+    h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
+    expect(h.getState().pendingBlock?.targetTeamId).toBe('1')
+
+    // B กัน Skip
+    let st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    // A (คนใช้ Skip) ได้สิทธิ์ล้ม Block ของ B ด้วย Block ของตัวเอง
+    expect(st.phase).toBe('blocking')
+    expect(st.pendingBlock?.counter).toBe(true)
+    expect(st.pendingBlock?.askQueue?.[0]).toBe('0')
+
+    // A ล้ม → chain 2 ชั้น = เลขคู่ = Skip ทำงานตามปกติ ตาไปทีมถัดไป
+    st = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
+    expect(st.phase).not.toBe('blocking')
+    expect(st.teams[st.currentTeamIndex].id).toBe('1')
   })
 
   it('#2: ใช้ Skip ได้ตอน phase defending (ยังไม่เข้า phase cards)', () => {

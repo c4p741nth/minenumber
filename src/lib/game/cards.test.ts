@@ -707,16 +707,20 @@ describe('FIX_LISTS ชุดใหม่: Block กัน Skip ได้', () =
     expect(st.pendingBlock?.askQueue).toEqual(['1'])
   })
 
-  it('กัน Skip สำเร็จ → คนใช้เสียการ์ดเปล่าและจบตา ทีมถัดไปได้เล่นตามคิวเดิม', () => {
+  // FIX_LISTS ชุดที่สิบสี่ #1: เดิมกัน Skip ติดแล้วคนใช้ "จบตาไปตามเดิม" ซึ่งทำให้
+  //   การกันแทบไม่มีความหมาย (คนใช้ได้สิ่งที่ต้องการครบ เสียแค่การ์ด) — เปลี่ยนเป็น
+  //   คนใช้ต้องกลับมาเล่นตาตัวเองตามปกติ
+  it('กัน Skip สำเร็จ → คนใช้กลับมาเล่นตาตัวเอง ไม่ได้ข้ามตาฟรี', () => {
     const h = setupSkipVsBlock()
     h.dispatch({ type: 'PLAY_CARD', card: 'skip' })
     const after = h.dispatch({ type: 'RESOLVE_BLOCK', use: true })
 
-    expect(after.phase).not.toBe('blocking')
+    expect(after.phase).toBe('cards')
     expect(after.teams[1].hand).not.toContain('block') // B ใช้ Block ไปแล้ว
-    expect(after.teams[0].hand).not.toContain('skip') // A เสีย Skip เปล่า
-    // จบตาของ A ตามปกติ → ถึงตา B
-    expect(after.currentTeamIndex).toBe(1)
+    expect(after.teams[0].hand).not.toContain('skip') // A เสีย Skip ไป
+    // ยังเป็นตาของ A และ A ยังต้องเปิดป้ายตามปกติ
+    expect(after.currentTeamIndex).toBe(0)
+    expect(after.teams[0].pendingOpens).toBe(1)
   })
 
   it('ไม่กัน → Skip ทำงาน จบตาคนใช้และไม่ได้จั่วการ์ด', () => {
