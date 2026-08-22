@@ -300,7 +300,7 @@ export function Hand({ locked = false, onPickCell }: HandProps) {
                   aria-label={`ใช้ ${CARD_META[revealedCard].name}`}
                   className={
                     'grid h-12 w-12 place-items-center rounded-full border-2 border-white/70 ' +
-                    'bg-[var(--confirm)] text-2xl text-white shadow-lg transition hover:scale-110'
+                    'bg-(--confirm) text-2xl text-white shadow-lg transition hover:scale-110'
                   }
                 >
                   ✓

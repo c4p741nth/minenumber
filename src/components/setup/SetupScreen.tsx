@@ -192,7 +192,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
           type="checkbox"
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
-          className="h-6 w-6 accent-[var(--primary)]"
+          className="h-6 w-6 accent-primary"
         />
         <span className="text-lg font-semibold">{label}</span>
       </span>
@@ -506,7 +506,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                               name="glitchMode"
                               checked={glitchMode === 'auto'}
                               onChange={() => setGlitchMode('auto')}
-                              className="accent-[var(--primary)]"
+                              className="accent-primary"
                             />
                             อัตโนมัติ (ตามสัดส่วน)
                           </label>
@@ -516,7 +516,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                               name="glitchMode"
                               checked={glitchMode === 'manual'}
                               onChange={() => setGlitchMode('manual')}
-                              className="accent-[var(--primary)]"
+                              className="accent-primary"
                             />
                             กำหนดเอง
                           </label>
@@ -612,7 +612,7 @@ export function SetupScreen({ initial, onStart, onBack }: Props) {
                             type="checkbox"
                             checked={handLimited}
                             onChange={(e) => setHandLimited(e.target.checked)}
-                            className="h-5 w-5 accent-[var(--primary)]"
+                            className="h-5 w-5 accent-primary"
                           />
                           <span className="text-base font-semibold">จำกัดจำนวนใบในมือ</span>
                         </label>
@@ -922,7 +922,7 @@ export function VolumeField({
             bump(e.deltaY < 0 ? 5 : -5)
           }}
           aria-label={label}
-          className="h-2 min-w-32 flex-1 accent-[var(--primary)]"
+          className="h-2 min-w-32 flex-1 accent-primary"
         />
         <input
           type="number"

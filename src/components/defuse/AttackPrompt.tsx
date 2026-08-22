@@ -98,7 +98,7 @@ export function AttackPrompt() {
             className={
               'rounded-full border-2 px-3 py-1 font-mono text-base font-black ' +
               (selectedCount > 0
-                ? 'border-[var(--confirm)] text-[var(--confirm)]'
+                ? 'border-(--confirm) text-(--confirm)'
                 : 'border-border text-muted-foreground')
             }
             aria-live="polite"
@@ -122,7 +122,7 @@ export function AttackPrompt() {
             <span
               className={
                 'ml-auto font-mono text-3xl font-black leading-none ' +
-                (left <= 5 ? 'text-red-500 timer-urgent' : 'text-[var(--primary)]')
+                (left <= 5 ? 'text-red-500 timer-urgent' : 'text-primary')
               }
               aria-live="polite"
             >
@@ -158,7 +158,7 @@ export function AttackPrompt() {
                     className={
                       'relative block rounded-2xl transition ' +
                       (isSel
-                        ? 'ring-4 ring-[var(--confirm)]'
+                        ? 'ring-4 ring-(--confirm)'
                         : selectable
                           ? 'opacity-90 hover:opacity-100'
                           : 'cursor-not-allowed opacity-40')
@@ -178,7 +178,7 @@ export function AttackPrompt() {
                     <span
                       className={
                         'absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-black ' +
-                        (isSel ? 'bg-[var(--confirm)] text-white' : 'bg-red-600 text-white')
+                        (isSel ? 'bg-(--confirm) text-white' : 'bg-red-600 text-white')
                       }
                     >
                       {isSel ? '🚫 ป้องกัน' : '⚔ ปล่อยผ่าน'}
@@ -226,7 +226,7 @@ export function AttackPrompt() {
             <span
               className={
                 'font-mono text-xl ' +
-                (takingOpens > 0 ? 'text-destructive' : 'text-[var(--confirm)]')
+                (takingOpens > 0 ? 'text-destructive' : 'text-(--confirm)')
               }
             >
               {takingOpens} ป้าย
@@ -242,7 +242,7 @@ export function AttackPrompt() {
         <div className="mt-4 flex flex-wrap justify-center gap-3">
           <button
             onClick={() => dispatch({ type: 'RESOLVE_ATTACK_DEFENSE', use: selectedCount })}
-            className="rounded-lg bg-[var(--confirm)] px-6 py-3 text-lg font-black text-white"
+            className="rounded-lg bg-(--confirm) px-6 py-3 text-lg font-black text-white"
           >
             ✓ ยืนยัน
             {selectedCount > 0 ? ` — ป้องกัน ${selectedCount} ใบ` : ' — ปล่อยผ่านทั้งหมด'}

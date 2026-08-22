@@ -90,10 +90,10 @@ export function BlockPrompt() {
             <img
               src={CARD_ART.block}
               alt={`${CARD_META.block.name} ในมือของ ${responder.name}`}
-              className="h-40 w-auto rounded-xl shadow-lg ring-2 ring-[var(--confirm)]"
+              className="h-40 w-auto rounded-xl shadow-lg ring-2 ring-(--confirm)"
               draggable={false}
             />
-            <figcaption className="mt-1.5 text-xs font-bold text-[var(--confirm)]">
+            <figcaption className="mt-1.5 text-xs font-bold text-(--confirm)">
               ของคุณ — เหลือ {blocksLeft} ใบ
             </figcaption>
           </figure>
@@ -149,7 +149,7 @@ export function BlockPrompt() {
         <div className="mt-6 flex justify-center gap-3">
           <button
             onClick={() => dispatch({ type: 'RESOLVE_BLOCK', use: true })}
-            className="rounded-lg bg-[var(--confirm)] px-6 py-3 text-lg font-black text-white"
+            className="rounded-lg bg-(--confirm) px-6 py-3 text-lg font-black text-white"
           >
             🚫 {isCounter ? 'ใช้ Block ล้ม' : 'ใช้ Block กัน'}
           </button>
