@@ -1008,25 +1008,35 @@ function settleBlockChain(state: EngineState, pending: NonNullable<EngineState['
 
   if (blocked) {
     // การ์ดถูกกัน → ทีมที่ใช้จบ turn ไปเลย (เสียการ์ดฟรี)
-    // FIX_LISTS ชุดใหม่: Skip ที่ถูกกันก็จบตาเหมือนกัน (endTurn ข้างล่างนี่แหละ) —
-    // ต่างกันที่ "เสียการ์ดเปล่า" ไม่ได้บังคับให้คนใช้กลับไปเปิดป้าย เพราะ Skip
-    // ไม่มี effect ค้างให้ย้อน จึงเขียน log ให้ชัดว่าผลคือใครเสียอะไร ไม่ให้ผู้เล่นเข้าใจผิด
+    // FIX_LISTS ชุดที่สิบสี่ #1: Skip ที่ถูกกัน **ไม่จบตาอีกต่อไป** — คนใช้ต้องกลับมา
+    //   เล่นตาตัวเองตามปกติ (เปิดป้ายเอง) ไม่งั้นการกัน Skip แทบไม่มีความหมาย:
+    //   ของเดิม endTurn ทำให้คนใช้ได้สิ่งที่ต้องการครบ (ไม่ต้องเปิดป้าย + จบตา)
+    //   เสียแค่การ์ดใบเดียว ส่วนคนกันก็เสีย Block ใบหนึ่งเท่ากัน = คนกันไม่ได้อะไรเลย
+    //   ⚠️ ห้ามเรียก endTurn ตรงนี้ — endTurn รีเซ็ต pendingOpens = 1 และเดินตาต่อ
     if (pending.card === 'skip') {
-      pushLog(
-        state,
-        pending.targetTeamId,
-        `${teamName(state, pending.targetTeamId)} กัน Skip ไว้ได้ — คนใช้เสียการ์ดเปล่าและจบตาไปตามเดิม`,
-        { level: 'warn' },
-      )
       // FIX_LISTS ชุดที่สิบสาม #2: Skip ที่ใช้ตอนตั้งรับถูกกัน → หนี้ attack ยังอยู่
       //   ต้องกลับไป 'defending' ให้เลือกใหม่ (กันด้วย Block / Skip ใบอื่น / รับไปเต็ม ๆ)
-      //   ห้าม endTurn — endTurn รีเซ็ต pendingOpens = 1 ทำให้หนี้หายฟรี (บั๊กเดิมข้อ 3)
       //   ถ้ากันด้วย Block หมดคิวไปแล้ว (pendingAttacks ว่าง) ก็ปล่อยเข้าตาเล่นตามปกติ
+      const user = currentTeam(state)
       if (pending.fromDefending) {
-        const user = currentTeam(state)
+        pushLog(
+          state,
+          pending.targetTeamId,
+          `${teamName(state, pending.targetTeamId)} กัน Skip ไว้ได้ — ${user.name} ต้องกลับไปตั้งรับต่อ`,
+          { level: 'warn' },
+        )
         state.phase = user.pendingAttacks.length > 0 ? 'defending' : 'cards'
         return
       }
+      // Skip ธรรมดา (ไม่ได้ใช้ตอนตั้งรับ) — คนใช้กลับมาเล่นตาตัวเองต่อ ยังต้องเปิดป้าย
+      pushLog(
+        state,
+        pending.targetTeamId,
+        `${teamName(state, pending.targetTeamId)} กัน Skip ไว้ได้ — ${user.name} ต้องเล่นตาตัวเองตามปกติ`,
+        { level: 'warn' },
+      )
+      state.phase = 'cards'
+      return
     }
     endTurn(state, { draw: false })
     return

@@ -1,20 +1,22 @@
 import { useGame } from '@/components/game/GameProvider'
-import { CARD_ART, CARD_BACK, CARD_META } from '@/lib/game/cards'
+import { CARD_ART, CARD_META } from '@/lib/game/cards'
 
 // FIX #25: ทีมที่ถือ Block ถูกถามว่าจะใช้กัน effect ไหม
 // FIX_LISTS #10: ถามทีละทีมจนกว่าจะมีคนกัน หรือทุกทีมที่ถือ Block ตอบว่าไม่กัน
 //   หัวคิว (askQueue[0]) คือทีมที่กำลังถูกถามอยู่ตอนนี้
 // FIX_LISTS ชุดใหม่ #1: กัน Block ด้วย Block ได้ — ตอนเป็นชั้น counter ต้องบอกให้ชัด
 //   ว่ากำลังจะ "ล้ม Block ของทีมไหน" ไม่ใช่กัน effect ต้นทาง (คนละเรื่องกัน)
-// ⚠️ ห้ามบอกว่าอีกฝ่ายใช้การ์ดอะไร — ผู้เล่นต้องตัดสินใจโดยไม่เห็นการ์ด
-//   (ยกเว้นชั้น counter ที่ "การ์ดที่จะกัน" คือ Block ซึ่งประกาศออกมาแล้ว ไม่เป็นความลับ)
+// FIX_LISTS ชุดที่สิบสี่ #2: เดิมปิดเป็นความลับว่าอีกฝ่ายใช้การ์ดอะไร (ใบคว่ำ) — ยกเลิกแล้ว
+//   ตอนนี้หงายให้เห็นตรง ๆ ว่ากำลังกันการ์ดอะไรอยู่ เหตุผล:
+//   1. ผู้เล่นตัดสินใจไม่ถูกว่าจะทิ้ง Block ใบที่มีจำกัดไปกับ effect ที่มองไม่เห็น
+//   2. AttackPrompt (จังหวะตัดสินใจแบบเดียวกัน) หงาย CARD_ART.attack อยู่แล้ว
+//   3. `pendingBlock.card` อยู่ใน PublicGameState อยู่แล้ว จึงไม่เคยเป็นความลับจริงในทางเทคนิค
 //
 // FIX_LISTS ชุดที่สิบสอง #4: เดิมกล่องนี้มีแต่ text ล้วน ไม่มีรูปการ์ดสักใบ ทั้งที่
 // AttackPrompt (จังหวะตัดสินใจแบบเดียวกัน) โชว์การ์ดจริง — สองหน้าจอดูเป็นคนละเกม
 // ตอนนี้วางการ์ดคู่ที่กำลังปะทะกันให้เห็นภาพ: [ของอีกฝ่าย] ⚔ [🚫 Block ของคุณ]
-//   - ชั้นปกติ: ฝั่งซ้ายเป็น "ใบคว่ำ" (CARD_BACK) — ยังเป็นความลับตามกติกาข้อบน
-//     ห้ามเปลี่ยนเป็น CARD_ART ของ effect ต้นทางเด็ดขาด จะสปอยล์เกม
-//   - ชั้น counter: ฝั่งซ้ายหงายเป็น Block ได้ เพราะเจ้าของประกาศออกมาแล้ว
+//   - ชั้นปกติ: ฝั่งซ้ายหงายเป็น CARD_ART ของ effect ต้นทาง (attack/skip/reverse/shuffle)
+//   - ชั้น counter: ฝั่งซ้ายหงายเป็น Block เพราะเจ้าของประกาศออกมาแล้ว
 export function BlockPrompt() {
   const { state, dispatch } = useGame()
   const pending = state.pendingBlock
@@ -31,6 +33,9 @@ export function BlockPrompt() {
   const lastBlocker = state.teams.find((t) => t.id === chain[chain.length - 1])
   // FIX_LISTS ชุดที่สิบสอง #4: ใช้ทั้งใต้รูปการ์ดและในบรรทัดคำอธิบาย — คำนวณที่เดียว
   const blocksLeft = responder.hand.filter((c) => c === 'block').length
+  // FIX_LISTS ชุดที่สิบสี่ #2: ชื่อทีมที่ใช้การ์ดต้นทาง — โชว์คู่กับหน้าการ์ดที่หงายแล้ว
+  const sourceName =
+    state.teams.find((t) => t.id === pending.sourceTeamId)?.name ?? 'อีกทีม'
 
   // FIX_LISTS ชุดที่สาม #2: กันได้เฉพาะ effect ที่ลงกับทีมตัวเอง — คิวจึงมีทีมเดียวเสมอ
   // ไม่มีเคส "กันแทนทีมอื่น" (defendingOther) และไม่มีทีมรอถามต่ออีก (waiting)
@@ -50,22 +55,30 @@ export function BlockPrompt() {
         }
       >
         <p className="section-label">
-          {isCounter ? `ชั้นที่ ${chain.length + 1} — มีทีมประกาศ Block` : 'มีทีมใช้ effect ใส่คุณ'}
+          {isCounter
+            ? `ชั้นที่ ${chain.length + 1} — มีทีมประกาศ Block`
+            : `${sourceName} ใช้ ${CARD_META[pending.card].name} ใส่คุณ`}
         </p>
         <h2 className="mt-2 font-serif text-4xl font-bold">{responder.name}</h2>
 
         {/* FIX_LISTS ชุดที่สิบสอง #4: การ์ดคู่ที่กำลังปะทะกัน — ใบซ้าย = ของอีกฝ่าย
-            (คว่ำไว้ถ้ายังเป็นความลับ), ใบขวา = Block ที่เรากำลังจะตัดสินใจใช้ */}
+            (หงายแล้วตั้งแต่ชุดที่สิบสี่ #2), ใบขวา = Block ที่เรากำลังจะตัดสินใจใช้ */}
         <div className="mt-5 flex items-center justify-center gap-3">
           <figure className="m-0">
             <img
-              src={isCounter ? CARD_ART.block : CARD_BACK}
-              alt={isCounter ? `${CARD_META.block.name} ของ ${lastBlocker?.name ?? 'อีกทีม'}` : 'การ์ดที่อีกทีมใช้ (ยังไม่เปิดเผย)'}
+              src={isCounter ? CARD_ART.block : CARD_ART[pending.card]}
+              alt={
+                isCounter
+                  ? `${CARD_META.block.name} ของ ${lastBlocker?.name ?? 'อีกทีม'}`
+                  : `${CARD_META[pending.card].name} ที่ ${sourceName} ใช้ใส่คุณ`
+              }
               className="h-40 w-auto rounded-xl shadow-lg"
               draggable={false}
             />
             <figcaption className="mt-1.5 text-xs font-bold text-muted-foreground">
-              {isCounter ? (lastBlocker?.name ?? 'อีกทีม') : 'อีกทีมใช้ใส่คุณ'}
+              {isCounter
+                ? (lastBlocker?.name ?? 'อีกทีม')
+                : `${sourceName} ใช้ ${CARD_META[pending.card].name}`}
             </figcaption>
           </figure>
 
@@ -100,10 +113,12 @@ export function BlockPrompt() {
         ) : (
           <>
             <p className="mt-4 text-lg leading-7">
+              <b>{sourceName}</b> ใช้ <b>{CARD_META[pending.card].name}</b> ใส่คุณ
+              <br />
               จะใช้การ์ด <b>🚫 Block</b> เพื่อกันไว้ไหม?
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              (ไม่บอกว่าเป็น effect อะไร — เหลือ Block อยู่ {blocksLeft} ใบ)
+              (เหลือ Block อยู่ {blocksLeft} ใบ)
             </p>
           </>
         )}

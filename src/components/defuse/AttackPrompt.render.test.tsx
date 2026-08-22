@@ -273,15 +273,21 @@ test('ชุดที่สิบสอง #4: BlockPrompt โชว์การ
   expect(imgs.length).toBe(2)
 })
 
-// ⚠️ กติกาข้อสำคัญ — ห้ามสปอยล์ว่า effect ต้นทางคือการ์ดอะไร (ที่นี่คือ Reverse)
-test('ชุดที่สิบสอง #4: ชั้นปกติ ใบของอีกฝ่ายต้องคว่ำไว้ ไม่สปอยล์ว่าใช้การ์ดอะไร', () => {
+// FIX_LISTS ชุดที่สิบสี่ #2: กลับกติกาเดิม — เดิมใบของอีกฝ่ายคว่ำไว้ (ห้ามสปอยล์)
+//   ตอนนี้ต้อง "หงายให้เห็นว่าเป็นการ์ดอะไรและใครใช้" เพื่อให้ตัดสินใจทิ้ง Block ได้
+test('ชุดที่สิบสี่ #2: ชั้นปกติ ใบของอีกฝ่ายต้องหงาย บอกว่าเป็นการ์ดอะไรและใครใช้', () => {
   const h = reverseBlockGame()
-  expect(h.getState().pendingBlock?.counter).not.toBe(true)
+  const st = h.getState()
+  expect(st.pendingBlock?.counter).not.toBe(true)
+  expect(st.pendingBlock?.card).toBe('reverse')
+  const sourceName = st.teams.find((t) => t.id === st.pendingBlock!.sourceTeamId)!.name
+
   renderBlock(h)
-  expect(screen.getByAltText(/ยังไม่เปิดเผย/)).toBeDefined()
-  // ชื่อการ์ดต้นทางต้องไม่หลุดออกมาทาง alt/ข้อความใด ๆ
-  expect(screen.queryByAltText(/Reverse/)).toBeNull()
-  expect(screen.queryByText(/Reverse/)).toBeNull()
+  // ไม่มีใบคว่ำอีกแล้ว
+  expect(screen.queryByAltText(/ยังไม่เปิดเผย/)).toBeNull()
+  // หงายเป็น Reverse จริง และบอกชื่อทีมที่ใช้
+  expect(screen.getByAltText(new RegExp(`Reverse ที่ ${sourceName} ใช้ใส่คุณ`))).toBeDefined()
+  expect(screen.getAllByText(new RegExp(`${sourceName} ใช้ Reverse`)).length).toBeGreaterThan(0)
 })
 
 // Block ของตัวเองหงายได้ตลอด — เป็นการ์ดในมือเราเอง พร้อมบอกจำนวนที่เหลือ
