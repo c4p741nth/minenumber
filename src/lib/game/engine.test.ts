@@ -775,8 +775,11 @@ describe('V5 turn flow — use many cards + block', () => {
     expect(st.currentTeamIndex).toBe(0)
   })
 
-  it('หลัง OPEN_CELL แล้ว PLAY_CARD ไม่มีผล (การ์ดไม่หายจากมือ)', () => {
-    // A โจมตี B → B ต้องเปิด 2 → B เปิด 1 แล้วยังอยู่ตาเดิม (opening) → ใช้การ์ดต่อไม่ได้
+  // เดิมชื่อ 'หลัง OPEN_CELL แล้ว PLAY_CARD ไม่มีผล' — กติกาถูกเปลี่ยนแล้ว
+  // ทีมที่โดน Attack ต้องใช้การ์ดได้ตลอดตาของตัวเอง ไม่ใช่แค่ก่อนเปิดป้ายแรก
+  // Attack บังคับให้ "เปิดหลายป้าย" ไม่ได้แปลว่า "ห้ามใช้การ์ด"
+  it('โดน Attack แล้วเปิดป้ายแรก → ยังใช้การ์ดต่อได้ และยังอยู่ตาเดิม', () => {
+    // A โจมตี B → B ต้องเปิด 2 → B เปิด 1 แล้วยังอยู่ตาเดิม และกลับมา phase 'cards'
     const settings = cardGame({ startingHand: 1, teamNames: ['A', 'B'], rangeMin: 1, rangeMax: 8 })
     let seed = -1
     for (let s = 0; s < 40000; s++) {
@@ -798,13 +801,16 @@ describe('V5 turn flow — use many cards + block', () => {
     const safe = safeCellOf(h)
     h.dispatch({ type: 'OPEN_CELL', cell: safe })
     const s = h.getState()
-    expect(s.phase).toBe('opening')
+    // หนี้ยังเหลือ 1 → กลับมาที่ 'cards' เพื่อให้ใช้การ์ดได้ ไม่ค้างที่ 'opening'
+    expect(s.phase).toBe('cards')
     expect(s.currentTeamIndex).toBe(1) // ยังตาเดิม เหลือเปิดอีก 1
+    expect(s.teams[1].pendingOpens).toBe(1)
 
+    // การ์ดต้องถูกใช้ได้จริง (หายจากมือ) — หัวใจของกติกาใหม่
     const handBefore = s.teams[1].hand.length
     const anyCard = s.teams[1].hand[0]
     h.dispatch({ type: 'PLAY_CARD', card: anyCard, targetTeamId: '0' })
-    expect(h.getState().teams[1].hand.length).toBe(handBefore) // ไม่หาย
+    expect(h.getState().teams[1].hand.length).toBe(handBefore - 1)
   })
 
   it('FIX #25: Block ใช้เล่นตรง ๆ ไม่ได้ — ต้องมี effect ของทีมอื่นก่อน', () => {

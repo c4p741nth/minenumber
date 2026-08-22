@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useGame } from '@/components/game/GameProvider'
 import { sfx } from '@/lib/audio/sfx'
 
@@ -126,9 +126,15 @@ export function DefuseModal() {
     return () => window.removeEventListener('keydown', onKey)
   }, [stage, chosen, acknowledge])
 
+  // จังหวะกระพริบร่วมของฉากหลัง + ตัวเลข — คำนวณจากวินาทีเต็มที่เหลือ ไม่ใช่ msLeft
+  //   (ถ้าผูกกับ ms คาบจะเปลี่ยนทุกเฟรม = อนิเมชันถูกรีสตาร์ตรัว ๆ จนดูเหมือนค้าง)
+  //   ระหว่างเฉลยผลไม่ต้องเต้นตามเวลาแล้ว — คืนค่าคาบเดิม 0.9s
+  const pulse = stage === 'choosing' && limit > 0 ? pulsePeriod(left) : 0.9
+
   return (
     <div
       className={`defuse-vignette ${boom ? 'defuse-shake' : ''}`}
+      style={{ '--mn-pulse': `${pulse}s` } as CSSProperties}
       role="dialog"
       aria-modal="true"
     >
@@ -154,14 +160,11 @@ export function DefuseModal() {
                 <br />
                 ตัดสาย
               </h2>
-              {/* FIX #27: นับถอยหลัง — ระดับมิลลิวินาที ตัวเลขสีแดงตลอด */}
+              {/* FIX #27: นับถอยหลัง — `SS:cc` สีหลอดไฟ (แดงอมส้ม) กระพริบพร้อมฉากหลัง
+                  ใช้ .defuse-timer ไม่ใช่ .timer-urgent เดิม เพราะตัวนั้นคาบตายตัว 0.5s
+                  ซึ่งไม่มีวันตรงกับฉากหลัง — ตัวใหม่อ่านคาบจาก --mn-pulse ตัวเดียวกัน */}
               {limit > 0 && (
-                <p
-                  className={`font-mono text-5xl font-black text-red-400 sm:text-6xl ${
-                    left <= 5 ? 'timer-urgent' : ''
-                  }`}
-                  aria-live="polite"
-                >
+                <p className="defuse-timer font-mono text-5xl font-black sm:text-6xl" aria-live="polite">
                   {formatMs(msLeft)}
                 </p>
               )}
@@ -207,14 +210,30 @@ export function DefuseModal() {
   )
 }
 
-// `SS:mmm` — วินาทีที่เหลือ : เศษมิลลิวินาที (เช่น 10:243)
-//   ปัดลงเสมอ (Math.floor) ไม่ใช่ปัดใกล้สุด — เลข "0:000" ต้องโผล่ตอนหมดเวลาจริง ๆ
-//   ไม่ใช่ก่อนหน้านั้นครึ่งมิลลิวินาที
+// `SS:cc` — วินาที 2 หลัก : เศษเสี้ยววินาที 2 หลัก (เช่น 03:99)
+//   วินาทีเติม 0 หน้าเสมอ ⇒ ความกว้างคงที่ ตัวเลขไม่ขยับซ้าย-ขวาตอนนับถอยหลัง
+//   เศษใช้ centisecond (1/100 วิ) ไม่ใช่ 3 หลักแรกของมิลลิวินาที — 2 หลักที่วิ่งเต็มช่วง
+//   00–99 ดูลุ้นกว่า และอ่านทันตากว่าเลข 3 หลักที่วิ่งเร็วจนเป็นภาพเบลอ
+//   ปัดลงเสมอ (Math.floor) — "00:00" ต้องโผล่ตอนหมดเวลาจริง ไม่ใช่ก่อนหน้านั้น
 function formatMs(ms: number): string {
   const clamped = Math.max(0, ms)
   const s = Math.floor(clamped / 1000)
-  const rest = Math.floor(clamped % 1000)
-  return `${s}:${String(rest).padStart(3, '0')}`
+  const cs = Math.floor((clamped % 1000) / 10)
+  return `${String(s).padStart(2, '0')}:${String(cs).padStart(2, '0')}`
+}
+
+// จังหวะกระพริบ (วินาที) ตามเวลาที่เหลือ — ยิ่งใกล้ระเบิดยิ่งถี่
+//   > 10 วิ  → 1.00s (ตรงกับจังหวะวินาที = เสียง bombTimer ที่ดังทุก 1 วิพอดี)
+//   6–10 วิ  → 0.50s (สองครั้งต่อวินาที ยังเข้าจังหวะเสียงอยู่)
+//   3–5 วิ   → 0.25s
+//   ≤ 2 วิ   → 0.15s (ถี่จนอ่านออกว่า "จะระเบิดแล้ว")
+//   ค่าที่คืนถูกส่งเข้า CSS var --mn-pulse ให้ทั้งฉากหลังและตัวเลขใช้ค่าเดียวกัน
+//   ⇒ กระพริบพร้อมกันเสมอ ไม่ใช่ต่างคนต่างวิ่งคนละคาบเหมือนเดิม
+function pulsePeriod(secondsLeft: number): number {
+  if (secondsLeft > 10) return 1
+  if (secondsLeft > 5) return 0.5
+  if (secondsLeft > 2) return 0.25
+  return 0.15
 }
 
 function Wires({

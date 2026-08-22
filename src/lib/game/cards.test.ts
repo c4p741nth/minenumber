@@ -1153,11 +1153,12 @@ describe('ชุดที่สิบเอ็ด #2: TIMEOUT ระหว่า
     }
 
     // กู้สำเร็จ → หักหนี้หนึ่งใบ แต่ "ไม่ล้างหนี้" ที่เหลือ ยังเป็นตาของทีม 1 ต่อ
-    // และ phase ต้องกลับมาเป็น 'opening' ไม่ค้างที่ 'defusing' (ไม่งั้นกดเปิดป้ายต่อไม่ได้)
+    // และ phase ต้องหลุดจาก 'defusing' (ไม่งั้นกดเปิดป้ายต่อไม่ได้) — เกมนี้เปิดการ์ดอยู่
+    // จึงกลับเป็น 'cards' เพื่อให้ยังใช้การ์ดได้ระหว่างใช้หนี้ Attack (openCell รับทั้งสอง phase)
     const done = h2.dispatch({ type: 'ACK_DEFUSE' })
     expect(done.currentTeamIndex).toBe(1)
     expect(done.teams[1].pendingOpens).toBe(1)
-    expect(done.phase).toBe('opening')
+    expect(done.phase).toBe('cards')
 
     // เปิดป้ายที่เหลือให้ครบ → ค่อยจบตาไปทีมถัดไป
     openSafeCell(h2)

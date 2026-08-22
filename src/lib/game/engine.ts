@@ -437,6 +437,22 @@ function eliminateTeam(state: EngineState, team: Team): void {
   team.pendingAttacks = []
 }
 
+// หักหนี้เปิดป้ายหนึ่งใบ แล้วตัดสินว่าจบตาหรือเปิดต่อ
+//   หนี้หมด → จบตาตามปกติ
+//   ยังมีหนี้เหลือ (โดน Attack มา) → **ต้องดึง phase กลับเป็น 'cards'** ไม่ใช่ค้างที่ 'opening'
+//   เพราะ playCard() รับเฉพาะ phase 'cards' (ดู `if (state.phase !== 'cards' ...)` ในฟังก์ชันนั้น)
+//   ปล่อยค้างที่ 'opening' = ทีมที่โดน Attack ใช้การ์ดไม่ได้เลยตั้งแต่ป้ายที่ 2 เป็นต้นไป
+//   ซึ่งเป็นการลงโทษซ้ำที่ไม่มีในกติกา — Attack บังคับให้ "เปิดหลายป้าย" ไม่ได้ห้ามใช้การ์ด
+//   (ถ้าปิดการ์ดในเกมนี้ cardsEnabled=false ก็อยู่ที่ 'opening' ตามเดิม)
+function consumePendingOpen(state: EngineState, team: Team): void {
+  team.pendingOpens -= 1
+  if (team.pendingOpens <= 0) {
+    endTurn(state)
+    return
+  }
+  state.phase = state.settings.cardsEnabled ? 'cards' : 'opening'
+}
+
 // เปิดช่องหนึ่งช่อง — ตรวจชนิด → resolve ตาม §4
 function openCell(state: EngineState, cell: number): void {
   if (state.phase !== 'opening' && state.phase !== 'cards') return
@@ -470,8 +486,7 @@ function openCell(state: EngineState, cell: number): void {
       //   ทำให้ Shield แข็งกว่า Block ในการกัน Attack (Block กันได้ 1 ใบ แต่ Shield
       //   กันระเบิด + ล้างหนี้ทั้งก้อน + ได้ช่องเขียว ในใบเดียว)
       //   ตอนนี้หักหนี้ทีละป้ายเหมือนเส้นทางช่องปลอดภัย — ยังมีหนี้เหลือ = เปิดต่อในตาเดิม
-      team.pendingOpens -= 1
-      if (team.pendingOpens <= 0) endTurn(state)
+      consumePendingOpen(state, team)
       return
     }
     // FIX: สุ่ม "สายปลอดภัย" ตอนเข้าเซสชันตัดสาย — สีที่เลือกมีผลจริง
@@ -528,8 +543,7 @@ function openCell(state: EngineState, cell: number): void {
   state.lastResult = { kind: 'safe' }
   pushLog(state, team.id, `${team.name} เปิด ${cell} — ปลอดภัย`)
   if (state.settings.shrinkingEnabled) applyShrink(state, cell)
-  team.pendingOpens -= 1
-  if (team.pendingOpens <= 0) endTurn(state)
+  consumePendingOpen(state, team)
 }
 
 // FIX_LISTS #4: DefuseModal เล่นเสียงระเบิดไปแล้วตอนตัวนับเวลาหมด
@@ -599,15 +613,9 @@ function ackDefuse(state: EngineState): void {
     //   "ตาปกติเจอระเบิดถือว่าโหดพอแล้ว ไม่ซ้ำเติม" ไม่ได้ครอบคลุมหนี้ที่ทีมอื่นยัดมาให้
     //   ถ้ายังมี Attack ค้างอยู่ก็ต้องเปิดป้ายต่อจนครบ ไม่งั้นการ์ด Attack ถูกลบล้างฟรี
     //   หักทีละป้ายเหมือนเส้นทางช่องปลอดภัยและเส้นทาง Shield
-    team.pendingOpens -= 1
-    if (team.pendingOpens <= 0) {
-      endTurn(state)
-    } else {
-      // ยังมีหนี้เหลือ → ต้องดึง phase ออกจาก 'defusing' กลับไป 'opening' เอง
-      // (endTurn เป็นคนตั้ง phase ให้ตามปกติ แต่รอบนี้เราไม่ได้เรียกมัน)
-      // ไม่ทำ = openCell() เด้งออกทุกครั้งเพราะ phase ยังเป็น 'defusing' → เกมค้างกดอะไรไม่ได้
-      state.phase = 'opening'
-    }
+    // ยังมีหนี้เหลือ → ต้องดึง phase ออกจาก 'defusing' เอง (endTurn เป็นคนตั้ง phase
+    // ให้ตามปกติ แต่รอบนี้เราไม่ได้เรียกมัน) ไม่ทำ = openCell() เด้งออกทุกครั้ง เกมค้าง
+    consumePendingOpen(state, team)
   } else {
     detonate(state, team, cell, `${team.name} ${DEFUSE_FAILED_LOG}`)
   }

@@ -141,7 +141,8 @@ button { cursor: pointer; }
      (place-items: center ล้วน จะดันส่วนบนทะลุขอบขึ้นไปจนอ่านไม่ครบ)
      ตัว overlay ยังเป็น overflow: hidden ตาม FIX #34 อยู่ — กันขอบขาวโผล่ตอนสั่น */
   display: grid; place-items: safe center;
-  background: radial-gradient(ellipse, rgba(60, 10, 10, 0.55), rgba(10, 5, 5, 0.92) 70%);
+  /* แดงอมส้ม ไม่ใช่แดงล้วน — ให้อารมณ์แสงหลอดไฟ/ไฟเตือน (แดงล้วนดูเป็นสีจอ error) */
+  background: radial-gradient(ellipse, rgba(74, 22, 6, 0.55), rgba(12, 6, 4, 0.92) 70%);
   /* FIX_LISTS ชุดที่สิบสี่ #5: padding ล่างต้องมากกว่าบน — ไม่ใช่เพราะอยากเยื้อง แต่เพราะ
      inset: -40px ด้านล่างข้างล่างนี้ดัน "กึ่งกลาง" ของ grid ให้ต่ำกว่ากึ่งกลางจอจริง 40px
      (กล่องสูงกว่าจอ 80px แต่ center คิดจากกล่อง ไม่ใช่จอ) ปุ่ม "รับทราบ" กับสายจึงต่ำไป
@@ -149,14 +150,32 @@ button { cursor: pointer; }
      ชดเชยด้วย padding-bottom ที่มากกว่าบน 80px = ดึงเนื้อหากลับขึ้นมากลางจอพอดี */
   padding: calc(24px * var(--mn-scale)) calc(24px * var(--mn-scale))
     calc(24px * var(--mn-scale) + 80px);
-  animation: mn-vignette 0.9s ease-in-out infinite;
+  /* คาบมาจาก --mn-pulse ที่ DefuseModal ตั้งตามเวลาที่เหลือ (ยิ่งใกล้ระเบิดยิ่งถี่)
+     ตัวเลขนับถอยหลังอ่านตัวแปรเดียวกัน ⇒ ฉากหลังกับตัวเลขกระพริบพร้อมกันเสมอ
+     fallback 0.9s ไว้เผื่อ stage อื่นที่ไม่ได้ตั้งค่ามา */
+  animation: mn-vignette var(--mn-pulse, 0.9s) ease-in-out infinite;
   /* FIX #34: ตอนสั่น (defuse-shake) element ถูก translate ออกไป ทำให้เห็นพื้นหลัง
      สีขาวโผล่ที่ขอบ — ขยาย element ให้ใหญ่กว่าจอทุกด้านเผื่อระยะสั่นไว้ */
   inset: -40px;
   overflow: hidden;
 }
 @keyframes mn-vignette {
-  50% { background: radial-gradient(ellipse, rgba(90, 15, 15, 0.62), rgba(10, 5, 5, 0.92) 75%); }
+  50% { background: radial-gradient(ellipse, rgba(122, 44, 10, 0.62), rgba(12, 6, 4, 0.92) 75%); }
+}
+
+/* ตัวเลขนับถอยหลังของหน้าตัดสาย — สีหลอดไฟ (แดงอมส้ม) + กระพริบคาบเดียวกับฉากหลัง
+   ไม่ใช้ .timer-urgent เพราะคาบมันตายตัว 0.5s จึงไม่มีทาง sync กับฉากหลังที่เร่งขึ้นได้
+   ใช้ opacity อย่างเดียว (ไม่สลับ color) — เปลี่ยนสีจะอ่านเลขไม่ทันตอนคาบสั้น ๆ */
+.defuse-timer {
+  color: #ff6b35;
+  text-shadow: 0 0 calc(14px * var(--mn-scale)) rgba(255, 107, 53, 0.55);
+  animation: mn-defuse-timer var(--mn-pulse, 0.9s) ease-in-out infinite;
+}
+@keyframes mn-defuse-timer {
+  50% { opacity: 0.42; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .defuse-timer { animation: none !important; }
 }
 /* FIX_LISTS ชุดที่สิบสี่ #5: ส่วนหัว/สาย/ปุ่มของ modal ตัดสาย ต้องย่อตามโหมดจอ
    ค่า sm: ของ Tailwind เป็น px ตายตัว ไม่รู้จัก --mn-scale — โหมด TV (scale 1.5)
